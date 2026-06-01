@@ -74,6 +74,7 @@ public class ZoteroController {
         out.put("url", data.get("url"));
         out.put("abstractNote", data.get("abstractNote"));
         out.put("tags", data.get("tags"));
+        out.put("collections", data.get("collections"));
         return out;
     }
 }

@@ -60,10 +60,10 @@ project.sh                                   一键启停
 
 | 路径 | 说明 | 性能 |
 |---|---|---|
-| `GET /api/zotero/items` | 母条目（已过滤 attachment/note，挂上 attachments 子项） | ~2 ms（缓存）|
+| `GET /api/zotero/items` | 主条目列表（母条目 + 孤立附件，挂上 attachments 子项）| ~2 ms（缓存）|
 | `GET /api/zotero/items?refresh=true` | 触发后台刷新，不阻塞当前请求 | ~2 ms |
 | `GET /api/zotero/collections` | 文献分组 | ~2 ms（缓存）|
-| `GET /api/zotero/file/{key}` | PDF 流代理（自动跟 S3 302 重定向）| 取决于 PDF 大小 |
+| `GET /api/zotero/file/{key}` | 附件代理。自动跟 S3 302、自动解 ZIP（snapshot 类型）、按文件名推断真实 content-type | 取决于上游 |
 | `GET /api/zotero/items/{key}/export?format=bibtex\|ris\|bibliography&style=apa` | 引用导出 | 走上游，~1-3s |
 | `GET /api/zotero/items/raw` | 原始 Zotero JSON（调试用，不走缓存）| 慢 |
 
@@ -91,7 +91,30 @@ project.sh                                   一键启停
 }
 ```
 
-## 缓存机制（重要）
+## 主条目的两种来源
+
+`/items` 返回里的"主条目"包含两类，前端统一渲染：
+
+1. **正常文献**（`itemType=journalArticle / book / ...`）：母条目，子附件（PDF 等）通过 `parentItem` 反向挂载到它的 `attachments` 数组
+2. **孤立附件**（`itemType=attachment` 且 `parentItem=null`）：用户直接拖进 collection 的 md / 单文件 pdf 等。这类条目的 `attachments` 里只有一个元素——它自己（让前端"查看附件"按钮逻辑零改动复用）
+
+## 附件代理的特殊处理
+
+`GET /api/zotero/file/{key}` 不是单纯透传：
+
+- **跟 302**：Zotero 用 S3 存大文件，会 302 跳转。Spring `RestClient` 默认不跟，所以这里改用 JDK `HttpClient.followRedirects(NORMAL)`
+- **解 ZIP**：Zotero 把 markdown / 网页快照 / 部分单文件附件**用 ZIP 打包存**。上游 content-type 可能写 `text/plain` 但字节是 ZIP（前 4 字节 `PK\003\004`）。后端检测到 ZIP 头会解出第一个非目录条目
+- **推断 content-type**：解压后按文件名后缀返回正确类型（.md → `text/markdown`，.html → `text/html` 等）。如果上游不是 ZIP 就保留上游 content-type
+
+## 前端 markdown 渲染
+
+孤立 md 附件：前端检测 `filename` 以 `.md` 结尾时，不挂 iframe，而是：
+1. `fetch('/api/zotero/file/{key}')` 拿文本
+2. `marked.parse()` 渲染成 HTML（开 `breaks: true, gfm: true`）
+3. `DOMPurify.sanitize()` 防 XSS（**不能省**，上游内容不可信）
+4. `v-html` 注入到 `.md-render` 容器，样式见组件内 `<style>` 块
+
+依赖：`marked` + `dompurify`（已加到 package.json）
 
 **为什么有这玩意**：Zotero 直连 API 慢得离谱（16-30s 是常态），不能让用户每次都等。
 
@@ -137,6 +160,8 @@ project.sh                                   一键启停
 - Zotero 偶尔抽风返回 503，缓存层吞掉错误并保留上一次数据，日志会 ERROR
 - 火狐 PDF iframe 内嵌可能有 CSP 问题（Chrome OK，没测过 Safari）
 - `useMessage` 依赖 `<n-message-provider>` 包裹，已在 `App.vue` 加了，新页面要用就别拆掉
+- **Zotero 服务端把部分附件用 ZIP 打包**（md / 网页快照等），但上游 content-type 撒谎写 `text/plain`。后端 `fetchItemFile` 已处理；如果以后看到附件代理乱码，先看上游字节是不是 `PK\003\004`
+- npm 在某些环境下 `~/.npm/_cacache` 会有权限问题，绕过：`npm install --cache /tmp/npm-cache <pkg>`
 
 ## 添加新功能的套路
 

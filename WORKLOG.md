@@ -8,6 +8,32 @@
 
 ## 2026-06-01
 
+### feat: 孤立附件 + markdown 渲染（commit `3a5f281`）
+
+**问题**：用户在 Zotero 里直接拖进 collection 一个 `README.md`，前端不显示。
+
+**两层根因**：
+1. **过滤逻辑误伤**：之前假设所有 `attachment` 都是母条目的子项（论文+PDF 模式），处理流程会过滤掉 attachment 类型。但用户直接拖进 collection 的 md / 单文件 pdf，是 `parentItem=null` 的孤立附件，两边都漏。同时还有 2 条单文件 PDF（RDKit.pdf、1-s2.0-S1385894725123899-main.pdf）也被误吞。
+2. **Zotero ZIP 打包**：md / 网页快照这类附件，Zotero **服务端会用 ZIP 打包存**（contentType 写的是 `text/plain` 但实际字节是 ZIP，PK 头）。直接代理给浏览器是乱码。
+
+**改动**：
+- 后端 `ZoteroCache.processItems`：保留 `parentItem=null` 的 attachment 作为独立条目
+- 后端 `ZoteroCache.simplify`：孤立附件把自己挂进自己的 `attachments` 数组（前端"查看 PDF"按钮零改动复用）
+- 后端 `ZoteroService.fetchItemFile`：检测 ZIP 头（`PK\003\004`）自动解第一个非目录条目，按文件名后缀推断 content-type（md → text/markdown，html → text/html，pdf → pdf 等）
+- 前端 `Publications/index.vue`：
+  - 按钮文案随类型变："查看 PDF" / "查看 Markdown" / "查看文件"
+  - 装 `marked` + `dompurify`，md 类型 fetch 文本 → marked 渲染 → DOMPurify sanitize → v-html
+  - 加 `.md-render` 样式（标题、代码块、表格、引用、链接）
+  - `typeMap` 加 `attachment: '附件'` 映射
+- 总条目数 47 → 50
+
+**踩坑**：
+- ZIP 头检测必须看前 4 字节 `0x50 0x4B 0x03 0x04`，光看 contentType 会被骗（Zotero 那边写的不是 application/zip）
+- npm 缓存权限报错 `EACCES: ~/.npm/_cacache/...`，用 `npm install --cache /tmp/npm-cache` 绕过
+- DOMPurify 不能省，用户 md 内容如果含 `<script>` 直接 v-html 是 XSS
+
+---
+
 ### perf: 缓存层 + 启动预热（commit `b726af8`）
 
 **问题**：直连 Zotero API 16-30 秒，前端每次刷新都白屏十几秒，体验崩。

@@ -1,0 +1,128 @@
+@use './variables' as *;
+@use './mixins' as *;
+
+// 通用容器 - 企业标准
+.container {
+  max-width: $container-max;
+  min-width: $container-min;
+  margin: 0 auto;
+  padding: 0 $spacing-lg;
+}
+
+// 章节通用样式
+.section {
+  padding: $spacing-section 0;
+
+  &__title {
+    font-size: $font-size-title-h1;
+    font-weight: 600;
+    text-align: center;
+    margin-bottom: $spacing-md;
+    line-height: $line-height-title;
+    color: #000000;
+  }
+
+  &__subtitle {
+    font-size: $font-size-base;
+    color: $text-color-secondary;
+    text-align: center;
+    margin-bottom: $spacing-xl;
+    line-height: $line-height;
+  }
+}
+
+// 按钮通用样式
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: $spacing-sm $spacing-xl;
+  border-radius: $border-radius-base;
+  font-size: $font-size-base;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all $transition-fast;
+  border: none;
+  outline: none;
+
+  &--primary {
+    background: $primary-color;
+    color: #fff;
+
+    &:hover {
+      background: darken($primary-color, 10%);
+      box-shadow: $shadow-md;
+    }
+  }
+
+  &--secondary {
+    background: $bg-color-secondary;
+    color: $text-color;
+
+    &:hover {
+      background: darken($bg-color-secondary, 5%);
+    }
+  }
+
+  &--large {
+    padding: $spacing-md $spacing-xl;
+    font-size: $font-size-large;
+  }
+
+  &--small {
+    padding: $spacing-xs $spacing-sm;
+    font-size: $font-size-small;
+  }
+}
+
+// 卡片通用样式
+.card {
+  background: #fff;
+  border-radius: $border-radius-lg;
+  box-shadow: $shadow-sm;
+  overflow: hidden;
+  transition: all $transition-base;
+
+  &:hover {
+    box-shadow: $shadow-md;
+    transform: translateY(-4px);
+  }
+
+  &__image {
+    width: 100%;
+    height: 200px;
+    object-fit: cover;
+  }
+
+  &__content {
+    padding: $spacing-lg;
+  }
+
+  &__title {
+    font-size: $font-size-title-h3;
+    font-weight: 600;
+    margin-bottom: $spacing-sm;
+    line-height: $line-height;
+  }
+
+  &__description {
+    font-size: $font-size-base;
+    color: $text-color-secondary;
+    line-height: $line-height;
+  }
+}
+
+// 加载动画
+.loading {
+  @include flex-center;
+  height: 200px;
+  color: $primary-color;
+}
+
+// 空状态
+.empty {
+  @include flex-center;
+  height: 200px;
+  flex-direction: column;
+  color: $text-color-light;
+}

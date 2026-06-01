@@ -1,0 +1,30 @@
+# build
+node_modules/
+dist/
+target/
+*.class
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# logs / runtime
+.run/
+*.log
+*.pid
+
+# env / secrets（先全部忽略，避免 API Key 误提交）
+.env
+.env.local
+.env.*.local
+
+# os
+.DS_Store
+Thumbs.db
+
+# maven
+.mvn/wrapper/maven-wrapper.jar
+
+# tmp
+.tmp/

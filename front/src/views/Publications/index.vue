@@ -357,6 +357,10 @@ async function load() {
     ])
     if (itemsRes.code === 200) {
       items.value = itemsRes.data || []
+      // 后端缓存还在预热（首次启动后 3-15 秒），轮询一次
+      if (itemsRes.warmedUp === false || items.value.length === 0) {
+        setTimeout(load, 2000)
+      }
     } else {
       error.value = itemsRes.message || '拉取文献失败'
     }

@@ -104,12 +104,14 @@ public class ZoteroCache {
 
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> processItems(List<Map<String, Object>> raw) {
+        // 1. 收集"作为子附件"的 attachment（有 parentItem），按 parentItem 分组挂载
+        //    parentItem=null 的孤立附件（用户直接上传的 md / pdf 等）则保留为独立条目
         Map<String, List<Map<String, Object>>> attachByParent = new HashMap<>();
         for (Map<String, Object> it : raw) {
             Map<String, Object> data = (Map<String, Object>) it.getOrDefault("data", Map.of());
             if (!"attachment".equals(data.get("itemType"))) continue;
             Object parent = data.get("parentItem");
-            if (parent == null) continue;
+            if (parent == null) continue; // 孤立附件交给主流程作为独立条目
             Map<String, Object> a = new HashMap<>();
             a.put("key", it.get("key"));
             a.put("filename", data.get("filename"));
@@ -119,11 +121,17 @@ public class ZoteroCache {
             attachByParent.computeIfAbsent(parent.toString(), k -> new ArrayList<>()).add(a);
         }
 
+        // 2. 主条目 = 非附件/非笔记 + 孤立附件（parentItem=null 的 attachment）
         return raw.stream()
                 .filter(it -> {
                     Map<String, Object> d = (Map<String, Object>) it.getOrDefault("data", Map.of());
                     String t = (String) d.get("itemType");
-                    return !"attachment".equals(t) && !"note".equals(t);
+                    if ("note".equals(t)) return false;
+                    if ("attachment".equals(t)) {
+                        // 只保留孤立附件
+                        return d.get("parentItem") == null;
+                    }
+                    return true;
                 })
                 .map(it -> simplify(it, attachByParent))
                 .collect(Collectors.toList());
@@ -135,9 +143,15 @@ public class ZoteroCache {
         Map<String, Object> data = (Map<String, Object>) item.getOrDefault("data", Map.of());
         Map<String, Object> out = new HashMap<>();
         String key = (String) item.get("key");
+        String type = (String) data.get("itemType");
         out.put("key", key);
-        out.put("itemType", data.get("itemType"));
-        out.put("title", data.get("title"));
+        out.put("itemType", type);
+        // 孤立 attachment 没有 title 时用 filename 兜底，避免出现 "(无标题)"
+        Object title = data.get("title");
+        if ((title == null || title.toString().isBlank()) && data.get("filename") != null) {
+            title = data.get("filename");
+        }
+        out.put("title", title);
         out.put("creators", data.get("creators"));
         out.put("date", data.get("date"));
         out.put("publicationTitle", data.get("publicationTitle"));
@@ -146,7 +160,19 @@ public class ZoteroCache {
         out.put("abstractNote", data.get("abstractNote"));
         out.put("tags", data.get("tags"));
         out.put("collections", data.get("collections"));
-        out.put("attachments", attachByParent.getOrDefault(key, List.of()));
+
+        // 孤立附件：把自己作为附件挂到自己下面，让前端 "查看附件" 按钮可用
+        if ("attachment".equals(type) && data.get("parentItem") == null) {
+            Map<String, Object> self = new HashMap<>();
+            self.put("key", key);
+            self.put("filename", data.get("filename"));
+            self.put("title", data.get("title"));
+            self.put("contentType", data.get("contentType"));
+            self.put("isPdf", "application/pdf".equals(data.get("contentType")));
+            out.put("attachments", List.of(self));
+        } else {
+            out.put("attachments", attachByParent.getOrDefault(key, List.of()));
+        }
         return out;
     }
 }

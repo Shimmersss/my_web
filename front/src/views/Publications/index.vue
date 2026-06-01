@@ -113,7 +113,7 @@
 
                   <div class="pub-actions">
                     <n-button
-                      v-for="att in pdfAttachments(item)"
+                      v-for="att in viewableAttachments(item)"
                       :key="att.key"
                       size="small"
                       type="primary"
@@ -121,7 +121,7 @@
                       @click="togglePdf(item.key, att)"
                     >
                       <template #icon><n-icon><DocumentTextOutline /></n-icon></template>
-                      {{ openedPdf[item.key] === att.key ? '收起 PDF' : '查看 PDF' }}
+                      {{ openedPdf[item.key] === att.key ? '收起' : attachmentLabel(att) }}
                     </n-button>
                     <n-dropdown
                       :options="exportOptions"
@@ -137,9 +137,15 @@
 
                   <div v-if="openedPdf[item.key]" class="pdf-frame">
                     <iframe
+                      v-if="!openedMd[item.key]"
                       :src="`/api/zotero/file/${openedPdf[item.key]}#toolbar=1&navpanes=0`"
                       frameborder="0"
                       loading="lazy"
+                    />
+                    <div
+                      v-else
+                      class="md-render markdown-body"
+                      v-html="openedMd[item.key]"
                     />
                   </div>
                 </div>
@@ -168,6 +174,8 @@ import {
   DownloadOutline
 } from '@vicons/ionicons5'
 import { getZoteroItems, getZoteroCollections } from '@/api'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 
 const message = useMessage()
 
@@ -184,6 +192,7 @@ const PAGE_SIZE = 20
 const pageCount = ref(1)
 const expanded = reactive({})
 const openedPdf = reactive({})
+const openedMd = reactive({})
 
 const typeMap = {
   journalArticle: '期刊论文',
@@ -195,7 +204,8 @@ const typeMap = {
   webpage: '网页',
   report: '报告',
   manuscript: '手稿',
-  document: '文档'
+  document: '文档',
+  attachment: '附件'
 }
 
 const exportOptions = [
@@ -307,15 +317,45 @@ function hasPdf(item) {
   return (item.attachments || []).some(a => a.isPdf)
 }
 
+function viewableAttachments(item) {
+  return item.attachments || []
+}
+
+function attachmentLabel(att) {
+  if (att.isPdf) return '查看 PDF'
+  const fn = att.filename || att.title || ''
+  if (/\.md$/i.test(fn)) return '查看 Markdown'
+  if (/\.(txt|csv|json|xml|html?)$/i.test(fn)) return '查看文件'
+  return '查看附件'
+}
+
 function pdfAttachments(item) {
   return (item.attachments || []).filter(a => a.isPdf)
 }
 
-function togglePdf(itemKey, att) {
+function isMarkdown(att) {
+  const fn = att.filename || att.title || ''
+  return /\.(md|markdown)$/i.test(fn)
+}
+
+async function togglePdf(itemKey, att) {
   if (openedPdf[itemKey] === att.key) {
     delete openedPdf[itemKey]
-  } else {
-    openedPdf[itemKey] = att.key
+    delete openedMd[itemKey]
+    return
+  }
+  openedPdf[itemKey] = att.key
+  delete openedMd[itemKey]
+
+  if (isMarkdown(att)) {
+    try {
+      const res = await fetch(`/api/zotero/file/${att.key}`)
+      const text = await res.text()
+      const html = marked.parse(text, { breaks: true, gfm: true })
+      openedMd[itemKey] = DOMPurify.sanitize(html)
+    } catch (e) {
+      openedMd[itemKey] = `<p style="color:#d03050">加载失败：${e.message}</p>`
+    }
   }
 }
 
@@ -623,6 +663,68 @@ onBeforeUnmount(() => {
   height: 720px;
   display: block;
 }
+
+.md-render {
+  padding: 24px 28px;
+  background: #fff;
+  max-height: 720px;
+  overflow: auto;
+  font-size: 14px;
+  line-height: 1.7;
+  color: #1f2937;
+}
+.md-render :deep(h1),
+.md-render :deep(h2),
+.md-render :deep(h3),
+.md-render :deep(h4) {
+  margin: 1.2em 0 0.6em;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.md-render :deep(h1) { font-size: 1.6em; border-bottom: 1px solid #eee; padding-bottom: 0.3em; }
+.md-render :deep(h2) { font-size: 1.35em; border-bottom: 1px solid #eee; padding-bottom: 0.25em; }
+.md-render :deep(h3) { font-size: 1.15em; }
+.md-render :deep(p) { margin: 0.6em 0; }
+.md-render :deep(ul),
+.md-render :deep(ol) { padding-left: 1.6em; margin: 0.6em 0; }
+.md-render :deep(code) {
+  background: #f3f4f6;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'SF Mono', Consolas, monospace;
+  font-size: 0.9em;
+}
+.md-render :deep(pre) {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 14px 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin: 0.8em 0;
+}
+.md-render :deep(pre code) {
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+.md-render :deep(blockquote) {
+  border-left: 4px solid #d1d5db;
+  padding-left: 12px;
+  color: #6b7280;
+  margin: 0.6em 0;
+}
+.md-render :deep(table) {
+  border-collapse: collapse;
+  margin: 0.8em 0;
+}
+.md-render :deep(th),
+.md-render :deep(td) {
+  border: 1px solid #e5e7eb;
+  padding: 6px 10px;
+}
+.md-render :deep(a) { color: #2563eb; text-decoration: none; }
+.md-render :deep(a:hover) { text-decoration: underline; }
+.md-render :deep(img) { max-width: 100%; }
 
 .load-more {
   display: flex;

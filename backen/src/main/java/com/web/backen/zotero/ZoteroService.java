@@ -8,14 +8,18 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.io.ByteArrayInputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
 
 @Service
 public class ZoteroService {
@@ -55,8 +59,10 @@ public class ZoteroService {
     }
 
     /**
-     * 拉取条目附件文件（通常是 PDF），用于代理给前端。
-     * 使用 JDK HttpClient 以自动跟随 Zotero 返回的 S3 302 重定向。
+     * 拉取条目附件文件，用于代理给前端。
+     * - 自动跟随 Zotero 的 S3 302 重定向
+     * - 如果上游返回 ZIP 包（snapshot 类型常见，如 markdown / 网页快照），
+     *   自动解出包内主文件并按文件名后缀推断 content-type
      */
     public ResponseEntity<byte[]> fetchItemFile(String itemKey) throws Exception {
         URI uri = URI.create(config.getBaseUrl()
@@ -69,10 +75,56 @@ public class ZoteroService {
                 .GET()
                 .build();
         HttpResponse<byte[]> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofByteArray());
+        byte[] body = resp.body();
+        String upstreamCt = resp.headers().firstValue("content-type").orElse("");
+
+        // 检测 ZIP 头 PK\003\004
+        if (body != null && body.length >= 4
+                && body[0] == 0x50 && body[1] == 0x4B
+                && body[2] == 0x03 && body[3] == 0x04) {
+            UnzipResult unzipped = unzipPickFirstUseful(body);
+            if (unzipped != null) {
+                HttpHeaders h = new HttpHeaders();
+                h.setContentType(MediaType.parseMediaType(guessContentType(unzipped.filename)));
+                return new ResponseEntity<>(unzipped.bytes, h, 200);
+            }
+        }
+
         HttpHeaders headers = new HttpHeaders();
-        Optional<String> ct = resp.headers().firstValue("content-type");
-        headers.setContentType(ct.map(MediaType::parseMediaType).orElse(MediaType.APPLICATION_PDF));
-        return new ResponseEntity<>(resp.body(), headers, resp.statusCode());
+        headers.setContentType(MediaType.parseMediaType(
+                upstreamCt.isBlank() ? "application/pdf" : upstreamCt));
+        return new ResponseEntity<>(body, headers, resp.statusCode());
+    }
+
+    private record UnzipResult(String filename, byte[] bytes) {}
+
+    /** 解 ZIP，返回第一个非目录条目（一般 Zotero snapshot 就一个主文件） */
+    private UnzipResult unzipPickFirstUseful(byte[] zip) {
+        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zip))) {
+            ZipEntry e;
+            while ((e = zis.getNextEntry()) != null) {
+                if (e.isDirectory()) continue;
+                return new UnzipResult(e.getName(), zis.readAllBytes());
+            }
+        } catch (Exception ex) {
+            return null;
+        }
+        return null;
+    }
+
+    private String guessContentType(String filename) {
+        if (filename == null) return "application/octet-stream";
+        String name = filename.toLowerCase(Locale.ROOT);
+        if (name.endsWith(".md") || name.endsWith(".markdown")) return "text/markdown; charset=UTF-8";
+        if (name.endsWith(".txt")) return "text/plain; charset=UTF-8";
+        if (name.endsWith(".html") || name.endsWith(".htm")) return "text/html; charset=UTF-8";
+        if (name.endsWith(".json")) return "application/json; charset=UTF-8";
+        if (name.endsWith(".csv")) return "text/csv; charset=UTF-8";
+        if (name.endsWith(".pdf")) return "application/pdf";
+        if (name.endsWith(".png")) return "image/png";
+        if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+        if (name.endsWith(".svg")) return "image/svg+xml";
+        return "application/octet-stream";
     }
 
     /**

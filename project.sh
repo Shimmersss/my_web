@@ -17,6 +17,7 @@ BACKEND_PID="$RUN_DIR/backend.pid"
 FRONTEND_PID="$RUN_DIR/frontend.pid"
 BACKEND_LOG="$LOG_DIR/backend.log"
 FRONTEND_LOG="$LOG_DIR/frontend.log"
+BACKEND_JAR="$BACKEND_DIR/target/backen-0.0.1-SNAPSHOT.jar"
 
 BACKEND_PORT=8080
 FRONTEND_PORT=3000
@@ -27,11 +28,15 @@ if [[ -f "$ROOT/.env.local" ]]; then
 fi
 export ZOTERO_API_KEY="${ZOTERO_API_KEY:-}"
 export ZOTERO_USER_ID="${ZOTERO_USER_ID:-}"
+export ADMIN_KEY="${ADMIN_KEY:-change-me}"
 export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}"
 export PATH="$JAVA_HOME/bin:$PATH"
 
 if [[ -z "$ZOTERO_API_KEY" || -z "$ZOTERO_USER_ID" ]]; then
   echo "[!] 未检测到 Zotero 凭证，请在 $ROOT/.env.local 中设置 ZOTERO_API_KEY 和 ZOTERO_USER_ID"
+fi
+if [[ "$ADMIN_KEY" == "change-me" ]]; then
+  echo "[!] ADMIN_KEY 仍为开发默认值，请在 $ROOT/.env.local 中设置 ADMIN_KEY"
 fi
 
 # 颜色
@@ -80,8 +85,11 @@ start_backend() {
   info "启动后端 ..."
   kill_port "$BACKEND_PORT"
   cd "$BACKEND_DIR"
-  nohup mvn -q spring-boot:run >"$BACKEND_LOG" 2>&1 &
+  info "打包后端 ..."
+  mvn -q -DskipTests package >"$BACKEND_LOG" 2>&1 || return 1
+  nohup perl -MPOSIX=setsid -e 'setsid(); exec @ARGV or die $!' "$JAVA_HOME/bin/java" -jar "$BACKEND_JAR" >"$BACKEND_LOG" 2>&1 &
   echo $! >"$BACKEND_PID"
+  disown "$!" 2>/dev/null || true
   cd - >/dev/null
   wait_http "http://localhost:$BACKEND_PORT/api/health" "后端" 90 || return 1
 }
@@ -204,6 +212,7 @@ case "$cmd" in
 
 环境变量:
   ZOTERO_API_KEY  / ZOTERO_USER_ID   覆盖默认 Zotero 凭证
+  ADMIN_KEY                          后台管理密钥
   JAVA_HOME                          覆盖 JDK 路径（默认 /opt/homebrew/opt/openjdk@17）
 EOF
     ;;

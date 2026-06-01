@@ -8,6 +8,35 @@
 
 ## 2026-06-01
 
+### feat: GitHub 开源项目后台 + 后端代理 README / 仓库数据
+
+**问题**：原“新闻动态”改成 GitHub 开源项目后，前端最初直接请求 `api.github.com` / `raw.githubusercontent.com`。这和 Zotero 板块“前端只打 `/api`、上游请求交给后端”的架构不一致，也容易遇到浏览器侧限流、CORS、错误提示暴露等问题。
+
+**改动**：
+- 前端 `News/index.vue` 改成 GitHub 开源项目页：
+  - 卡片展示 repo、说明、stars、forks、语言、topics、更新时间
+  - README 按钮 / 标题点击打开 README 弹窗
+  - 管理后台支持 `ADMIN_KEY` 登录、添加项目、编辑 GitHub 地址/分类/说明、首页展示、上移/下移排序、删除
+- 后端新增 `github/`：
+  - `GithubProjectStore`：读写 `.run/github-projects.json`，只保存 `repo/highlight/category/featured`
+  - `GithubProjectService`：后端请求 GitHub API 补全 `description/stars/forks/language/topics/default_branch/homepage/pushed_at`
+  - `GithubProjectController`：提供 `/api/github-projects`、`/api/github-projects/{owner}/{repo}/readme`、登录和保存接口
+- README 读取改为后端代理：尝试 `default_branch/main/master` 和 `README.md/readme.md/README.MD`，前端只拿 markdown 文本后用 `marked + DOMPurify` 渲染
+- 首页开源项目预览读取同一份后端配置，按后台保存顺序取前 3 个 `featured=true`
+- `project.sh` 后端启动改成 package 后 `java -jar`，并用 `setsid` 脱离 shell，会比 `mvn spring-boot:run` 的 PID 管理稳定
+- `ZoteroConfig` / `AdminConfig` 补显式 getter/setter，避免 Maven 打包时 Lombok getter 不可见
+
+**规则**：
+- GitHub 和 Zotero 一样，**前端不要直连外部 API**。以后任何 GitHub 数据、README、raw 文件都走后端 `/api/github-projects*`。
+- 前端可以负责展示、过滤、Markdown 渲染和后台表单，但外部请求、地址归一化、限流降级都放在后端。
+
+**踩坑**：
+- GitHub REST API 的 repo 路径不能把 `owner/repo` 作为单个 `{repo}` URI 变量传给 `/repos/{repo}`，要拆成 `/repos/{owner}/{repo}`。
+- GitHub 公共 API 偶尔 403/限流，页面不要全局报黄条；后端拿不到实时字段时保留本地配置基础展示即可。
+- README 走 raw 地址比 GitHub README API 更适合做后端代理，但仍要后端尝试多个分支和文件名。
+
+---
+
 ### feat: 孤立附件 + markdown 渲染（commit `3a5f281`）
 
 **问题**：用户在 Zotero 里直接拖进 collection 一个 `README.md`，前端不显示。

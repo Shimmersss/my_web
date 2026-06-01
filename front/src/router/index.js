@@ -41,13 +41,7 @@ const routes = [
     path: '/news',
     name: 'News',
     component: () => import('@/views/News/index.vue'),
-    meta: { title: '新闻动态' }
-  },
-  {
-    path: '/news/:id',
-    name: 'NewsDetail',
-    component: () => import('@/views/News/detail.vue'),
-    meta: { title: '新闻详情' }
+    meta: { title: 'GitHub 项目开源' }
   },
   {
     path: '/contact',

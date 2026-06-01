@@ -1,12 +1,36 @@
 <template>
-  <div class="news-page">
-    <!-- 新闻列表 -->
+  <div class="open-source-page">
     <section class="section">
       <div class="container">
-        <div class="news-search">
+        <div class="page-head">
+          <div>
+            <p class="eyebrow">GitHub Open Source</p>
+            <h2>GitHub 项目开源</h2>
+            <p>展示我指定的开源项目，自动同步 GitHub stars、forks、语言、topics 与最近更新时间。</p>
+          </div>
+          <div class="page-actions">
+            <n-button
+              tag="a"
+              href="https://github.com"
+              target="_blank"
+              rel="noopener"
+              type="primary"
+              size="large"
+            >
+              <template #icon><n-icon><LogoGithub /></n-icon></template>
+              GitHub
+            </n-button>
+            <n-button size="large" secondary @click="adminVisible = true">
+              <template #icon><n-icon><SettingsOutline /></n-icon></template>
+              后台管理
+            </n-button>
+          </div>
+        </div>
+
+        <div class="toolbar">
           <n-input
             v-model:value="searchText"
-            placeholder="搜索新闻..."
+            placeholder="搜索项目 / 描述 / 技术栈..."
             size="large"
             clearable
           >
@@ -14,265 +38,793 @@
               <n-icon><SearchOutline /></n-icon>
             </template>
           </n-input>
+          <n-select
+            v-model:value="languageFilter"
+            :options="languageOptions"
+            placeholder="语言"
+            clearable
+            size="large"
+            class="language-select"
+          />
+          <n-button size="large" :loading="loading" @click="loadProjects">
+            <template #icon><n-icon><RefreshOutline /></n-icon></template>
+            刷新
+          </n-button>
         </div>
 
-        <div class="news-list">
-          <div v-for="news in filteredNews" :key="news.id" class="news-item" @click="navigateTo(`/news/${news.id}`)">
-            <div class="news-image">
-              <img :src="news.image" :alt="news.title">
-              <div class="news-date">
-                <div class="day">{{ formatDate(news.date).day }}</div>
-                <div class="month">{{ formatDate(news.date).month }}</div>
+        <n-spin :show="loading">
+          <div class="project-grid">
+            <article
+              v-for="project in filteredProjects"
+              :key="project.full_name"
+              class="project-card"
+            >
+              <div class="card-top">
+                <div class="repo-mark">
+                  <n-icon size="26"><LogoGithub /></n-icon>
+                </div>
+                <div class="repo-title">
+                  <p>{{ project.owner }}</p>
+                  <h3 @click="openReadme(project)">{{ project.name }}</h3>
+                </div>
+                <span class="category">{{ project.category }}</span>
               </div>
+
+              <p class="description">{{ project.description || project.highlight }}</p>
+              <p v-if="project.highlight" class="highlight">{{ project.highlight }}</p>
+
+              <div class="metrics">
+                <span><n-icon><StarOutline /></n-icon>{{ formatNumber(project.stargazers_count) }}</span>
+                <span><n-icon><GitBranchOutline /></n-icon>{{ formatNumber(project.forks_count) }}</span>
+                <span><n-icon><CodeSlashOutline /></n-icon>{{ project.language || 'Unknown' }}</span>
+                <span><n-icon><TimeOutline /></n-icon>{{ formatDate(project.pushed_at) }}</span>
+              </div>
+
+              <div v-if="project.topics?.length" class="topics">
+                <span v-for="topic in project.topics.slice(0, 6)" :key="topic">{{ topic }}</span>
+              </div>
+
+              <div class="card-actions">
+                <n-button @click="openReadme(project)" :loading="readmeLoading && readmeProject?.full_name === project.full_name">
+                  <template #icon><n-icon><DocumentTextOutline /></n-icon></template>
+                  README
+                </n-button>
+                <n-button
+                  tag="a"
+                  :href="project.html_url"
+                  target="_blank"
+                  rel="noopener"
+                  type="primary"
+                >
+                  <template #icon><n-icon><LogoGithub /></n-icon></template>
+                  仓库
+                </n-button>
+                <n-button
+                  v-if="project.homepage"
+                  tag="a"
+                  :href="project.homepage"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  <template #icon><n-icon><OpenOutline /></n-icon></template>
+                  Demo
+                </n-button>
+              </div>
+            </article>
+          </div>
+
+          <n-empty
+            v-if="filteredProjects.length === 0 && !loading"
+            description="没有匹配的开源项目"
+            class="empty"
+          />
+        </n-spin>
+
+        <n-modal v-model:show="adminVisible" preset="card" title="开源项目后台管理" class="admin-modal">
+          <div v-if="!isAdmin" class="login-panel">
+            <n-input
+              v-model:value="adminKeyInput"
+              type="password"
+              show-password-on="click"
+              placeholder="请输入管理员密钥"
+              @keyup.enter="loginAdmin"
+            />
+            <n-button type="primary" :loading="adminLoading" @click="loginAdmin">进入后台</n-button>
+          </div>
+
+          <div v-else class="admin-panel">
+            <div class="admin-actions">
+              <n-button type="primary" @click="addProject">
+                <template #icon><n-icon><AddOutline /></n-icon></template>
+                添加项目
+              </n-button>
+              <n-button :loading="adminLoading" @click="saveAdminProjects">保存展示列表</n-button>
+              <n-button text @click="logoutAdmin">退出后台</n-button>
             </div>
-            <div class="news-content">
-              <div class="news-category">{{ news.category }}</div>
-              <h3>{{ news.title }}</h3>
-              <p class="news-summary">{{ news.summary }}</p>
-              <div class="news-meta">
-                <span><n-icon><PersonOutline /></n-icon> {{ news.author }}</span>
-                <span><n-icon><EyeOutline /></n-icon> {{ news.views }}</span>
+
+            <div class="admin-list">
+              <div v-for="(project, index) in editableProjects" :key="index" class="admin-row">
+                <label>
+                  <span>GitHub 仓库地址</span>
+                  <n-input v-model:value="project.repo" placeholder="https://github.com/vuejs/core 或 vuejs/core" />
+                </label>
+                <label>
+                  <span>分类</span>
+                  <n-input v-model:value="project.category" placeholder="例如 Frontend / Tooling / Backend" />
+                </label>
+                <label>
+                  <span>展示说明</span>
+                  <n-input v-model:value="project.highlight" type="textarea" placeholder="写一句你想展示在卡片上的说明" :autosize="{ minRows: 2, maxRows: 4 }" />
+                </label>
+                <div class="row-foot">
+                  <n-checkbox v-model:checked="project.featured">首页展示</n-checkbox>
+                  <div class="row-actions">
+                    <n-button size="small" :disabled="index === 0" @click="moveProject(index, -1)">上移</n-button>
+                    <n-button size="small" :disabled="index === editableProjects.length - 1" @click="moveProject(index, 1)">下移</n-button>
+                    <n-button size="small" quaternary type="error" @click="removeProject(index)">删除</n-button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </n-modal>
 
-        <div class="pagination">
-          <n-pagination v-model:page="page" :page-count="10" show-quick-jumper />
-        </div>
+        <n-modal v-model:show="readmeVisible" preset="card" :title="readmeTitle" class="readme-modal">
+          <n-spin :show="readmeLoading">
+            <n-alert v-if="readmeError" type="warning" title="README 读取失败" class="status-alert">
+              {{ readmeError }}
+            </n-alert>
+            <div v-else class="readme-render markdown-body" v-html="readmeHtml" />
+          </n-spin>
+        </n-modal>
       </div>
     </section>
   </div>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useRouter } from 'vue-router'
-import { NInput, NPagination, NIcon } from 'naive-ui'
-import { SearchOutline, PersonOutline, EyeOutline } from '@vicons/ionicons5'
+import { computed, onMounted, ref } from 'vue'
+import { useMessage } from 'naive-ui'
+import {
+  NAlert,
+  NButton,
+  NCheckbox,
+  NEmpty,
+  NIcon,
+  NInput,
+  NModal,
+  NSelect,
+  NSpin
+} from 'naive-ui'
+import {
+  AddOutline,
+  CodeSlashOutline,
+  GitBranchOutline,
+  LogoGithub,
+  OpenOutline,
+  RefreshOutline,
+  SearchOutline,
+  SettingsOutline,
+  StarOutline,
+  TimeOutline,
+  DocumentTextOutline
+} from '@vicons/ionicons5'
+import { marked } from 'marked'
+import DOMPurify from 'dompurify'
+import { getGithubProjectReadme, getGithubProjects, loginGithubProjectsAdmin, saveGithubProjects } from '@/api'
+import { defaultGithubProjects, githubProjectFallback } from '@/config/githubProjects'
 
-const router = useRouter()
-const page = ref(1)
+const message = useMessage()
+const loading = ref(false)
+const configLoading = ref(false)
+const error = ref('')
 const searchText = ref('')
+const languageFilter = ref(null)
+const projectConfigs = ref(defaultGithubProjects)
+const projects = ref(buildFallbackProjects())
+const adminVisible = ref(false)
+const adminLoading = ref(false)
+const adminKeyInput = ref('')
+const adminKey = ref(localStorage.getItem('githubProjectsAdminKey') || '')
+const editableProjects = ref([])
+const readmeVisible = ref(false)
+const readmeLoading = ref(false)
+const readmeError = ref('')
+const readmeHtml = ref('')
+const readmeProject = ref(null)
 
-const news = ref([
-  {
-    id: 1,
-    title: '公司荣获2024年度最佳服务商',
-    summary: '凭借优质服务和创新技术，公司在2024年度行业评选中荣获最佳服务商奖项',
-    category: '公司动态',
-    date: '2024-01-15',
-    author: '市场部',
-    views: 1234,
-    image: 'https://picsum.photos/400/300'
-  },
-  {
-    id: 2,
-    title: '发布新产品2.0版本',
-    summary: '经过半年的研发，公司推出新产品2.0版本，带来更好的用户体验和功能',
-    category: '产品发布',
-    date: '2024-01-10',
-    author: '产品部',
-    views: 2345,
-    image: 'https://picsum.photos/400/300'
-  },
-  {
-    id: 3,
-    title: '参加行业峰会并发表主题演讲',
-    summary: '公司CEO受邀参加年度行业峰会，分享数字化转型经验',
-    category: '行业活动',
-    date: '2024-01-05',
-    author: '市场部',
-    views: 1876,
-    image: 'https://picsum.photos/400/300'
-  },
-  {
-    id: 4,
-    title: '与知名企业达成战略合作',
-    summary: '公司与某世界500强企业签署战略合作协议，共同推进技术创新',
-    category: '公司动态',
-    date: '2023-12-28',
-    author: '市场部',
-    views: 3456,
-    image: 'https://picsum.photos/400/300'
-  },
-  {
-    id: 5,
-    title: '完成新一轮融资',
-    summary: '公司完成B轮融资，将加速产品研发和市场拓展',
-    category: '公司动态',
-    date: '2023-12-20',
-    author: '市场部',
-    views: 4567,
-    image: 'https://picsum.photos/400/300'
-  },
-  {
-    id: 6,
-    title: '技术团队荣获专利证书',
-    summary: '技术团队研发的核心技术获得国家发明专利',
-    category: '技术创新',
-    date: '2023-12-15',
-    author: '技术部',
-    views: 2890,
-    image: 'https://picsum.photos/400/300'
-  }
-])
+const isAdmin = computed(() => Boolean(adminKey.value))
+const readmeTitle = computed(() => readmeProject.value ? `${readmeProject.value.full_name} README` : 'README')
 
-const filteredNews = computed(() => {
-  if (!searchText.value) return news.value
-  return news.value.filter(n =>
-    n.title.toLowerCase().includes(searchText.value.toLowerCase()) ||
-    n.summary.toLowerCase().includes(searchText.value.toLowerCase())
-  )
+const languageOptions = computed(() => {
+  const languages = new Set(projects.value.map(project => project.language).filter(Boolean))
+  return Array.from(languages)
+    .sort((a, b) => a.localeCompare(b))
+    .map(language => ({ label: language, value: language }))
 })
 
-const formatDate = (dateStr) => {
-  const date = new Date(dateStr)
-  const months = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC']
+const filteredProjects = computed(() => {
+  const kw = searchText.value.trim().toLowerCase()
+  return projects.value.filter(project => {
+    if (languageFilter.value && project.language !== languageFilter.value) return false
+    if (!kw) return true
+    const haystack = [
+      project.full_name,
+      project.description,
+      project.highlight,
+      project.language,
+      project.category,
+      ...(project.topics || [])
+    ].filter(Boolean).join(' ').toLowerCase()
+    return haystack.includes(kw)
+  })
+})
+
+function buildFallbackProjects() {
+  return projectConfigs.value.map(item => {
+    const repoName = normalizeRepoInput(item.repo)
+    const config = { ...item, repo: repoName }
+    return normalizeProject({
+      ...githubProjectFallback,
+      ...config,
+      full_name: repoName,
+      html_url: `https://github.com/${repoName}`
+    }, config)
+  })
+}
+
+function normalizeProject(repo, config) {
+  const repoName = normalizeRepoInput(config.repo || repo.full_name || '')
+  const [owner, name] = repoName.split('/')
   return {
-    day: date.getDate(),
-    month: months[date.getMonth()]
+    ...repo,
+    ...config,
+    owner,
+    name,
+    repo: repoName,
+    full_name: repoName || repo.full_name,
+    description: repo.description || config.highlight,
+    html_url: repo.html_url || `https://github.com/${repoName}`,
+    topics: Array.isArray(repo.topics) ? repo.topics : [],
+    language: repo.language || githubProjectFallback.language
   }
 }
 
-const navigateTo = (path) => {
-  router.push(path)
+function normalizeRepoInput(value) {
+  return String(value || '')
+    .trim()
+    .replace(/^https?:\/\/github\.com\//i, '')
+    .replace(/^git@github\.com:/i, '')
+    .replace(/\.git$/i, '')
+    .replace(/[?#].*$/, '')
+    .split('/')
+    .slice(0, 2)
+    .join('/')
 }
+
+async function loadProjects() {
+  loading.value = true
+  error.value = ''
+  try {
+    await loadProjectConfigs()
+    projects.value = projectConfigs.value.map(item => normalizeProject(item, item))
+  } catch (e) {
+    projects.value = buildFallbackProjects()
+  } finally {
+    loading.value = false
+  }
+}
+
+async function openReadme(project) {
+  readmeProject.value = project
+  readmeVisible.value = true
+  readmeLoading.value = true
+  readmeError.value = ''
+  readmeHtml.value = ''
+  try {
+    const markdown = await getGithubProjectReadme(project.full_name)
+    const html = marked.parse(markdown, { breaks: true, gfm: true })
+    readmeHtml.value = DOMPurify.sanitize(html)
+  } catch (e) {
+    readmeError.value = e.message || '无法读取 README.md'
+  } finally {
+    readmeLoading.value = false
+  }
+}
+
+async function loadProjectConfigs() {
+  if (configLoading.value) return
+  configLoading.value = true
+  try {
+    const res = await getGithubProjects()
+    if (res.code === 200 && Array.isArray(res.data)) {
+      projectConfigs.value = res.data.length ? res.data : defaultGithubProjects
+    }
+  } catch (e) {
+    projectConfigs.value = defaultGithubProjects
+  } finally {
+    configLoading.value = false
+  }
+}
+
+async function loginAdmin() {
+  adminLoading.value = true
+  try {
+    const res = await loginGithubProjectsAdmin(adminKeyInput.value)
+    if (res.code !== 200) throw new Error(res.message || '管理员密钥错误')
+    adminKey.value = res.data.token
+    localStorage.setItem('githubProjectsAdminKey', adminKey.value)
+    editableProjects.value = projectConfigs.value.map(item => ({ ...item }))
+    message.success('已进入后台模式')
+  } catch (e) {
+    message.error(e.message || '登录失败')
+  } finally {
+    adminLoading.value = false
+  }
+}
+
+function logoutAdmin() {
+  adminKey.value = ''
+  adminKeyInput.value = ''
+  localStorage.removeItem('githubProjectsAdminKey')
+}
+
+function addProject() {
+  editableProjects.value.push({
+    repo: 'https://github.com/',
+    highlight: '',
+    category: 'Open Source',
+    featured: true
+  })
+}
+
+function removeProject(index) {
+  editableProjects.value.splice(index, 1)
+}
+
+function moveProject(index, direction) {
+  const nextIndex = index + direction
+  if (nextIndex < 0 || nextIndex >= editableProjects.value.length) return
+  const next = [...editableProjects.value]
+  const current = next[index]
+  next[index] = next[nextIndex]
+  next[nextIndex] = current
+  editableProjects.value = next
+}
+
+async function saveAdminProjects() {
+  adminLoading.value = true
+  try {
+    const payload = editableProjects.value.map(item => ({
+      repo: normalizeRepoInput(item.repo),
+      highlight: item.highlight,
+      category: item.category,
+      featured: Boolean(item.featured)
+    })).filter(item => item.repo)
+    const res = await saveGithubProjects(payload, adminKey.value)
+    if (res.code !== 200) throw new Error(res.message || '保存失败')
+    projectConfigs.value = res.data
+    editableProjects.value = res.data.map(item => ({ ...item }))
+    message.success('开源项目展示列表已保存')
+    await loadProjects()
+  } catch (e) {
+    message.error(e.message || '保存失败')
+  } finally {
+    adminLoading.value = false
+  }
+}
+
+function formatNumber(value) {
+  const n = Number(value || 0)
+  if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}k`
+  return String(n)
+}
+
+function formatDate(value) {
+  if (!value) return '未同步'
+  return new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).format(new Date(value))
+}
+
+onMounted(async () => {
+  await loadProjects()
+  editableProjects.value = projectConfigs.value.map(item => ({ ...item }))
+})
 </script>
 
 <style scoped lang="scss">
 @use '@/assets/styles/variables' as *;
 
-.news-search {
-  margin-bottom: $spacing-xl;
-  max-width: 600px;
-  margin-left: auto;
-  margin-right: auto;
+.open-source-page {
+  min-height: 100vh;
+  background: #f6f8fb;
+  padding-top: 72px;
 }
 
-.news-list {
+.page-head {
+  display: flex;
+  justify-content: space-between;
+  gap: $spacing-lg;
+  align-items: flex-end;
+  margin-bottom: $spacing-xl;
+
+  h2 {
+    font-size: 34px;
+    margin: 4px 0 8px;
+    color: $text-color;
+  }
+
+  p {
+    margin: 0;
+    color: $text-color-secondary;
+    line-height: 1.7;
+  }
+
+  .eyebrow {
+    color: $primary-color;
+    font-weight: 700;
+    letter-spacing: 0;
+  }
+}
+
+.page-actions {
+  display: flex;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.toolbar {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) 180px auto;
+  gap: $spacing-md;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #e8edf3;
+  border-radius: 8px;
+  padding: $spacing-md;
+  margin-bottom: $spacing-lg;
+}
+
+.status-alert {
+  margin-bottom: $spacing-lg;
+}
+
+.project-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: $spacing-lg;
+}
+
+.project-card {
+  min-height: 360px;
   display: flex;
   flex-direction: column;
-  gap: $spacing-xl;
-  margin-bottom: $spacing-xl;
-}
-
-.news-item {
-  display: grid;
-  grid-template-columns: 300px 1fr;
-  gap: $spacing-xl;
   background: #fff;
-  border-radius: $border-radius-lg;
-  overflow: hidden;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  padding: $spacing-lg;
   box-shadow: $shadow-sm;
-  cursor: pointer;
-  transition: all $transition-base;
+  transition: transform $transition-base, box-shadow $transition-base, border-color $transition-base;
 
   &:hover {
-    transform: translateY(-4px);
+    transform: translateY(-3px);
+    border-color: rgba(24, 144, 255, 0.35);
     box-shadow: $shadow-lg;
+  }
+}
 
-    .news-image img {
-      transform: scale(1.1);
-    }
+.card-top {
+  display: flex;
+  gap: $spacing-md;
+  align-items: center;
+  margin-bottom: $spacing-md;
+}
+
+.repo-mark {
+  width: 48px;
+  height: 48px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #24292f;
+  flex-shrink: 0;
+}
+
+.repo-title {
+  min-width: 0;
+  flex: 1;
+
+  p {
+    margin: 0 0 2px;
+    color: $text-color-light;
+    font-size: 13px;
   }
 
-  .news-image {
-    position: relative;
-    height: 200px;
-    overflow: hidden;
+  h3 {
+    margin: 0;
+    font-size: 22px;
+    color: $text-color;
+    overflow-wrap: anywhere;
+    cursor: pointer;
 
-    img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      transition: transform $transition-base;
-    }
-
-    .news-date {
-      position: absolute;
-      top: $spacing-sm;
-      left: $spacing-sm;
-      background: $primary-color;
-      color: #fff;
-      padding: $spacing-sm;
-      border-radius: $border-radius-base;
-      text-align: center;
-      min-width: 60px;
-
-      .day {
-        font-size: 24px;
-        font-weight: 700;
-        line-height: 1;
-      }
-
-      .month {
-        font-size: 12px;
-        margin-top: 2px;
-      }
-    }
-  }
-
-  .news-content {
-    padding: $spacing-lg;
-    display: flex;
-    flex-direction: column;
-
-    .news-category {
-      display: inline-block;
-      background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%);
-      color: #fff;
-      padding: $spacing-xs $spacing-sm;
-      border-radius: $border-radius-sm;
-      font-size: 12px;
-      margin-bottom: $spacing-sm;
-      align-self: flex-start;
-    }
-
-    h3 {
-      font-size: 24px;
-      font-weight: 600;
-      margin-bottom: $spacing-sm;
-    }
-
-    .news-summary {
-      flex: 1;
-      color: $text-color-secondary;
-      line-height: 1.6;
-      margin-bottom: $spacing-md;
-    }
-
-    .news-meta {
-      display: flex;
-      gap: $spacing-lg;
-      font-size: 14px;
-      color: $text-color-light;
-
-      span {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-
-        .n-icon {
-          font-size: 16px;
-        }
-      }
+    &:hover {
+      color: $primary-color;
     }
   }
 }
 
-.pagination {
+.category {
+  flex-shrink: 0;
+  background: #e8f4ff;
+  color: $primary-color;
+  border-radius: 4px;
+  padding: 3px 9px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.description {
+  margin: 0 0 $spacing-sm;
+  color: $text-color;
+  line-height: 1.65;
+}
+
+.highlight {
+  margin: 0 0 $spacing-md;
+  color: $text-color-secondary;
+  line-height: 1.65;
+  font-size: 14px;
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: $spacing-sm;
+  margin: auto 0 $spacing-md;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: $text-color-secondary;
+    font-size: 14px;
+  }
+}
+
+.topics {
   display: flex;
-  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: $spacing-lg;
+
+  span {
+    color: #476582;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 12px;
+  }
+}
+
+.card-actions {
+  display: flex;
+  gap: $spacing-sm;
+  margin-top: auto;
+}
+
+.empty {
+  padding: 80px 0;
+}
+
+.admin-modal {
+  width: min(960px, calc(100vw - 32px));
+}
+
+.readme-modal {
+  width: min(1040px, calc(100vw - 32px));
+}
+
+.readme-render {
+  max-height: min(72vh, 760px);
+  overflow: auto;
+  padding: $spacing-lg;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  background: #fff;
+  color: #1f2937;
+  font-size: 15px;
+  line-height: 1.75;
+
+  :deep(h1),
+  :deep(h2),
+  :deep(h3),
+  :deep(h4) {
+    margin: 1.2em 0 0.6em;
+    line-height: 1.3;
+  }
+
+  :deep(h1) {
+    font-size: 1.8em;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 0.3em;
+  }
+
+  :deep(h2) {
+    font-size: 1.45em;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 0.25em;
+  }
+
+  :deep(p) {
+    margin: 0.7em 0;
+  }
+
+  :deep(a) {
+    color: $primary-color;
+    text-decoration: none;
+  }
+
+  :deep(a:hover) {
+    text-decoration: underline;
+  }
+
+  :deep(pre) {
+    overflow: auto;
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+
+  :deep(code) {
+    background: #f1f5f9;
+    border-radius: 4px;
+    padding: 2px 5px;
+    font-family: 'SF Mono', Consolas, monospace;
+    font-size: 0.9em;
+  }
+
+  :deep(pre code) {
+    background: transparent;
+    color: inherit;
+    padding: 0;
+  }
+
+  :deep(img) {
+    max-width: 100%;
+  }
+
+  :deep(table) {
+    display: block;
+    max-width: 100%;
+    overflow: auto;
+    border-collapse: collapse;
+  }
+
+  :deep(th),
+  :deep(td) {
+    border: 1px solid #e5e7eb;
+    padding: 6px 10px;
+  }
+}
+
+.login-panel {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto;
+  gap: $spacing-md;
+}
+
+.admin-panel {
+  display: grid;
+  gap: $spacing-md;
+}
+
+.admin-actions {
+  display: flex;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.admin-list {
+  display: grid;
+  gap: $spacing-sm;
+}
+
+.admin-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1.2fr) minmax(160px, 0.7fr);
+  gap: $spacing-md;
+  align-items: start;
+  padding: $spacing-md;
+  border: 1px solid #e6ebf2;
+  border-radius: 8px;
+  background: #fbfcfe;
+
+  label {
+    display: grid;
+    gap: 6px;
+    min-width: 0;
+
+    span {
+      font-size: 13px;
+      color: $text-color-secondary;
+      font-weight: 600;
+    }
+
+    &:nth-child(3) {
+      grid-column: 1 / -1;
+    }
+  }
+}
+
+.row-foot {
+  grid-column: 1 / -1;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: $spacing-sm;
+}
+
+.row-actions {
+  display: flex;
+  gap: $spacing-sm;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+@media (max-width: 1100px) {
+  .project-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 768px) {
-  .news-item {
+  .page-head {
+    display: block;
+
+    .page-actions {
+      margin-top: $spacing-md;
+      justify-content: flex-start;
+    }
+  }
+
+  .toolbar {
     grid-template-columns: 1fr;
   }
 
-  .news-image {
-    height: 200px;
+  .language-select {
+    width: 100%;
+  }
+
+  .project-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .login-panel,
+  .admin-row {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-row label:nth-child(3),
+  .row-foot {
+    grid-column: auto;
+  }
+
+  .row-foot {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .row-actions {
+    justify-content: flex-start;
   }
 }
 </style>

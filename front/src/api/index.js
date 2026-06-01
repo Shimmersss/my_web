@@ -3,7 +3,7 @@
  * 实际项目中，请替换为真实的API调用
  */
 
-import { get, post, put, del } from '@/utils/request'
+import { get, post, put, del, requestWithOptions } from '@/utils/request'
 
 // 模拟延迟
 const delay = (ms = 500) => new Promise(resolve => setTimeout(resolve, ms))
@@ -203,4 +203,30 @@ export function getZoteroItems(limit = 50) {
  */
 export function getZoteroCollections() {
   return get('/zotero/collections')
+}
+
+// ==================== GitHub 开源项目 API ====================
+
+export function getGithubProjects() {
+  return get('/github-projects')
+}
+
+export function loginGithubProjectsAdmin(key) {
+  return post('/github-projects/login', { key })
+}
+
+export function saveGithubProjects(projects, adminKey) {
+  return requestWithOptions('/github-projects', {
+    method: 'PUT',
+    headers: {
+      'X-Admin-Key': adminKey
+    },
+    body: JSON.stringify(projects)
+  })
+}
+
+export async function getGithubProjectReadme(fullName) {
+  const res = await fetch(`/api/github-projects/${fullName}/readme`)
+  if (!res.ok) throw new Error(await res.text())
+  return res.text()
 }

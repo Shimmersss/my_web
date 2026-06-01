@@ -85,21 +85,24 @@
       </div>
     </section>
 
-    <!-- 新闻动态 -->
+    <!-- GitHub 项目开源 -->
     <section class="section news-section">
       <div class="container">
         <h2 class="section__title">{{ $t('home.news.title') }}</h2>
         <p class="section__subtitle">{{ $t('home.news.subtitle') }}</p>
         <n-grid :x-gap="24" :y-gap="24" :cols="3" :cols-md="2" :cols-sm="1">
-          <n-grid-item v-for="news in newsList" :key="news.id">
-            <div class="news-card" @click="navigateTo(`/news/${news.id}`)">
+          <n-grid-item v-for="project in projectList" :key="project.repo">
+            <div class="news-card" @click="navigateTo('/news')">
               <div class="news-image">
-                <img :src="news.image" :alt="news.title">
-                <div class="news-date">{{ news.date }}</div>
+                <div class="project-preview">
+                  <n-icon size="54"><LogoGithub /></n-icon>
+                  <span>{{ project.category }}</span>
+                </div>
+                <div class="news-date">{{ project.repo.split('/')[0] }}</div>
               </div>
               <div class="news-content">
-                <h3>{{ news.title }}</h3>
-                <p>{{ news.summary }}</p>
+                <h3>{{ project.repo.split('/')[1] }}</h3>
+                <p>{{ project.highlight }}</p>
               </div>
             </div>
           </n-grid-item>
@@ -168,7 +171,7 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { onMounted, ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import {
@@ -185,8 +188,11 @@ import {
   FlashOutline,
   LocationOutline,
   CallOutline,
-  MailOutline
+  MailOutline,
+  LogoGithub
 } from '@vicons/ionicons5'
+import { getGithubProjects } from '@/api'
+import { defaultGithubProjects } from '@/config/githubProjects'
 
 const router = useRouter()
 const message = useMessage()
@@ -214,11 +220,7 @@ const cases = ref([
   { id: 3, title: '电商平台搭建', description: '高性能电商系统开发', image: 'https://picsum.photos/800/400?random=3' }
 ])
 
-const newsList = ref([
-  { id: 1, title: '公司荣获2024年度最佳服务商', summary: '凭借优质服务获得行业认可', date: '2024-01-15', image: 'https://picsum.photos/400/250?random=4' },
-  { id: 2, title: '发布新产品2.0版本', summary: '带来更好的用户体验', date: '2024-01-10', image: 'https://picsum.photos/400/250?random=5' },
-  { id: 3, title: '参加行业峰会', summary: '分享最新技术趋势', date: '2024-01-05', image: 'https://picsum.photos/400/250?random=6' }
-])
+const projectList = ref(defaultGithubProjects.filter(item => item.featured).slice(0, 3))
 
 const formData = reactive({
   name: '',
@@ -251,6 +253,17 @@ const handleSubmit = () => {
     }
   })
 }
+
+onMounted(async () => {
+  try {
+    const res = await getGithubProjects()
+    if (res.code === 200 && Array.isArray(res.data) && res.data.length) {
+      projectList.value = res.data.filter(item => item.featured).slice(0, 3)
+    }
+  } catch (e) {
+    projectList.value = defaultGithubProjects.filter(item => item.featured).slice(0, 3)
+  }
+})
 </script>
 
 <style scoped lang="scss">
@@ -501,7 +514,7 @@ const handleSubmit = () => {
   }
 }
 
-// 新闻动态
+// GitHub 项目开源
 .news-section {
   background: $bg-color-secondary;
 
@@ -536,6 +549,28 @@ const handleSubmit = () => {
 
       &:hover img {
         transform: scale(1.08);
+      }
+
+      .project-preview {
+        width: 100%;
+        height: 100%;
+        display: grid;
+        place-items: center;
+        gap: $spacing-sm;
+        align-content: center;
+        color: #fff;
+        background:
+          radial-gradient(circle at 20% 20%, rgba(24, 144, 255, 0.28), transparent 28%),
+          linear-gradient(135deg, #24292f 0%, #334155 58%, #0f766e 100%);
+
+        span {
+          font-size: 13px;
+          font-weight: 700;
+          background: rgba(255, 255, 255, 0.14);
+          border: 1px solid rgba(255, 255, 255, 0.24);
+          border-radius: $border-radius-sm;
+          padding: 3px 9px;
+        }
       }
 
       .news-date {

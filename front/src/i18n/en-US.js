@@ -4,7 +4,7 @@ export default {
     about: 'About Us',
     business: 'Business',
     cases: 'Cases',
-    news: 'News',
+    news: 'Open Source',
     contact: 'Contact',
     franchise: 'Franchise',
     search: 'Search',
@@ -39,8 +39,8 @@ export default {
       subtitle: 'Success Stories Prove Our Strength'
     },
     news: {
-      title: 'Latest News',
-      subtitle: 'Stay Updated'
+      title: 'GitHub Open Source',
+      subtitle: 'Selected repositories with live GitHub stats'
     }
   },
   about: {

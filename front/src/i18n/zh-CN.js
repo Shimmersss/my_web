@@ -4,7 +4,7 @@ export default {
     about: '关于我们',
     business: '业务模块',
     cases: '案例展示',
-    news: '新闻动态',
+    news: '开源项目',
     contact: '联系我们',
     franchise: '招商加盟',
     search: '搜索',
@@ -39,8 +39,8 @@ export default {
       subtitle: '成功案例见证实力'
     },
     news: {
-      title: '新闻动态',
-      subtitle: '了解最新资讯'
+      title: 'GitHub 项目开源',
+      subtitle: '展示精选开源项目与实时仓库数据'
     }
   },
   about: {

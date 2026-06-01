@@ -76,4 +76,11 @@ export function del(url) {
   return request(url, { method: 'DELETE' })
 }
 
+/**
+ * 带自定义配置的原始请求
+ */
+export function requestWithOptions(url, options = {}) {
+  return request(url, options)
+}
+
 export default request

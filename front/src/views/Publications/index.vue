@@ -3,8 +3,8 @@
     <section class="section">
       <div class="container">
         <div class="page-header">
-          <h2>文献库（自建 / 分支 B）</h2>
-          <p>左侧 Zotero collection 树 · 右侧文献卡片 · 共 {{ total }} 条</p>
+          <h2>文献库</h2>
+          <p>同步自 Zotero · 共 {{ total }} 条 · 显示 {{ filtered.length }} 条匹配</p>
         </div>
 
         <n-alert v-if="error" type="error" title="加载失败" style="margin-bottom: 16px">
@@ -64,8 +64,7 @@
                   clearable
                   style="width: 180px"
                 />
-                <n-button @click="load" :loading="loading">刷新</n-button>
-                <span class="result-count">{{ filtered.length }} 条结果</span>
+                <n-button @click="load" :loading="loading" size="small">刷新</n-button>
               </div>
 
               <div v-if="filtered.length === 0 && !loading" class="empty">
@@ -73,22 +72,34 @@
               </div>
 
               <div v-else class="pub-list">
-                <div v-for="item in filtered" :key="item.key" class="pub-item">
-                  <div class="pub-type">{{ typeLabel(item.itemType) }}</div>
+                <div v-for="item in visibleItems" :key="item.key" class="pub-item">
+                  <div class="pub-row">
+                    <div class="pub-type">{{ typeLabel(item.itemType) }}</div>
+                    <div v-if="hasPdf(item)" class="pdf-badge">PDF</div>
+                  </div>
                   <h3 class="pub-title">
                     <a v-if="item.url" :href="item.url" target="_blank" rel="noopener">{{ item.title || '(无标题)' }}</a>
                     <span v-else>{{ item.title || '(无标题)' }}</span>
                   </h3>
                   <div class="pub-meta">
                     <span v-if="formatCreators(item.creators)">{{ formatCreators(item.creators) }}</span>
-                    <span v-if="item.publicationTitle"> · {{ item.publicationTitle }}</span>
+                    <span v-if="item.publicationTitle"> · <em>{{ item.publicationTitle }}</em></span>
                     <span v-if="item.date"> · {{ item.date }}</span>
                   </div>
-                  <p v-if="item.abstractNote" class="pub-abstract">{{ truncate(item.abstractNote, 280) }}</p>
+
+                  <div v-if="item.abstractNote" class="pub-abstract">
+                    <p :class="{ collapsed: !expanded[item.key] }">{{ item.abstractNote }}</p>
+                    <a
+                      v-if="item.abstractNote.length > 200"
+                      class="toggle"
+                      @click="expanded[item.key] = !expanded[item.key]"
+                    >{{ expanded[item.key] ? '收起' : '展开' }}</a>
+                  </div>
+
                   <div class="pub-foot">
-                    <a v-if="item.DOI" :href="`https://doi.org/${item.DOI}`" target="_blank" rel="noopener">DOI: {{ item.DOI }}</a>
+                    <a v-if="item.DOI" :href="`https://doi.org/${item.DOI}`" target="_blank" rel="noopener" class="doi-link">DOI: {{ item.DOI }}</a>
                     <span v-if="itemCollections(item).length" class="item-colls">
-                      <n-icon><FolderOutline /></n-icon>
+                      <n-icon size="14"><FolderOutline /></n-icon>
                       <span
                         v-for="cn in itemCollections(item)"
                         :key="cn"
@@ -99,7 +110,45 @@
                       <span v-for="t in item.tags" :key="t.tag" class="tag">{{ t.tag }}</span>
                     </span>
                   </div>
+
+                  <div class="pub-actions">
+                    <n-button
+                      v-for="att in pdfAttachments(item)"
+                      :key="att.key"
+                      size="small"
+                      type="primary"
+                      ghost
+                      @click="togglePdf(item.key, att)"
+                    >
+                      <template #icon><n-icon><DocumentTextOutline /></n-icon></template>
+                      {{ openedPdf[item.key] === att.key ? '收起 PDF' : '查看 PDF' }}
+                    </n-button>
+                    <n-dropdown
+                      :options="exportOptions"
+                      trigger="click"
+                      @select="opt => doExport(item.key, opt)"
+                    >
+                      <n-button size="small">
+                        <template #icon><n-icon><DownloadOutline /></n-icon></template>
+                        导出
+                      </n-button>
+                    </n-dropdown>
+                  </div>
+
+                  <div v-if="openedPdf[item.key]" class="pdf-frame">
+                    <iframe
+                      :src="`/api/zotero/file/${openedPdf[item.key]}#toolbar=1&navpanes=0`"
+                      frameborder="0"
+                      loading="lazy"
+                    />
+                  </div>
                 </div>
+              </div>
+
+              <div v-if="hasMore" class="load-more">
+                <n-button @click="loadMore" size="medium" type="primary" ghost>
+                  加载更多（剩余 {{ filtered.length - visibleItems.length }} 条）
+                </n-button>
               </div>
             </main>
           </div>
@@ -110,9 +159,17 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { SearchOutline, FolderOutline } from '@vicons/ionicons5'
-import { getZoteroCollections } from '@/api'
+import { ref, computed, onMounted, onBeforeUnmount, watch, reactive } from 'vue'
+import { useMessage } from 'naive-ui'
+import {
+  SearchOutline,
+  FolderOutline,
+  DocumentTextOutline,
+  DownloadOutline
+} from '@vicons/ionicons5'
+import { getZoteroItems, getZoteroCollections } from '@/api'
+
+const message = useMessage()
 
 const items = ref([])
 const collectionsRaw = ref([])
@@ -122,6 +179,11 @@ const keyword = ref('')
 const typeFilter = ref(null)
 const treeFilter = ref('')
 const selectedKey = ref(null)
+
+const PAGE_SIZE = 20
+const pageCount = ref(1)
+const expanded = reactive({})
+const openedPdf = reactive({})
 
 const typeMap = {
   journalArticle: '期刊论文',
@@ -135,6 +197,12 @@ const typeMap = {
   manuscript: '手稿',
   document: '文档'
 }
+
+const exportOptions = [
+  { label: 'BibTeX', key: 'bibtex' },
+  { label: 'RIS', key: 'ris' },
+  { label: 'APA 引用（复制）', key: 'apa' }
+]
 
 const typeOptions = computed(() => {
   const set = new Set(items.value.map(i => i.itemType).filter(Boolean))
@@ -184,9 +252,15 @@ const countMap = computed(() => {
   return m
 })
 
+function itemMatchesPdfFirst(a, b) {
+  const ap = hasPdf(a) ? 1 : 0
+  const bp = hasPdf(b) ? 1 : 0
+  return bp - ap
+}
+
 const filtered = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
-  return items.value.filter(item => {
+  const list = items.value.filter(item => {
     if (selectedKey.value && !(item.collections || []).includes(selectedKey.value)) return false
     if (typeFilter.value && item.itemType !== typeFilter.value) return false
     if (!kw) return true
@@ -198,7 +272,20 @@ const filtered = computed(() => {
     ].filter(Boolean).join(' ').toLowerCase()
     return hay.includes(kw)
   })
+  return [...list].sort(itemMatchesPdfFirst)
 })
+
+const visibleItems = computed(() => filtered.value.slice(0, pageCount.value * PAGE_SIZE))
+
+const hasMore = computed(() => visibleItems.value.length < filtered.value.length)
+
+watch([keyword, typeFilter, selectedKey], () => {
+  pageCount.value = 1
+})
+
+function loadMore() {
+  pageCount.value += 1
+}
 
 function typeLabel(t) {
   return typeMap[t] || t || '未知'
@@ -212,13 +299,52 @@ function formatCreators(creators) {
     .join(', ')
 }
 
-function truncate(s, n) {
-  if (!s) return ''
-  return s.length > n ? s.slice(0, n) + '…' : s
-}
-
 function itemCollections(item) {
   return (item.collections || []).map(k => collectionMap.value[k]?.name).filter(Boolean)
+}
+
+function hasPdf(item) {
+  return (item.attachments || []).some(a => a.isPdf)
+}
+
+function pdfAttachments(item) {
+  return (item.attachments || []).filter(a => a.isPdf)
+}
+
+function togglePdf(itemKey, att) {
+  if (openedPdf[itemKey] === att.key) {
+    delete openedPdf[itemKey]
+  } else {
+    openedPdf[itemKey] = att.key
+  }
+}
+
+async function doExport(itemKey, opt) {
+  const isApa = opt === 'apa'
+  const format = isApa ? 'bibliography' : opt
+  try {
+    const res = await fetch(`/api/zotero/items/${itemKey}/export?format=${format}&style=apa`)
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const text = await res.text()
+    if (isApa) {
+      const stripped = text.replace(/<[^>]+>/g, '').trim()
+      await navigator.clipboard.writeText(stripped)
+      message.success('APA 引用已复制到剪贴板')
+    } else {
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${itemKey}.${opt === 'bibtex' ? 'bib' : 'ris'}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      message.success(`${opt.toUpperCase()} 已下载`)
+    }
+  } catch (e) {
+    message.error('导出失败：' + e.message)
+  }
 }
 
 async function load() {
@@ -226,11 +352,11 @@ async function load() {
   error.value = ''
   try {
     const [itemsRes, collRes] = await Promise.all([
-      fetch('/api/zotero/items?limit=200').then(r => r.json()),
+      getZoteroItems(200),
       getZoteroCollections()
     ])
     if (itemsRes.code === 200) {
-      items.value = (itemsRes.data || []).filter(i => i.itemType !== 'attachment' && i.itemType !== 'note')
+      items.value = itemsRes.data || []
     } else {
       error.value = itemsRes.message || '拉取文献失败'
     }
@@ -242,7 +368,22 @@ async function load() {
   }
 }
 
-onMounted(load)
+function onScroll() {
+  if (!hasMore.value || loading.value) return
+  const scrollBottom = window.innerHeight + window.scrollY
+  if (scrollBottom >= document.body.offsetHeight - 400) {
+    pageCount.value += 1
+  }
+}
+
+onMounted(() => {
+  load()
+  window.addEventListener('scroll', onScroll, { passive: true })
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onScroll)
+})
 </script>
 
 <style scoped>
@@ -261,12 +402,12 @@ onMounted(load)
 }
 
 .page-header { margin-bottom: 24px; }
-.page-header h2 { font-size: 28px; margin: 0 0 6px; }
+.page-header h2 { font-size: 32px; margin: 0 0 6px; }
 .page-header p { color: #888; margin: 0; }
 
 .layout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 240px 1fr;
   gap: 24px;
   align-items: start;
 }
@@ -302,9 +443,10 @@ onMounted(load)
 .coll-item.active { background: #e6f0ff; color: #1677ff; font-weight: 500; }
 
 .coll-name {
-  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
 }
 
 .count {
@@ -318,37 +460,46 @@ onMounted(load)
 
 .coll-item.active .count { background: #cfe1ff; color: #1677ff; }
 
-.content { min-width: 0; }
+.content {
+  background: transparent;
+}
 
 .filter-bar {
   display: flex;
   gap: 12px;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   flex-wrap: wrap;
   align-items: center;
-}
-
-.result-count {
-  color: #999;
-  font-size: 13px;
-  margin-left: auto;
+  background: #fff;
+  padding: 12px 16px;
+  border-radius: 12px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
 }
 
 .empty { padding: 48px 0; }
 
-.pub-list { display: flex; flex-direction: column; gap: 16px; }
+.pub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
 
 .pub-item {
   background: #fff;
   border-radius: 12px;
-  padding: 22px 26px;
+  padding: 20px 24px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  transition: box-shadow 0.2s, transform 0.2s;
+  transition: box-shadow 0.2s;
 }
 
 .pub-item:hover {
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.08);
-  transform: translateY(-2px);
+}
+
+.pub-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
 }
 
 .pub-type {
@@ -358,20 +509,61 @@ onMounted(load)
   background: #e6f0ff;
   padding: 2px 10px;
   border-radius: 4px;
-  margin-bottom: 8px;
 }
 
-.pub-title { font-size: 17px; margin: 0 0 8px; line-height: 1.5; }
-.pub-title a { color: #1f1f1f; text-decoration: none; }
+.pdf-badge {
+  font-size: 12px;
+  color: #d4380d;
+  background: #fff1f0;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.pub-title {
+  font-size: 17px;
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.pub-title a {
+  color: #1f1f1f;
+  text-decoration: none;
+}
+
 .pub-title a:hover { color: #1677ff; }
 
-.pub-meta { color: #666; font-size: 14px; margin-bottom: 10px; }
+.pub-meta {
+  color: #666;
+  font-size: 13px;
+  margin-bottom: 10px;
+}
 
 .pub-abstract {
-  color: #555;
-  font-size: 14px;
-  line-height: 1.7;
+  position: relative;
   margin: 8px 0 12px;
+}
+
+.pub-abstract p {
+  color: #555;
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 0;
+}
+
+.pub-abstract p.collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.toggle {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  color: #1677ff;
+  cursor: pointer;
 }
 
 .pub-foot {
@@ -379,17 +571,17 @@ onMounted(load)
   gap: 12px;
   align-items: center;
   flex-wrap: wrap;
-  font-size: 13px;
+  font-size: 12px;
   color: #888;
+  margin-bottom: 12px;
 }
 
-.pub-foot a { color: #1677ff; text-decoration: none; }
+.doi-link { color: #1677ff; text-decoration: none; }
 
 .item-colls {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  color: #888;
 }
 
 .item-coll {
@@ -407,5 +599,30 @@ onMounted(load)
   padding: 1px 8px;
   border-radius: 4px;
   font-size: 12px;
+}
+
+.pub-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pdf-frame {
+  margin-top: 14px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pdf-frame iframe {
+  width: 100%;
+  height: 720px;
+  display: block;
+}
+
+.load-more {
+  display: flex;
+  justify-content: center;
+  margin: 32px 0;
 }
 </style>

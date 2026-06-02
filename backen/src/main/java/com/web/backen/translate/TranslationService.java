@@ -1,6 +1,7 @@
 package com.web.backen.translate;
 
-import com.web.backen.config.LlmConfig;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -18,18 +19,13 @@ public class TranslationService {
     private static final Logger log = LoggerFactory.getLogger(TranslationService.class);
 
     private final PdfParseService pdfParseService;
-    private final PdfRenderService pdfRenderService;
-    private final LlmService llmService;
-    private final LlmConfig llmConfig;
+    private final BabelDocService babelDocService;
     private final ConcurrentHashMap<String, TranslationSession> sessions = new ConcurrentHashMap<>();
     private final ExecutorService executor = Executors.newCachedThreadPool();
 
-    public TranslationService(PdfParseService pdfParseService, PdfRenderService pdfRenderService,
-                              LlmService llmService, LlmConfig llmConfig) {
+    public TranslationService(PdfParseService pdfParseService, BabelDocService babelDocService) {
         this.pdfParseService = pdfParseService;
-        this.pdfRenderService = pdfRenderService;
-        this.llmService = llmService;
-        this.llmConfig = llmConfig;
+        this.babelDocService = babelDocService;
     }
 
     /**
@@ -38,42 +34,36 @@ public class TranslationService {
     public TranslationSession createSessionPreview(String fileName, byte[] pdfBytes) throws Exception {
         String taskId = UUID.randomUUID().toString().substring(0, 8);
         int totalPages = pdfParseService.getTotalPages(pdfBytes);
-        // 创建空段落列表的会话
-        TranslationSession session = new TranslationSession(taskId, fileName, pdfBytes, List.of());
+        TranslationSession session = new TranslationSession(taskId, fileName, pdfBytes);
         session.setTotalPages(totalPages);
+        session.setPageRange(1, totalPages);
         sessions.put(taskId, session);
         log.info("创建翻译预览: taskId={}, file={}, totalPages={}", taskId, fileName, totalPages);
         return session;
     }
 
     /**
-     * 开始翻译：按页面范围提取段落并开始翻译
+     * 开始翻译：记录页面范围，PDF 解析和翻译统一交给 BabelDOC
      */
-    public TranslationSession startTranslation(String taskId, int startPage, int endPage) throws Exception {
+    public TranslationSession startTranslation(String taskId, int startPage, int endPage, String fontFamily,
+                                               int qps) throws Exception {
         TranslationSession session = sessions.get(taskId);
         if (session == null) {
             throw new IllegalArgumentException("任务不存在");
         }
 
-        List<PdfParseService.Paragraph> paragraphs = pdfParseService.extractParagraphs(
-                session.getPdfBytes(), startPage, endPage);
+        int effectiveStart = Math.max(1, startPage);
+        int effectiveEnd = Math.min(endPage, session.getTotalPages());
+        if (effectiveStart > effectiveEnd) {
+            throw new IllegalArgumentException("页面范围无效");
+        }
 
-        // 更新会话的段落列表
-        session.updateParagraphs(paragraphs);
-        log.info("开始翻译: taskId={}, pages={}-{}, paragraphs={}", taskId, startPage, endPage, paragraphs.size());
-        return session;
-    }
-
-    /**
-     * 创建翻译任务：解析 PDF，返回会话（翻译全部页面）
-     */
-    public TranslationSession createSession(String fileName, byte[] pdfBytes) throws Exception {
-        String taskId = UUID.randomUUID().toString().substring(0, 8);
-        List<PdfParseService.Paragraph> paragraphs = pdfParseService.extractParagraphs(pdfBytes);
-        TranslationSession session = new TranslationSession(taskId, fileName, pdfBytes, paragraphs);
-        session.setTotalPages(pdfParseService.getTotalPages(pdfBytes));
-        sessions.put(taskId, session);
-        log.info("创建翻译任务: taskId={}, file={}, paragraphs={}", taskId, fileName, paragraphs.size());
+        session.setPageRange(effectiveStart, effectiveEnd);
+        session.setFontFamily(validateFontFamily(fontFamily));
+        session.setQps(validateQps(qps));
+        session.setStatus("ready");
+        log.info("准备 BabelDOC 翻译: taskId={}, pages={}-{}, fontFamily={}, qps={}",
+                taskId, effectiveStart, effectiveEnd, session.getFontFamily(), session.getQps());
         return session;
     }
 
@@ -97,46 +87,50 @@ public class TranslationService {
             return;
         }
 
-        session.setStatus("translating");
+        synchronized (session) {
+            if ("translating".equals(session.getStatus())) {
+                try {
+                    emitter.send(SseEmitter.event().name("layout").data(
+                            Map.of("message", "BabelDOC 翻译任务已在运行")
+                    ));
+                } catch (IOException ignored) {}
+                emitter.complete();
+                return;
+            }
+            if ("completed".equals(session.getStatus())) {
+                try {
+                    emitter.send(SseEmitter.event().name("done").data(Map.of("taskId", taskId)));
+                } catch (IOException ignored) {}
+                emitter.complete();
+                return;
+            }
+            session.setStatus("translating");
+        }
 
         executor.submit(() -> {
             try {
-                List<PdfParseService.Paragraph> paragraphs = session.getParagraphs();
-
-                for (int i = 0; i < paragraphs.size(); i++) {
-                    PdfParseService.Paragraph para = paragraphs.get(i);
-                    String sourceText = para.text();
-
-                    String translated;
-                    // 长段落按 chunk-size 拆分翻译
-                    if (sourceText.length() > llmConfig.getChunkSize()) {
-                        translated = translateLongText(sourceText);
-                    } else {
-                        translated = llmService.translate(sourceText);
-                    }
-
-                    session.setTranslation(i, translated);
-
-                    // 推送 SSE 进度事件
-                    Map<String, Object> progressData = new LinkedHashMap<>();
-                    progressData.put("paragraphIndex", i);
-                    progressData.put("pageNumber", para.pageNumber());
-                    progressData.put("original", sourceText);
-                    progressData.put("translated", translated);
-                    progressData.put("completed", session.getCompletedParagraphs());
-                    progressData.put("total", session.getTotalParagraphs());
-
-                    emitter.send(SseEmitter.event().name("progress").data(progressData));
+                try {
+                    emitter.send(SseEmitter.event().name("layout").data(
+                            Map.of("message", "正在使用 BabelDOC 分析版面、翻译并重建 PDF")
+                    ));
+                } catch (IOException e) {
+                    log.warn("SSE 客户端已断开，BabelDOC 继续执行: taskId={}", taskId);
                 }
-
+                BabelDocService.TranslationResult result = babelDocService.translatePdf(
+                        session.getPdfBytes(), session.getFileName(),
+                        session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
+                        progress -> sendProgress(session, emitter, progress));
+                session.setTranslatedPdfBytes(result.translatedPdfBytes());
+                session.setBilingualPdfBytes(result.bilingualPdfBytes());
+                session.setProgress(100);
+                session.setProgressStage("completed");
                 session.setStatus("completed");
 
-                // 推送完成事件
-                Map<String, Object> doneData = Map.of(
-                        "taskId", taskId,
-                        "total", session.getTotalParagraphs()
-                );
-                emitter.send(SseEmitter.event().name("done").data(doneData));
+                try {
+                    emitter.send(SseEmitter.event().name("done").data(Map.of("taskId", taskId)));
+                } catch (IOException e) {
+                    log.warn("SSE 完成事件未送达，客户端可通过 status 恢复: taskId={}", taskId);
+                }
                 emitter.complete();
 
             } catch (Exception e) {
@@ -154,65 +148,9 @@ public class TranslationService {
     }
 
     /**
-     * 翻译超长文本：按句号边界拆分，分别翻译后拼接
-     */
-    private String translateLongText(String text) {
-        int chunkSize = llmConfig.getChunkSize();
-        List<String> chunks = splitAtSentenceBoundary(text, chunkSize);
-        StringBuilder result = new StringBuilder();
-
-        for (int i = 0; i < chunks.size(); i++) {
-            String chunk = chunks.get(i);
-            String translated = llmService.translate(chunk, i > 0);
-            result.append(translated);
-            if (i < chunks.size() - 1) {
-                result.append("\n");
-            }
-        }
-
-        return result.toString();
-    }
-
-    /**
-     * 按句号边界拆分长文本
-     */
-    private List<String> splitAtSentenceBoundary(String text, int maxChunkSize) {
-        List<String> chunks = new ArrayList<>();
-        int start = 0;
-
-        while (start < text.length()) {
-            if (start + maxChunkSize >= text.length()) {
-                chunks.add(text.substring(start));
-                break;
-            }
-
-            // 在 chunk-size 范围内找最后一个句号
-            int end = start + maxChunkSize;
-            int lastPeriod = -1;
-            for (int i = end; i > start; i--) {
-                char c = text.charAt(i);
-                if (c == '.' && i + 1 < text.length() && text.charAt(i + 1) == ' ') {
-                    lastPeriod = i + 1;
-                    break;
-                }
-            }
-
-            if (lastPeriod <= start) {
-                // 找不到句号，强制截断
-                lastPeriod = end;
-            }
-
-            chunks.add(text.substring(start, lastPeriod).trim());
-            start = lastPeriod;
-        }
-
-        return chunks;
-    }
-
-    /**
      * 构建下载内容
      */
-    public String buildDownloadContent(String taskId, String mode) {
+    public String buildDownloadContent(String taskId) {
         TranslationSession session = sessions.get(taskId);
         if (session == null) {
             throw new IllegalArgumentException("任务不存在");
@@ -221,37 +159,21 @@ public class TranslationService {
             throw new IllegalStateException("翻译尚未完成");
         }
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("=== PDF 论文翻译 ===\n");
-        sb.append("文件: ").append(session.getFileName()).append("\n");
-        sb.append("段落数: ").append(session.getTotalParagraphs()).append("\n");
-        sb.append("模式: ").append("bilingual".equals(mode) ? "双语对照" : "纯中文翻译").append("\n");
-        sb.append("=".repeat(40)).append("\n\n");
-
-        List<PdfParseService.Paragraph> paragraphs = session.getParagraphs();
-        List<String> translations = session.getTranslations();
-
-        for (int i = 0; i < paragraphs.size(); i++) {
-            PdfParseService.Paragraph para = paragraphs.get(i);
-            String translated = translations.get(i);
-
-            if ("bilingual".equals(mode)) {
-                sb.append("【第 ").append(para.pageNumber()).append(" 页 · 段落 ").append(i + 1).append("】\n");
-                sb.append("[原文] ").append(para.text()).append("\n\n");
-                sb.append("[译文] ").append(translated != null ? translated : "(翻译失败)").append("\n");
-                sb.append("-".repeat(40)).append("\n\n");
-            } else {
-                sb.append(translated != null ? translated : "(翻译失败)").append("\n\n");
-            }
+        byte[] translatedPdf = session.getTranslatedPdfBytes();
+        if (translatedPdf == null || translatedPdf.length == 0) {
+            throw new IllegalStateException("BabelDOC 翻译 PDF 尚未生成");
         }
-
-        return sb.toString();
+        try (var document = Loader.loadPDF(translatedPdf)) {
+            return new PDFTextStripper().getText(document);
+        } catch (IOException e) {
+            throw new IllegalStateException("提取中文 TXT 失败: " + e.getMessage(), e);
+        }
     }
 
     /**
      * 生成翻译后的 PDF 文件
      */
-    public byte[] buildTranslatedPdf(String taskId) {
+    public byte[] buildTranslatedPdf(String taskId, String mode) {
         TranslationSession session = sessions.get(taskId);
         if (session == null) {
             throw new IllegalArgumentException("任务不存在");
@@ -260,11 +182,70 @@ public class TranslationService {
             throw new IllegalStateException("翻译尚未完成");
         }
 
-        try {
-            return pdfRenderService.renderTranslatedPdf(
-                    session.getPdfBytes(), session.getParagraphs(), session.getTranslations());
-        } catch (IOException e) {
-            throw new RuntimeException("生成翻译 PDF 失败: " + e.getMessage(), e);
+        if (!Set.of("translated", "bilingual").contains(mode)) {
+            throw new IllegalArgumentException("不支持的 PDF 模式: " + mode);
         }
+        byte[] translatedPdf = "bilingual".equals(mode)
+                ? session.getBilingualPdfBytes()
+                : session.getTranslatedPdfBytes();
+        if (translatedPdf == null || translatedPdf.length == 0) {
+            throw new IllegalStateException("BabelDOC 翻译 PDF 尚未生成");
+        }
+        return translatedPdf;
+    }
+
+    private String validateFontFamily(String fontFamily) {
+        String value = fontFamily == null || fontFamily.isBlank() ? "auto" : fontFamily;
+        if (!Set.of("auto", "serif", "sans-serif", "script").contains(value)) {
+            throw new IllegalArgumentException("不支持的字体族: " + value);
+        }
+        return value;
+    }
+
+    private int validateQps(int qps) {
+        if (qps < 1 || qps > 12) {
+            throw new IllegalArgumentException("并发数必须在 1-12 之间");
+        }
+        return qps;
+    }
+
+    private void sendProgress(TranslationSession session, SseEmitter emitter,
+                              BabelDocService.ProgressUpdate progress) {
+        if (Double.compare(session.getProgress(), progress.progress()) == 0
+                && Objects.equals(session.getProgressStage(), progress.stage())) {
+            return;
+        }
+        session.setProgress(progress.progress());
+        session.setProgressStage(progress.stage());
+        try {
+            emitter.send(SseEmitter.event().name("progress").data(Map.of(
+                    "progress", progress.progress(),
+                    "stage", progress.stage(),
+                    "stageLabel", stageLabel(progress.stage()),
+                    "current", progress.current(),
+                    "total", progress.total()
+            )));
+        } catch (IOException ignored) {
+            // The task continues; the browser can recover the latest progress through /status.
+        }
+    }
+
+    public String stageLabel(String stage) {
+        return switch (stage) {
+            case "Parse PDF and Create Intermediate Representation" -> "解析 PDF";
+            case "DetectScannedFile" -> "检测 PDF 类型";
+            case "Parse Page Layout" -> "分析页面版式";
+            case "Parse Tables" -> "识别表格";
+            case "Parse Paragraphs" -> "识别段落";
+            case "Parse Formulas and Styles" -> "识别公式与样式";
+            case "Translate Paragraphs" -> "翻译正文";
+            case "Typesetting" -> "重新排版";
+            case "Add Fonts" -> "映射字体";
+            case "Generate drawing instructions" -> "生成绘制指令";
+            case "Subset font" -> "嵌入字体";
+            case "Save PDF" -> "保存 PDF";
+            case "completed" -> "翻译完成";
+            default -> stage == null || stage.isBlank() ? "处理中" : stage;
+        };
     }
 }

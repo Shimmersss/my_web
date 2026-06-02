@@ -11,6 +11,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 @RestController
@@ -65,21 +66,23 @@ public class TranslateController {
     }
 
     /**
-     * 开始翻译：指定页面范围，提取段落并开始翻译
+     * 开始翻译：指定页面范围并交给 BabelDOC
      */
     @PostMapping("/start/{taskId}")
     public ResponseEntity<?> start(@PathVariable String taskId,
                                     @RequestParam(defaultValue = "1") int startPage,
-                                    @RequestParam(required = false) Integer endPage) {
+                                    @RequestParam(required = false) Integer endPage,
+                                    @RequestParam(defaultValue = "auto") String fontFamily,
+                                    @RequestParam(defaultValue = "8") int qps) {
         try {
             TranslationSession session = translationService.startTranslation(
-                    taskId, startPage, endPage != null ? endPage : Integer.MAX_VALUE);
+                    taskId, startPage, endPage != null ? endPage : Integer.MAX_VALUE, fontFamily, qps);
 
             return ResponseEntity.ok(Map.of(
                     "code", 200,
                     "data", Map.of(
                             "taskId", session.getTaskId(),
-                            "paragraphCount", session.getTotalParagraphs()
+                            "pageCount", session.getEndPage() - session.getStartPage() + 1
                     )
             ));
         } catch (IllegalArgumentException e) {
@@ -95,7 +98,7 @@ public class TranslateController {
      */
     @GetMapping(value = "/stream/{taskId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@PathVariable String taskId) {
-        SseEmitter emitter = new SseEmitter(10 * 60 * 1000L); // 10 分钟超时
+        SseEmitter emitter = new SseEmitter(35 * 60 * 1000L); // BabelDOC 首次运行需要下载资源
 
         emitter.onTimeout(() -> {
             log.warn("SSE 超时: taskId={}", taskId);
@@ -120,28 +123,29 @@ public class TranslateController {
             return ResponseEntity.status(404).body(Map.of("code", 404, "message", "任务不存在"));
         }
 
-        return ResponseEntity.ok(Map.of(
-                "code", 200,
-                "data", Map.of(
-                        "taskId", session.getTaskId(),
-                        "fileName", session.getFileName(),
-                        "status", session.getStatus(),
-                        "totalPages", session.getTotalPages(),
-                        "completedParagraphs", session.getCompletedParagraphs(),
-                        "totalParagraphs", session.getTotalParagraphs(),
-                        "errorMessage", session.getErrorMessage() != null ? session.getErrorMessage() : ""
-                )
-        ));
+        Map<String, Object> data = new LinkedHashMap<>();
+        data.put("taskId", session.getTaskId());
+        data.put("fileName", session.getFileName());
+        data.put("status", session.getStatus());
+        data.put("totalPages", session.getTotalPages());
+        data.put("startPage", session.getStartPage());
+        data.put("endPage", session.getEndPage());
+        data.put("fontFamily", session.getFontFamily());
+        data.put("qps", session.getQps());
+        data.put("progress", session.getProgress());
+        data.put("progressStage", session.getProgressStage());
+        data.put("progressStageLabel", translationService.stageLabel(session.getProgressStage()));
+        data.put("errorMessage", session.getErrorMessage() != null ? session.getErrorMessage() : "");
+        return ResponseEntity.ok(Map.of("code", 200, "data", data));
     }
 
     /**
      * 下载翻译结果（TXT）
      */
     @GetMapping("/download/{taskId}")
-    public ResponseEntity<?> download(@PathVariable String taskId,
-                                      @RequestParam(defaultValue = "bilingual") String mode) {
+    public ResponseEntity<?> download(@PathVariable String taskId) {
         try {
-            String content = translationService.buildDownloadContent(taskId, mode);
+            String content = translationService.buildDownloadContent(taskId);
             String encodedFileName = URLEncoder.encode("翻译结果.txt", StandardCharsets.UTF_8).replace("+", "%20");
 
             return ResponseEntity.ok()
@@ -159,10 +163,12 @@ public class TranslateController {
      * 下载翻译后的 PDF（译文填回原位置）
      */
     @GetMapping("/download-pdf/{taskId}")
-    public ResponseEntity<?> downloadPdf(@PathVariable String taskId) {
+    public ResponseEntity<?> downloadPdf(@PathVariable String taskId,
+                                         @RequestParam(defaultValue = "translated") String mode) {
         try {
-            byte[] pdf = translationService.buildTranslatedPdf(taskId);
-            String encodedFileName = URLEncoder.encode("翻译版.pdf", StandardCharsets.UTF_8).replace("+", "%20");
+            byte[] pdf = translationService.buildTranslatedPdf(taskId, mode);
+            String fileName = "bilingual".equals(mode) ? "双语对照版.pdf" : "翻译版.pdf";
+            String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFileName)

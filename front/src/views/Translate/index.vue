@@ -72,6 +72,21 @@
             </div>
             <p class="range-hint">将翻译第 {{ startPage }} 到 {{ endPage }} 页的内容</p>
 
+            <div class="range-label option-label">译文字体风格</div>
+            <n-select
+              v-model:value="fontFamily"
+              :options="fontFamilyOptions"
+              style="width: 100%"
+            />
+            <p class="range-hint">字号由 BabelDOC 根据原始文本框自动适配，以尽量保持版式。</p>
+
+            <div class="range-label option-label">翻译速度</div>
+            <n-radio-group v-model:value="translationQps" size="small">
+              <n-radio-button :value="4">稳定模式</n-radio-button>
+              <n-radio-button :value="8">加速模式</n-radio-button>
+            </n-radio-group>
+            <p class="range-hint">加速模式会提高并发请求数；如果接口限流，可切回稳定模式。</p>
+
             <n-button
               type="primary"
               size="large"
@@ -99,28 +114,20 @@
           </n-icon>
           <div>
             <h2>{{ fileName }}</h2>
-            <p>第 {{ translateStartPage }}-{{ translateEndPage }} 页 · 共 {{ totalParagraphs }} 个段落</p>
+            <p>第 {{ translateStartPage }}-{{ translateEndPage }} 页 · BabelDOC 保留版式翻译</p>
           </div>
         </div>
 
         <div class="progress-bar-wrap">
           <n-progress
             type="line"
-            :percentage="progressPercent"
-            :processing="progressPercent < 100"
-            :indicator-text-color="progressPercent < 100 ? '#1890ff' : '#52c41a'"
+            :percentage="translationProgress"
+            :processing="translationProgress < 100"
+            indicator-text-color="#1890ff"
           />
           <p class="progress-text">
-            {{ progressPercent < 100 ? `正在翻译第 ${completedParagraphs + 1} / ${totalParagraphs} 段...` : '翻译完成！' }}
+            {{ progressStageLabel }}
           </p>
-        </div>
-
-        <!-- 实时预览已翻译段落 -->
-        <div class="preview-list">
-          <div v-for="(item, i) in translatedParagraphs" :key="i" class="preview-item">
-            <div class="preview-original">{{ item.original }}</div>
-            <div class="preview-translated">{{ item.translated }}</div>
-          </div>
         </div>
 
         <n-alert v-if="errorMsg" type="error" :title="errorMsg" closable @close="errorMsg = ''" style="margin-top: 16px">
@@ -137,26 +144,21 @@
             <n-icon size="24" color="#52c41a">
               <CheckmarkCircleOutline />
             </n-icon>
-            <span>翻译完成 · 第 {{ translateStartPage }}-{{ translateEndPage }} 页 · {{ totalParagraphs }} 个段落</span>
+            <span>翻译完成 · 第 {{ translateStartPage }}-{{ translateEndPage }} 页</span>
           </div>
 
           <div class="result-actions">
-            <n-radio-group v-model:value="displayMode" size="small">
-              <n-radio-button value="bilingual">双语对照</n-radio-button>
+            <n-radio-group v-model:value="pdfPreviewMode" size="small" @update:value="loadPdfPreview">
               <n-radio-button value="translated">纯中文</n-radio-button>
+              <n-radio-button value="bilingual">双语对照</n-radio-button>
             </n-radio-group>
-
-            <n-button size="small" @click="copyAll">
-              <template #icon><n-icon><CopyOutline /></n-icon></template>
-              复制全文
-            </n-button>
             <n-button size="small" @click="downloadResult">
               <template #icon><n-icon><DownloadOutline /></n-icon></template>
-              下载 TXT
+              下载中文 TXT
             </n-button>
             <n-button size="small" type="primary" @click="downloadPdf">
               <template #icon><n-icon><DownloadOutline /></n-icon></template>
-              下载翻译 PDF
+              下载当前 PDF
             </n-button>
             <n-button size="small" @click="resetToUpload">
               <template #icon><n-icon><RefreshOutline /></n-icon></template>
@@ -165,17 +167,29 @@
           </div>
         </div>
 
-        <div class="result-list">
-          <div v-for="(item, i) in translatedParagraphs" :key="i" class="result-item">
-            <template v-if="displayMode === 'bilingual'">
-              <div class="result-page-tag">第 {{ item.pageNumber }} 页 · 段落 {{ i + 1 }}</div>
-              <div class="result-original">{{ item.original }}</div>
-              <div class="result-translated">{{ item.translated }}</div>
-            </template>
-            <template v-else>
-              <div class="result-translated-only">{{ item.translated }}</div>
-            </template>
+        <div class="pdf-preview-panel">
+          <div class="pdf-preview-header">
+            <div>
+              <h3>{{ pdfPreviewMode === 'bilingual' ? '双语对照 PDF 预览' : '纯中文 PDF 预览' }}</h3>
+              <p>先检查选中页的版式、页码、图片、表格和公式位置，再下载 PDF。</p>
+            </div>
+            <n-button size="small" :loading="isLoadingPdfPreview" @click="loadPdfPreview">
+              刷新预览
+            </n-button>
           </div>
+
+          <div v-if="isLoadingPdfPreview" class="pdf-preview-loading">
+            正在生成 PDF 预览...
+          </div>
+          <iframe
+            v-else-if="pdfPreviewUrl"
+            class="pdf-preview-frame"
+            :src="pdfPreviewUrl"
+            title="翻译 PDF 预览"
+          ></iframe>
+          <n-alert v-else type="warning" title="PDF 预览暂不可用">
+            {{ pdfPreviewError || '请刷新预览或稍后重试。' }}
+          </n-alert>
         </div>
       </div>
     </div>
@@ -183,17 +197,23 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { useMessage } from 'naive-ui'
 import {
   CloudUploadOutline,
   DocumentTextOutline,
   CheckmarkCircleOutline,
-  CopyOutline,
   DownloadOutline,
   RefreshOutline
 } from '@vicons/ionicons5'
-import { uploadPdf, startTranslation, getTranslationStatus, downloadTranslation, downloadTranslatedPdf } from '@/api'
+import {
+  uploadPdf,
+  startTranslation,
+  getTranslationStatus,
+  downloadTranslation,
+  downloadTranslatedPdf,
+  getTranslatedPdfBlob
+} from '@/api'
 
 const message = useMessage()
 
@@ -209,17 +229,23 @@ const startPage = ref(1)
 const endPage = ref(1)
 const translateStartPage = ref(1)
 const translateEndPage = ref(1)
-const totalParagraphs = ref(0)
-const completedParagraphs = ref(0)
-const translatedParagraphs = ref([])
-const displayMode = ref('bilingual')
+const fontFamily = ref('auto')
+const fontFamilyOptions = [
+  { label: '自动匹配原文', value: 'auto' },
+  { label: '衬线字体', value: 'serif' },
+  { label: '无衬线字体', value: 'sans-serif' },
+  { label: '手写 / 斜体风格', value: 'script' }
+]
+const translationQps = ref(8)
+const translationProgress = ref(0)
+const progressStageLabel = ref('正在启动 BabelDOC...')
+const pdfPreviewMode = ref('translated')
 const isStarting = ref(false)
+const isLoadingPdfPreview = ref(false)
+const isGeneratingPdf = ref(false)
+const pdfPreviewUrl = ref('')
+const pdfPreviewError = ref('')
 let eventSource = null
-
-const progressPercent = computed(() => {
-  if (totalParagraphs.value === 0) return 0
-  return Math.round((completedParagraphs.value / totalParagraphs.value) * 100)
-})
 
 // 触发文件选择
 function triggerFileInput() {
@@ -292,16 +318,16 @@ async function handleStartTranslate() {
   errorMsg.value = ''
 
   try {
-    const res = await startTranslation(taskId.value, startPage.value, endPage.value)
+    const res = await startTranslation(taskId.value, startPage.value, endPage.value, fontFamily.value, translationQps.value)
     if (res.code !== 200) {
       throw new Error(res.message || '启动翻译失败')
     }
 
-    totalParagraphs.value = res.data.paragraphCount
     translateStartPage.value = startPage.value
     translateEndPage.value = endPage.value
-    translatedParagraphs.value = []
-    completedParagraphs.value = 0
+    isGeneratingPdf.value = false
+    translationProgress.value = 0
+    progressStageLabel.value = '正在启动 BabelDOC...'
 
     // 进入翻译态并开始 SSE
     step.value = 'translating'
@@ -321,25 +347,30 @@ function startSSE() {
 
   eventSource = new EventSource(`/api/translate/stream/${taskId.value}`)
 
-  eventSource.addEventListener('progress', (e) => {
-    try {
-      const data = JSON.parse(e.data)
-      translatedParagraphs.value.push({
-        pageNumber: data.pageNumber,
-        original: data.original,
-        translated: data.translated
-      })
-      completedParagraphs.value = data.completed
-    } catch (err) {
-      console.error('解析 SSE 进度事件失败:', err)
-    }
-  })
-
   eventSource.addEventListener('done', () => {
+    isGeneratingPdf.value = false
+    translationProgress.value = 100
+    progressStageLabel.value = '翻译完成'
     step.value = 'result'
     eventSource?.close()
     eventSource = null
     message.success('翻译完成！')
+    loadPdfPreview()
+  })
+
+  eventSource.addEventListener('layout', () => {
+    isGeneratingPdf.value = true
+    progressStageLabel.value = '正在使用 BabelDOC 分析版面、翻译并重建 PDF...'
+  })
+
+  eventSource.addEventListener('progress', (e) => {
+    try {
+      const data = JSON.parse(e.data)
+      translationProgress.value = Math.round(data.progress || 0)
+      progressStageLabel.value = data.stageLabel || '处理中...'
+    } catch (err) {
+      console.error('解析 BabelDOC 进度失败:', err)
+    }
   })
 
   eventSource.addEventListener('error', (e) => {
@@ -347,7 +378,7 @@ function startSSE() {
       const data = JSON.parse(e.data)
       errorMsg.value = data.message || '翻译过程中发生错误'
     } catch {
-      if (step.value === 'translating' && translatedParagraphs.value.length === 0) {
+      if (step.value === 'translating') {
         errorMsg.value = '翻译连接中断，请重试'
       }
     }
@@ -356,17 +387,13 @@ function startSSE() {
   })
 
   eventSource.onerror = () => {
-    if (step.value === 'translating' && translatedParagraphs.value.length < totalParagraphs.value) {
-      if (translatedParagraphs.value.length > 0) {
-        message.warning('连接中断，尝试重连...')
-        setTimeout(() => {
-          if (step.value === 'translating') {
-            reconnectSSE()
-          }
-        }, 2000)
-      } else {
-        errorMsg.value = '连接失败，请检查网络后重试'
-      }
+    if (step.value === 'translating') {
+      message.warning('连接中断，尝试重连...')
+      setTimeout(() => {
+        if (step.value === 'translating') {
+          reconnectSSE()
+        }
+      }, 2000)
     }
     eventSource?.close()
     eventSource = null
@@ -379,11 +406,12 @@ async function reconnectSSE() {
     const res = await getTranslationStatus(taskId.value)
     if (res.code === 200) {
       const data = res.data
-      completedParagraphs.value = data.completedParagraphs
-
       if (data.status === 'completed') {
+        translationProgress.value = 100
+        progressStageLabel.value = '翻译完成'
         step.value = 'result'
         message.success('翻译已完成')
+        loadPdfPreview()
         return
       }
 
@@ -392,51 +420,64 @@ async function reconnectSSE() {
         return
       }
 
-      startSSE()
+      translationProgress.value = Math.round(data.progress || 0)
+      progressStageLabel.value = data.progressStageLabel || '正在使用 BabelDOC 处理...'
+      setTimeout(() => {
+        if (step.value === 'translating') {
+          reconnectSSE()
+        }
+      }, 2000)
     }
   } catch {
     errorMsg.value = '重连失败，请刷新页面重试'
   }
 }
 
-// 复制全文
-async function copyAll() {
-  const text = translatedParagraphs.value
-    .map((item, i) => {
-      if (displayMode.value === 'bilingual') {
-        return `[段落 ${i + 1} - 第 ${item.pageNumber} 页]\n原文: ${item.original}\n译文: ${item.translated}`
-      }
-      return item.translated
-    })
-    .join('\n\n')
-
-  try {
-    await navigator.clipboard.writeText(text)
-    message.success('已复制到剪贴板')
-  } catch {
-    message.error('复制失败，请手动选择文本')
-  }
-}
-
 // 下载结果
 function downloadResult() {
-  downloadTranslation(taskId.value, displayMode.value)
+  downloadTranslation(taskId.value)
 }
 
 // 下载翻译 PDF
 function downloadPdf() {
-  downloadTranslatedPdf(taskId.value)
+  downloadTranslatedPdf(taskId.value, pdfPreviewMode.value)
+}
+
+async function loadPdfPreview() {
+  if (!taskId.value) return
+  isLoadingPdfPreview.value = true
+  pdfPreviewError.value = ''
+
+  try {
+    const blob = await getTranslatedPdfBlob(taskId.value, pdfPreviewMode.value)
+    if (pdfPreviewUrl.value) {
+      URL.revokeObjectURL(pdfPreviewUrl.value)
+    }
+    pdfPreviewUrl.value = URL.createObjectURL(blob)
+  } catch (e) {
+    pdfPreviewError.value = e.message || '生成 PDF 预览失败'
+  } finally {
+    isLoadingPdfPreview.value = false
+  }
 }
 
 // 重置到上传态
 function resetToUpload() {
   eventSource?.close()
   eventSource = null
+  if (pdfPreviewUrl.value) {
+    URL.revokeObjectURL(pdfPreviewUrl.value)
+  }
+  pdfPreviewUrl.value = ''
+  pdfPreviewError.value = ''
   step.value = 'upload'
   errorMsg.value = ''
-  translatedParagraphs.value = []
-  completedParagraphs.value = 0
-  totalParagraphs.value = 0
+  isGeneratingPdf.value = false
+  fontFamily.value = 'auto'
+  translationQps.value = 8
+  translationProgress.value = 0
+  progressStageLabel.value = '正在启动 BabelDOC...'
+  pdfPreviewMode.value = 'translated'
   totalPages.value = 0
   taskId.value = ''
   fileName.value = ''
@@ -454,16 +495,22 @@ onMounted(async () => {
         taskId.value = savedTaskId
         fileName.value = data.fileName
         totalPages.value = data.totalPages || 0
-        totalParagraphs.value = data.totalParagraphs
-        completedParagraphs.value = data.completedParagraphs
-
+        translateStartPage.value = data.startPage || 1
+        translateEndPage.value = data.endPage || data.totalPages || 1
+        fontFamily.value = data.fontFamily || 'auto'
+        translationQps.value = data.qps || 8
+        translationProgress.value = Math.round(data.progress || 0)
+        progressStageLabel.value = data.progressStageLabel || '正在使用 BabelDOC 处理...'
         if (data.status === 'completed') {
-          sessionStorage.removeItem('translateTaskId')
-          message.info('之前的翻译会话已过期，请重新上传')
+          progressStageLabel.value = '翻译完成'
+          step.value = 'result'
+          message.info('已恢复之前的翻译结果')
+          loadPdfPreview()
         } else if (data.status === 'translating') {
           step.value = 'translating'
+          isGeneratingPdf.value = true
           message.info('恢复翻译进度...')
-          startSSE()
+          reconnectSSE()
         } else if (data.status === 'preview') {
           step.value = 'config'
         } else {
@@ -480,6 +527,9 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   eventSource?.close()
+  if (pdfPreviewUrl.value) {
+    URL.revokeObjectURL(pdfPreviewUrl.value)
+  }
 })
 </script>
 
@@ -610,6 +660,10 @@ onBeforeUnmount(() => {
   margin-bottom: 12px;
 }
 
+.option-label {
+  margin-top: 20px;
+}
+
 .range-row {
   display: flex;
   align-items: center;
@@ -728,6 +782,54 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.pdf-preview-panel {
+  margin-bottom: 24px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.pdf-preview-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #eef0f3;
+  background: #fafbfc;
+
+  h3 {
+    margin: 0;
+    font-size: 15px;
+    color: $text-color;
+  }
+
+  p {
+    margin: 4px 0 0;
+    font-size: 12px;
+    color: #888;
+  }
+}
+
+.pdf-preview-loading {
+  height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #888;
+  background: #f8fafc;
+}
+
+.pdf-preview-frame {
+  display: block;
+  width: 100%;
+  height: 72vh;
+  min-height: 520px;
+  border: 0;
+  background: #f8fafc;
 }
 
 .result-list {

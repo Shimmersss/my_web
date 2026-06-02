@@ -6,7 +6,7 @@ export default {
     cases: 'Cases',
     news: 'Open Source',
     contact: 'Contact',
-    franchise: 'Franchise',
+    franchise: 'OpenClaw',
     search: 'Search',
     readMore: 'Read More',
     viewAll: 'View All',
@@ -76,7 +76,7 @@ export default {
     service: 'Customer Service'
   },
   franchise: {
-    title: 'Franchise',
+    title: 'OpenClaw Chat',
     apply: 'Apply Now',
     benefits: 'Franchise Benefits',
     process: 'Franchise Process',

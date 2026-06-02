@@ -8,7 +8,6 @@ import org.apache.pdfbox.text.TextPosition;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
-import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -17,6 +16,7 @@ import java.util.regex.Pattern;
 public class PdfParseService {
 
     private static final Pattern PAGE_NUMBER_PATTERN = Pattern.compile("^\\s*\\d+\\s*$");
+    private static final Pattern EQUATION_NUMBER_PATTERN = Pattern.compile("^\\s*\\(?\\d+(?:\\.\\d+)*\\)?\\s*$");
 
     /**
      * 获取 PDF 总页数
@@ -50,73 +50,23 @@ public class PdfParseService {
                 throw new IllegalArgumentException("PDF 已加密，请先解密后再上传");
             }
 
-            // 第一步：用标准 stripper 提取纯文本（用于段落内容）
-            PDFTextStripper textStripper = new PDFTextStripper();
-            textStripper.setSortByPosition(true);
-
-            // 第二步：用位置捕获 stripper 提取坐标
+            // 用位置捕获 stripper 提取每一行的文本和坐标，再按版面关系重建文本块。
             PositionStripper posStripper = new PositionStripper();
             posStripper.setSortByPosition(true);
 
             int totalPages = document.getNumberOfPages();
             int effectiveEnd = Math.min(endPage, totalPages);
             List<Paragraph> paragraphs = new ArrayList<>();
-            int globalIndex = 0;
+            int[] globalIndex = {0};
 
             for (int page = startPage; page <= effectiveEnd; page++) {
-                // 提取纯文本并按段落拆分
-                textStripper.setStartPage(page);
-                textStripper.setEndPage(page);
-                String pageText = textStripper.getText(document);
-                if (pageText == null || pageText.isBlank()) continue;
-
-                String[] textParagraphs = pageText.split("\\n\\s*\\n");
-
-                // 提取每行的位置信息
                 posStripper.setStartPage(page);
                 posStripper.setEndPage(page);
                 posStripper.lineBoxes.clear();
                 posStripper.getText(document);
 
                 List<LineBox> pageLines = new ArrayList<>(posStripper.lineBoxes);
-                int lineIdx = 0;
-
-                for (String tp : textParagraphs) {
-                    String trimmed = tp.trim().replaceAll("\\n", " ").replaceAll("\\s+", " ").trim();
-                    if (trimmed.isEmpty()) continue;
-                    if (PAGE_NUMBER_PATTERN.matcher(trimmed).matches()) continue;
-                    if (trimmed.length() < 15) continue;
-
-                    // 计算这个段落包含多少行（根据原文中的换行数）
-                    int lineCount = tp.split("\\n").length;
-
-                    // 从 pageLines 中取对应行数，计算 bounding box
-                    float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
-                    float maxX = 0, maxY = 0;
-                    float avgFontSize = 0;
-                    int collected = 0;
-
-                    for (int i = 0; i < lineCount && lineIdx < pageLines.size(); i++, lineIdx++) {
-                        LineBox lb = pageLines.get(lineIdx);
-                        if (lb.x < minX) minX = lb.x;
-                        if (lb.y < minY) minY = lb.y;
-                        if (lb.x + lb.width > maxX) maxX = lb.x + lb.width;
-                        if (lb.y + lb.height > maxY) maxY = lb.y + lb.height;
-                        avgFontSize += lb.fontSize;
-                        collected++;
-                    }
-
-                    if (collected > 0) {
-                        avgFontSize /= collected;
-                        paragraphs.add(new Paragraph(page, globalIndex, trimmed,
-                                minX, minY, maxX - minX, maxY - minY, avgFontSize));
-                    } else {
-                        // 位置信息不可用时，用默认值
-                        paragraphs.add(new Paragraph(page, globalIndex, trimmed,
-                                72, 72, 468, 20, 12));
-                    }
-                    globalIndex++;
-                }
+                appendLayoutBlocks(page, pageLines, paragraphs, globalIndex);
             }
 
             if (paragraphs.isEmpty()) {
@@ -138,76 +88,276 @@ public class PdfParseService {
     private static class PositionStripper extends PDFTextStripper {
         final List<LineBox> lineBoxes = new ArrayList<>();
         private final List<TextPosition> currentLinePositions = new ArrayList<>();
+        private final StringBuilder currentLineText = new StringBuilder();
 
         public PositionStripper() throws IOException {}
 
         @Override
         protected void writeString(String text, List<TextPosition> positions) throws IOException {
             if (positions != null && !positions.isEmpty()) {
+                if (!currentLineText.isEmpty() && text != null && !text.startsWith(" ")) {
+                    currentLineText.append(' ');
+                }
+                if (text != null) {
+                    currentLineText.append(text);
+                }
                 currentLinePositions.addAll(positions);
             }
         }
 
         @Override
         protected void writeLineSeparator() throws IOException {
-            if (!currentLinePositions.isEmpty()) {
-                float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
-                float maxX = 0, maxY = 0;
-                float avgFontSize = 0;
-
-                for (TextPosition tp : currentLinePositions) {
-                    float x = tp.getXDirAdj();
-                    float y = tp.getYDirAdj();
-                    float w = tp.getWidthDirAdj();
-                    float h = tp.getHeightDir();
-                    if (x < minX) minX = x;
-                    if (y < minY) minY = y;
-                    if (x + w > maxX) maxX = x + w;
-                    if (y + h > maxY) maxY = y + h;
-                    avgFontSize += tp.getFontSizeInPt();
-                }
-                avgFontSize /= currentLinePositions.size();
-
-                lineBoxes.add(new LineBox(minX, minY, maxX - minX, maxY - minY, avgFontSize));
-                currentLinePositions.clear();
-            }
+            flushLine();
             super.writeLineSeparator();
         }
 
         @Override
         protected void endPage(PDPage page) throws IOException {
-            // 处理最后一行（如果没有以换行结尾）
-            if (!currentLinePositions.isEmpty()) {
-                float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
-                float maxX = 0, maxY = 0;
-                float avgFontSize = 0;
-                for (TextPosition tp : currentLinePositions) {
-                    float x = tp.getXDirAdj();
-                    float y = tp.getYDirAdj();
-                    float w = tp.getWidthDirAdj();
-                    float h = tp.getHeightDir();
-                    if (x < minX) minX = x;
-                    if (y < minY) minY = y;
-                    if (x + w > maxX) maxX = x + w;
-                    if (y + h > maxY) maxY = y + h;
-                    avgFontSize += tp.getFontSizeInPt();
-                }
-                avgFontSize /= currentLinePositions.size();
-                lineBoxes.add(new LineBox(minX, minY, maxX - minX, maxY - minY, avgFontSize));
-                currentLinePositions.clear();
-            }
+            flushLine();
             super.endPage(page);
+        }
+
+        private void flushLine() {
+            if (currentLinePositions.isEmpty()) return;
+
+            appendLineSegments();
+            currentLineText.setLength(0);
+            currentLinePositions.clear();
+        }
+
+        private void appendLineSegments() {
+            List<TextPosition> segment = new ArrayList<>();
+            TextPosition previous = null;
+            for (TextPosition position : currentLinePositions) {
+                if (previous != null && isLargeHorizontalGap(previous, position)) {
+                    addSegment(segment);
+                    segment.clear();
+                }
+                segment.add(position);
+                previous = position;
+            }
+            addSegment(segment);
+        }
+
+        private boolean isLargeHorizontalGap(TextPosition previous, TextPosition current) {
+            float previousEnd = previous.getXDirAdj() + previous.getWidthDirAdj();
+            float gap = current.getXDirAdj() - previousEnd;
+            float threshold = Math.max(previous.getWidthOfSpace() * 2.8f, previous.getFontSizeInPt() * 1.8f);
+            return gap > threshold;
+        }
+
+        private void addSegment(List<TextPosition> positions) {
+            if (positions.isEmpty()) return;
+
+            float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
+            float maxX = 0, maxY = 0;
+            float avgFontSize = 0;
+            StringBuilder text = new StringBuilder();
+            TextPosition previous = null;
+
+            for (TextPosition tp : positions) {
+                float x = tp.getXDirAdj();
+                float y = tp.getYDirAdj();
+                float w = tp.getWidthDirAdj();
+                float h = tp.getHeightDir();
+                if (x < minX) minX = x;
+                if (y < minY) minY = y;
+                if (x + w > maxX) maxX = x + w;
+                if (y + h > maxY) maxY = y + h;
+                avgFontSize += tp.getFontSizeInPt();
+
+                if (previous != null && shouldInsertSpace(previous, tp)) {
+                    text.append(' ');
+                }
+                text.append(tp.getUnicode());
+                previous = tp;
+            }
+            avgFontSize /= positions.size();
+
+            String normalized = text.toString().replaceAll("\\s+", " ").trim();
+            if (!normalized.isEmpty()) {
+                lineBoxes.add(new LineBox(normalized, minX, minY, maxX - minX, maxY - minY, avgFontSize));
+            }
+        }
+
+        private boolean shouldInsertSpace(TextPosition previous, TextPosition current) {
+            float previousEnd = previous.getXDirAdj() + previous.getWidthDirAdj();
+            float gap = current.getXDirAdj() - previousEnd;
+            return gap > Math.max(previous.getWidthOfSpace() * 0.5f, previous.getFontSizeInPt() * 0.25f);
         }
     }
 
     /**
      * 一行文字的 bounding box
      */
-    record LineBox(float x, float y, float width, float height, float fontSize) {}
+    record LineBox(String text, float x, float y, float width, float height, float fontSize) {}
+
+    /**
+     * PDFMathTranslate/PDF2ZH 类工具的核心方向是“先恢复版面块，再替换文本”。
+     * 这里先做轻量 block 重建：同一栏、行距接近的行合并，标题/图注/表注保留为独立块。
+     */
+    private void appendLayoutBlocks(int page,
+                                    List<LineBox> lines,
+                                    List<Paragraph> paragraphs,
+                                    int[] globalIndex) {
+        List<LineBox> block = new ArrayList<>();
+        LineBox previous = null;
+
+        for (LineBox line : lines) {
+            String text = normalizeLineText(line.text());
+            if (!shouldTranslateText(text)) {
+                flushBlock(page, block, paragraphs, globalIndex);
+                appendProtectedBlock(page, line, paragraphs);
+                previous = null;
+                continue;
+            }
+
+            LineBox normalized = new LineBox(text, line.x(), line.y(), line.width(), line.height(), line.fontSize());
+            if (!block.isEmpty() && shouldStartNewBlock(previous, normalized)) {
+                flushBlock(page, block, paragraphs, globalIndex);
+            }
+
+            block.add(normalized);
+            previous = normalized;
+        }
+
+        flushBlock(page, block, paragraphs, globalIndex);
+    }
+
+    private void flushBlock(int page,
+                            List<LineBox> block,
+                            List<Paragraph> paragraphs,
+                            int[] globalIndex) {
+        if (block.isEmpty()) return;
+
+        String text = joinBlockText(block);
+        if (!shouldTranslateText(text)) {
+            block.clear();
+            return;
+        }
+
+        float minX = Float.MAX_VALUE, minY = Float.MAX_VALUE;
+        float maxX = 0, maxY = 0;
+        float avgFontSize = 0;
+        for (LineBox line : block) {
+            if (line.x() < minX) minX = line.x();
+            if (line.y() < minY) minY = line.y();
+            if (line.x() + line.width() > maxX) maxX = line.x() + line.width();
+            if (line.y() + line.height() > maxY) maxY = line.y() + line.height();
+            avgFontSize += line.fontSize();
+        }
+        avgFontSize /= block.size();
+
+        paragraphs.add(new Paragraph(page, globalIndex[0]++, text,
+                minX, minY, maxX - minX, maxY - minY, avgFontSize, true));
+        block.clear();
+    }
+
+    private void appendProtectedBlock(int page, LineBox line, List<Paragraph> paragraphs) {
+        String text = normalizeLineText(line.text());
+        if (!shouldPreserveOriginalText(text)) return;
+        paragraphs.add(new Paragraph(page, -1, text,
+                line.x(), line.y(), line.width(), line.height(), line.fontSize(), false));
+    }
+
+    private boolean shouldStartNewBlock(LineBox previous, LineBox current) {
+        if (previous == null) return false;
+
+        float verticalGap = current.y() - (previous.y() + previous.height());
+        boolean sameBaseline = Math.abs(current.y() - previous.y()) < Math.max(2f, previous.fontSize() * 0.35f);
+        float xDiff = Math.abs(current.x() - previous.x());
+        boolean horizontallyOverlaps = current.x() < previous.x() + previous.width()
+                && previous.x() < current.x() + current.width();
+        boolean sameRowCell = sameBaseline && xDiff > Math.max(18f, previous.fontSize() * 1.5f);
+        boolean differentColumn = !horizontallyOverlaps && xDiff > 24f;
+        boolean largeIndentChange = xDiff > Math.max(28f, previous.fontSize() * 3f)
+                && !previous.text().endsWith("-");
+        boolean largeGap = verticalGap > Math.max(10f, previous.fontSize() * 1.25f);
+        boolean captionBoundary = isCaptionLine(previous.text()) || isCaptionLine(current.text());
+        boolean headingBoundary = isLikelyHeading(previous) || isLikelyHeading(current);
+
+        return sameRowCell || differentColumn || largeIndentChange || largeGap || captionBoundary || headingBoundary;
+    }
+
+    private String joinBlockText(List<LineBox> block) {
+        StringBuilder sb = new StringBuilder();
+        for (LineBox line : block) {
+            String text = line.text();
+            if (sb.isEmpty()) {
+                sb.append(text);
+            } else if (sb.charAt(sb.length() - 1) == '-') {
+                sb.deleteCharAt(sb.length() - 1).append(text);
+            } else {
+                sb.append(' ').append(text);
+            }
+        }
+        return sb.toString().replaceAll("\\s+", " ").trim();
+    }
+
+    private String normalizeLineText(String text) {
+        return text == null ? "" : text.replaceAll("\\s+", " ").trim();
+    }
+
+    private boolean shouldTranslateText(String text) {
+        if (text == null || text.isBlank()) return false;
+        String trimmed = text.trim();
+        if (PAGE_NUMBER_PATTERN.matcher(trimmed).matches()) return false;
+        if (looksLikeFormula(trimmed)) return false;
+        if (looksLikeShortProtectedText(trimmed)) return false;
+        long letters = trimmed.chars().filter(Character::isLetter).count();
+        return letters >= 3;
+    }
+
+    private boolean shouldPreserveOriginalText(String text) {
+        if (text == null || text.isBlank()) return false;
+        String trimmed = text.trim();
+        if (PAGE_NUMBER_PATTERN.matcher(trimmed).matches()) return true;
+        if (looksLikeFormula(trimmed)) return true;
+        if (trimmed.matches("^\\[[0-9,\\-\\s]+]$")) return true;
+        return looksLikeShortProtectedText(trimmed);
+    }
+
+    private boolean looksLikeShortProtectedText(String trimmed) {
+        long letters = trimmed.chars().filter(Character::isLetter).count();
+        long digits = trimmed.chars().filter(Character::isDigit).count();
+        boolean hasSymbol = trimmed.chars().anyMatch(c -> "()[]{}+-=*/%.,:;<>≤≥≈≠_".indexOf(c) >= 0);
+
+        // 清理原 PDF 文本流后，短表格值、坐标轴标签、单位、变量名等也需要原样重绘，避免“删内容”。
+        if (trimmed.length() <= 24 && (digits > 0 || hasSymbol)) return true;
+        return trimmed.length() <= 12 && letters <= 2;
+    }
+
+    private boolean isCaptionLine(String text) {
+        return text.matches("(?i)^\\s*(figure|fig\\.|table)\\s+\\d+.*");
+    }
+
+    private boolean isLikelyHeading(LineBox line) {
+        String text = line.text();
+        if (text.length() > 80) return false;
+        if (text.matches("(?i)^\\s*(abstract|introduction|conclusion|references)\\s*$")) return true;
+        return text.matches("^\\s*(?:[0-9]+|[IVX]+)\\.?\\s+[A-Z][A-Za-z0-9 ,:()/-]{2,}$")
+                && !text.endsWith(".")
+                && line.width() < 360f;
+    }
+
+    /**
+     * 粗略过滤公式/变量密集行，避免把数学表达式送去翻译并遮罩。
+     */
+    private boolean looksLikeFormula(String text) {
+        if (EQUATION_NUMBER_PATTERN.matcher(text).matches()) return true;
+        long mathChars = text.chars()
+                .filter(c -> "=+-*/∑∫√≤≥≈≠∞∂∆∇|".indexOf(c) >= 0)
+                .count();
+        long letters = text.chars().filter(Character::isLetter).count();
+        long spaces = text.chars().filter(Character::isWhitespace).count();
+        if (mathChars >= 2 && letters < 20) return true;
+        return mathChars >= 3 && spaces <= 3;
+    }
 
     /**
      * 段落记录（带位置信息）
      */
     public record Paragraph(int pageNumber, int index, String text,
-                            float x, float y, float width, float height, float fontSize) {}
+                            float x, float y, float width, float height, float fontSize,
+                            boolean translatable) {}
 }

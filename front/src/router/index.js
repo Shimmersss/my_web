@@ -53,7 +53,7 @@ const routes = [
     path: '/franchise',
     name: 'Franchise',
     component: () => import('@/views/Franchise/index.vue'),
-    meta: { title: '招商加盟' }
+    meta: { title: 'OpenClaw 对话' }
   },
   {
     path: '/publications',

@@ -188,6 +188,101 @@ export async function getFranchiseCases() {
   }
 }
 
+// ==================== OpenClaw WebChat API ====================
+
+export function loginOpenClaw(key) {
+  return post('/openclaw/login', { key })
+}
+
+export function getOpenClawHistory(adminKey, sessionKey = '') {
+  const query = sessionKey ? `?sessionKey=${encodeURIComponent(sessionKey)}` : ''
+  return requestWithOptions(`/openclaw/history${query}`, {
+    method: 'GET',
+    headers: {
+      'X-Admin-Key': adminKey
+    }
+  })
+}
+
+export function sendOpenClawMessage(message, adminKey, sessionKey = '', attachments = []) {
+  return requestWithOptions('/openclaw/send', {
+    method: 'POST',
+    headers: {
+      'X-Admin-Key': adminKey
+    },
+    body: JSON.stringify({ message, sessionKey, attachments })
+  })
+}
+
+export function getOpenClawSessions(adminKey) {
+  return openClawRequest('/openclaw/sessions', adminKey)
+}
+
+export function createOpenClawSession(adminKey, data = {}) {
+  return openClawRequest('/openclaw/sessions', adminKey, 'POST', data)
+}
+
+export function resetOpenClawSession(adminKey, sessionKey) {
+  return openClawRequest('/openclaw/sessions/reset', adminKey, 'POST', { sessionKey })
+}
+
+export function patchOpenClawSession(adminKey, data) {
+  return openClawRequest('/openclaw/sessions', adminKey, 'PATCH', data)
+}
+
+export function getOpenClawModels(adminKey) {
+  return openClawRequest('/openclaw/models', adminKey)
+}
+
+export function getOpenClawCommands(adminKey) {
+  return openClawRequest('/openclaw/commands', adminKey)
+}
+
+export function getOpenClawArtifacts(adminKey, sessionKey) {
+  return openClawRequest(`/openclaw/artifacts?sessionKey=${encodeURIComponent(sessionKey)}`, adminKey)
+}
+
+export async function downloadOpenClawArtifact(adminKey, sessionKey, artifactId) {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+  const query = `?sessionKey=${encodeURIComponent(sessionKey)}`
+  const response = await fetch(`${baseUrl}/openclaw/artifacts/${encodeURIComponent(artifactId)}/download${query}`, {
+    headers: { 'X-Admin-Key': adminKey }
+  })
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+  const contentType = response.headers.get('Content-Type') || ''
+  if (contentType.includes('application/json')) return response.json()
+
+  const blob = await response.blob()
+  const disposition = response.headers.get('Content-Disposition') || ''
+  const filename = disposition.match(/filename="([^"]+)"/)?.[1] || 'openclaw-artifact'
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  link.click()
+  URL.revokeObjectURL(url)
+  return { code: 200 }
+}
+
+export async function getOpenClawInboundMedia(adminKey, filename) {
+  const baseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+  const response = await fetch(`${baseUrl}/openclaw/media/inbound/${encodeURIComponent(filename)}`, {
+    headers: { 'X-Admin-Key': adminKey }
+  })
+  if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`)
+  return response.blob()
+}
+
+function openClawRequest(path, adminKey, method = 'GET', body) {
+  return requestWithOptions(path, {
+    method,
+    headers: {
+      'X-Admin-Key': adminKey
+    },
+    ...(body ? { body: JSON.stringify(body) } : {})
+  })
+}
+
 // ==================== Zotero 文献 API ====================
 
 /**
@@ -255,8 +350,8 @@ export async function uploadPdf(file) {
  * @param {number} endPage - 结束页码
  * @returns {Promise}
  */
-export function startTranslation(taskId, startPage, endPage) {
-  return post(`/translate/start/${taskId}?startPage=${startPage}&endPage=${endPage}`)
+export function startTranslation(taskId, startPage, endPage, fontFamily = 'auto', qps = 8) {
+  return post(`/translate/start/${taskId}?startPage=${startPage}&endPage=${endPage}&fontFamily=${encodeURIComponent(fontFamily)}&qps=${qps}`)
 }
 
 /**
@@ -271,16 +366,33 @@ export function getTranslationStatus(taskId) {
 /**
  * 下载翻译结果
  * @param {string} taskId
- * @param {string} mode - 'bilingual' 或 'translated'
  */
-export function downloadTranslation(taskId, mode) {
-  window.open(`/api/translate/download/${taskId}?mode=${mode}`)
+export function downloadTranslation(taskId) {
+  window.open(`/api/translate/download/${taskId}`)
+}
+
+/**
+ * 获取翻译后的 PDF Blob（用于页面内预览）
+ * @param {string} taskId
+ * @returns {Promise<Blob>}
+ */
+export async function getTranslatedPdfBlob(taskId, mode = 'translated') {
+  const res = await fetch(`/api/translate/download-pdf/${taskId}?mode=${encodeURIComponent(mode)}`)
+  if (!res.ok) {
+    let message = '生成翻译 PDF 失败'
+    try {
+      const data = await res.json()
+      message = data.message || message
+    } catch {}
+    throw new Error(message)
+  }
+  return res.blob()
 }
 
 /**
  * 下载翻译后的 PDF（译文填回原位置）
  * @param {string} taskId
  */
-export function downloadTranslatedPdf(taskId) {
-  window.open(`/api/translate/download-pdf/${taskId}`)
+export function downloadTranslatedPdf(taskId, mode = 'translated') {
+  window.open(`/api/translate/download-pdf/${taskId}?mode=${encodeURIComponent(mode)}`)
 }

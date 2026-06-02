@@ -12,38 +12,57 @@
         </n-alert>
 
         <n-spin :show="loading">
-          <div class="layout">
-            <aside class="sidebar">
-              <h3>Collections</h3>
-              <n-input
-                v-model:value="treeFilter"
-                placeholder="过滤分组..."
-                size="small"
-                clearable
-                style="margin-bottom: 12px"
-              />
-              <div class="coll-list">
-                <div
-                  class="coll-item"
-                  :class="{ active: selectedKey === null }"
-                  @click="selectedKey = null"
+          <div class="layout" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+            <div ref="sidebarSlot" class="sidebar-slot">
+              <aside
+                class="sidebar"
+                :class="{ collapsed: sidebarCollapsed, following: sidebarFollowing }"
+                :style="sidebarFollowStyle"
+              >
+                <button
+                  class="sidebar-toggle"
+                  type="button"
+                  :title="sidebarCollapsed ? '展开分组栏' : '折叠分组栏'"
+                  @click="sidebarCollapsed = !sidebarCollapsed"
                 >
-                  <span class="coll-name">全部</span>
-                  <span class="count">{{ total }}</span>
-                </div>
-                <div
-                  v-for="c in visibleCollections"
-                  :key="c.key"
-                  class="coll-item"
-                  :class="{ active: selectedKey === c.key }"
-                  :style="{ paddingLeft: 12 + c.depth * 16 + 'px' }"
-                  @click="selectedKey = c.key"
-                >
-                  <span class="coll-name" :title="c.name">{{ c.name }}</span>
-                  <span class="count">{{ countMap[c.key] || 0 }}</span>
-                </div>
-              </div>
-            </aside>
+                  <n-icon size="18">
+                    <ChevronForwardOutline v-if="sidebarCollapsed" />
+                    <ChevronBackOutline v-else />
+                  </n-icon>
+                </button>
+                <template v-if="!sidebarCollapsed">
+                  <h3>Collections</h3>
+                  <n-input
+                    v-model:value="treeFilter"
+                    placeholder="过滤分组..."
+                    size="small"
+                    clearable
+                    style="margin-bottom: 12px"
+                  />
+                  <div class="coll-list">
+                    <div
+                      class="coll-item"
+                      :class="{ active: selectedKey === null }"
+                      @click="selectedKey = null"
+                    >
+                      <span class="coll-name">全部</span>
+                      <span class="count">{{ total }}</span>
+                    </div>
+                    <div
+                      v-for="c in visibleCollections"
+                      :key="c.key"
+                      class="coll-item"
+                      :class="{ active: selectedKey === c.key }"
+                      :style="{ paddingLeft: 12 + c.depth * 16 + 'px' }"
+                      @click="selectedKey = c.key"
+                    >
+                      <span class="coll-name" :title="c.name">{{ c.name }}</span>
+                      <span class="count">{{ countMap[c.key] || 0 }}</span>
+                    </div>
+                  </div>
+                </template>
+              </aside>
+            </div>
 
             <main class="content">
               <div class="filter-bar">
@@ -72,7 +91,7 @@
               </div>
 
               <div v-else class="pub-list">
-                <div v-for="item in visibleItems" :key="item.key" class="pub-item">
+                <div v-for="item in pagedItems" :key="item.key" class="pub-item">
                   <div class="pub-row">
                     <div class="pub-type">{{ typeLabel(item.itemType) }}</div>
                     <div v-if="hasPdf(item)" class="pdf-badge">PDF</div>
@@ -151,10 +170,14 @@
                 </div>
               </div>
 
-              <div v-if="hasMore" class="load-more">
-                <n-button @click="loadMore" size="medium" type="primary" ghost>
-                  加载更多（剩余 {{ filtered.length - visibleItems.length }} 条）
-                </n-button>
+              <div v-if="filtered.length > PAGE_SIZE" class="pagination-wrap">
+                <n-pagination
+                  v-model:page="currentPage"
+                  :page-count="totalPages"
+                  :page-size="PAGE_SIZE"
+                  show-quick-jumper
+                  @update:page="scrollToListTop"
+                />
               </div>
             </main>
           </div>
@@ -165,13 +188,15 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch, reactive } from 'vue'
+import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch, reactive } from 'vue'
 import { useMessage } from 'naive-ui'
 import {
   SearchOutline,
   FolderOutline,
   DocumentTextOutline,
-  DownloadOutline
+  DownloadOutline,
+  ChevronBackOutline,
+  ChevronForwardOutline
 } from '@vicons/ionicons5'
 import { getZoteroItems, getZoteroCollections } from '@/api'
 import { marked } from 'marked'
@@ -187,9 +212,16 @@ const keyword = ref('')
 const typeFilter = ref(null)
 const treeFilter = ref('')
 const selectedKey = ref(null)
+const sidebarCollapsed = ref(false)
+const sidebarSlot = ref(null)
+const sidebarFollowing = ref(false)
+const sidebarFollowLeft = ref(0)
+const sidebarFollowWidth = ref(0)
+let sidebarResizeTimer = null
+let sidebarScrollContainers = []
 
 const PAGE_SIZE = 20
-const pageCount = ref(1)
+const currentPage = ref(1)
 const expanded = reactive({})
 const openedPdf = reactive({})
 const openedMd = reactive({})
@@ -285,16 +317,62 @@ const filtered = computed(() => {
   return [...list].sort(itemMatchesPdfFirst)
 })
 
-const visibleItems = computed(() => filtered.value.slice(0, pageCount.value * PAGE_SIZE))
+const totalPages = computed(() => Math.max(1, Math.ceil(filtered.value.length / PAGE_SIZE)))
 
-const hasMore = computed(() => visibleItems.value.length < filtered.value.length)
-
-watch([keyword, typeFilter, selectedKey], () => {
-  pageCount.value = 1
+const pagedItems = computed(() => {
+  const start = (currentPage.value - 1) * PAGE_SIZE
+  return filtered.value.slice(start, start + PAGE_SIZE)
 })
 
-function loadMore() {
-  pageCount.value += 1
+const sidebarFollowStyle = computed(() => {
+  if (!sidebarFollowing.value) return undefined
+  return {
+    left: `${sidebarFollowLeft.value}px`,
+    width: `${sidebarFollowWidth.value}px`
+  }
+})
+
+watch([keyword, typeFilter, selectedKey], () => {
+  currentPage.value = 1
+})
+
+watch(sidebarCollapsed, () => {
+  nextTick(updateSidebarFollow)
+  clearTimeout(sidebarResizeTimer)
+  sidebarResizeTimer = setTimeout(updateSidebarFollow, 220)
+})
+
+watch(totalPages, pages => {
+  if (currentPage.value > pages) currentPage.value = pages
+})
+
+function scrollToListTop() {
+  const top = document.querySelector('.content')?.getBoundingClientRect().top
+  if (top === undefined) return
+  window.scrollTo({ top: window.scrollY + top - 100, behavior: 'smooth' })
+}
+
+function updateSidebarFollow() {
+  const slot = sidebarSlot.value
+  if (!slot || window.innerWidth <= 720) {
+    sidebarFollowing.value = false
+    return
+  }
+  const rect = slot.getBoundingClientRect()
+  sidebarFollowing.value = rect.top <= 100
+  sidebarFollowLeft.value = rect.left
+  sidebarFollowWidth.value = rect.width
+}
+
+function bindSidebarFollowListeners() {
+  let parent = sidebarSlot.value?.parentElement
+  while (parent) {
+    if (parent.classList.contains('n-layout-scroll-container')) {
+      parent.addEventListener('scroll', updateSidebarFollow, { passive: true })
+      sidebarScrollContainers.push(parent)
+    }
+    parent = parent.parentElement
+  }
 }
 
 function typeLabel(t) {
@@ -412,21 +490,24 @@ async function load() {
   }
 }
 
-function onScroll() {
-  if (!hasMore.value || loading.value) return
-  const scrollBottom = window.innerHeight + window.scrollY
-  if (scrollBottom >= document.body.offsetHeight - 400) {
-    pageCount.value += 1
-  }
-}
-
 onMounted(() => {
   load()
-  window.addEventListener('scroll', onScroll, { passive: true })
+  nextTick(() => {
+    bindSidebarFollowListeners()
+    updateSidebarFollow()
+  })
+  window.addEventListener('scroll', updateSidebarFollow, { passive: true })
+  window.addEventListener('resize', updateSidebarFollow)
 })
 
 onBeforeUnmount(() => {
-  window.removeEventListener('scroll', onScroll)
+  clearTimeout(sidebarResizeTimer)
+  sidebarScrollContainers.forEach(container => {
+    container.removeEventListener('scroll', updateSidebarFollow)
+  })
+  sidebarScrollContainers = []
+  window.removeEventListener('scroll', updateSidebarFollow)
+  window.removeEventListener('resize', updateSidebarFollow)
 })
 </script>
 
@@ -454,6 +535,15 @@ onBeforeUnmount(() => {
   grid-template-columns: 240px 1fr;
   gap: 24px;
   align-items: start;
+  transition: grid-template-columns 0.2s ease;
+}
+
+.layout.sidebar-collapsed {
+  grid-template-columns: 48px 1fr;
+}
+
+.sidebar-slot {
+  min-width: 0;
 }
 
 .sidebar {
@@ -461,10 +551,44 @@ onBeforeUnmount(() => {
   border-radius: 12px;
   padding: 16px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
-  position: sticky;
-  top: 100px;
+  width: 100%;
   max-height: calc(100vh - 120px);
   overflow-y: auto;
+}
+
+.sidebar.following {
+  position: fixed;
+  top: 100px;
+  z-index: 5;
+}
+
+.sidebar.collapsed {
+  padding: 8px;
+  overflow: hidden;
+}
+
+.sidebar-toggle {
+  width: 30px;
+  height: 30px;
+  margin: 0 0 10px auto;
+  border: 0;
+  border-radius: 6px;
+  color: #666;
+  background: #f5f5f5;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sidebar-toggle:hover {
+  color: #1677ff;
+  background: #e6f0ff;
+}
+
+.sidebar.collapsed .sidebar-toggle {
+  margin-bottom: 0;
 }
 
 .sidebar h3 { margin: 0 0 12px; font-size: 15px; color: #555; }
@@ -726,9 +850,27 @@ onBeforeUnmount(() => {
 .md-render :deep(a:hover) { text-decoration: underline; }
 .md-render :deep(img) { max-width: 100%; }
 
-.load-more {
+.pagination-wrap {
   display: flex;
   justify-content: center;
   margin: 32px 0;
+}
+
+@media (max-width: 720px) {
+  .layout,
+  .layout.sidebar-collapsed {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .sidebar {
+    position: relative;
+    z-index: 2;
+    max-height: 50vh;
+  }
+
+  .sidebar.collapsed {
+    width: 48px;
+  }
 }
 </style>

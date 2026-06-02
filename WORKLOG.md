@@ -8,6 +8,330 @@
 
 ## 2026-06-02
 
+### perf: BabelDOC 实时阶段进度 + 可选并发加速
+
+**改动**：
+- 新增 `backen/scripts/babeldoc_runner.py`，直接调用 BabelDOC Python API，将结构化进度以 JSON 行输出
+- 后端边读取子进程输出边发送 SSE `progress`，包含阶段、当前项、总项和整体百分比
+- `/status/{taskId}` 同步返回最新进度，断线后仍可恢复
+- 前端进度条改为真实百分比，并显示“分析页面版式 / 翻译正文 / 重新排版 / 生成 PDF”等阶段
+- 配置态新增稳定模式（4 QPS）和加速模式（8 QPS），默认使用加速模式
+- runner 关闭自动术语抽取，并让 worker 数与 QPS 对齐，减少额外模型调用和等待
+- runner 收到 BabelDOC `finish` 后主动退出，避免 macOS 上 ONNX/CoreML 原生后台线程让已完成任务迟迟不返回 `done`
+- BabelDOC API Key 改为通过子进程环境变量传递，不再暴露在本机进程参数中
+
+---
+
+### feat: BabelDOC 字体族选择 + 纯中文 / 双语 PDF 预览切换
+
+**能力边界**：BabelDOC `0.6.2` 原生支持 `--primary-font-family=serif|sans-serif|script`，但不提供固定字号参数。字号仍由版面引擎根据原文本框自动适配，避免破坏排版。
+
+**改动**：
+- 配置态增加译文字体风格：自动匹配、衬线、无衬线、手写 / 斜体
+- BabelDOC 一次生成并缓存纯中文 `mono.pdf` 与双语 `dual.pdf`
+- `/api/translate/download-pdf/{taskId}` 增加 `mode=translated|bilingual`
+- 结果页增加纯中文 / 双语对照切换；切换只读取缓存 Blob，不会重新翻译
+- 下载 PDF 按钮下载当前预览版本
+
+---
+
+### perf: PDF 翻译收敛为 BabelDOC 单链路
+
+**问题**：接入 BabelDOC 后仍先用 `LlmService` 串行逐段翻译，再让 BabelDOC 完整翻译一次。同一篇论文被翻译两遍，耗时和模型费用都翻倍，网页预览与最终 PDF 还可能不一致。
+
+**改动**：
+- `/api/translate/start/{taskId}` 只保存页面范围，不再用 PDFBox 重建段落
+- SSE 直接启动 BabelDOC，事件精简为 `layout / done / error`
+- 最终 PDF 缓存在 `TranslationSession`；预览和下载不会重复调用模型
+- TXT 下载从 BabelDOC 已生成的中文 PDF 提取，不再额外调用模型
+- 前端移除逐段实时预览、双语切换和逐段复制，结果页以 PDF 预览为主
+- 修复断线恢复重复启动翻译的问题：恢复时只轮询 `/status/{taskId}`
+
+**保留**：`LlmService`、`TranslationProtector`、`PdfParseService` 的旧段落逻辑暂时留作历史参考，不再进入默认翻译链路。
+
+---
+
+### feat: 原招商加盟页替换为 OpenClaw 原生网页对话
+
+**目标**：把原“招商加盟”页面替换为 OpenClaw Gateway 对话框，让用户在个人主页内直接与本机 OpenClaw 聊天。
+
+**方案演进**：
+- 最初尝试把 OpenClaw Control UI 嵌入 iframe
+- 实测 Gateway 返回 `X-Frame-Options: DENY` 和 CSP `frame-ancestors 'none'`
+- 浏览器会强制阻止嵌入，因此改为站内原生聊天 UI + Spring Boot 后端 CLI 代理
+
+**改动**：
+- 前端：
+  - `Franchise/index.vue` 删除招商加盟表单、案例和流程，改成 OpenClaw 登录 + 聊天界面
+  - 使用 `ADMIN_KEY` 登录，密钥只放 `sessionStorage`
+  - 支持读取历史、发送消息、每 2 秒轮询、Enter 发送、Shift+Enter 换行
+  - 仿照官方 Control UI 增加左侧对话栏：真实会话列表、搜索、新建和切换
+  - 顶部增加 Gateway 模型与思考级别选择器，按当前 session 保存 override
+  - 模型列表加入后台定时刷新，顶部刷新按钮同步刷新历史、会话和模型；Gateway 新增白名单模型后无需重新登录
+  - 后端模型接口改为 `models.list(view=all)` 与 `config.get.models.providers.*.models` 取交集：只展示本机显式配置模型，不再依赖 `agents.defaults.models` 白名单
+  - 输入 `/` 时读取 Gateway 指令列表并展示补全菜单，支持上下键和 Tab
+  - 增加当前会话重置按钮；选中会话 key 存入 `sessionStorage`
+  - 输入框增加回形针附件按钮，支持最多 5 个、单文件最多 20 MB，发送前可移除
+  - 顶部增加会话文件按钮，通过 Gateway artifacts API 列出并下载 agent 生成产物
+  - 发送时先本地插入 optimistic 用户消息，解决等待 Gateway 历史轮询后才显示的问题
+  - 图片附件在输入区和已发送消息气泡中显示缩略图；刷新页面后根据 Gateway 历史 `MediaPath` 恢复
+  - 回复处理中每 420 ms 跟踪历史，同一个 assistant 气泡逐字推进；CLI 代理模式下作为官方 WebSocket `chat.delta` 的兼容方案
+  - 后台轮询增加历史签名比较：无变化不触发消息数组重绘；用户查看旧消息时不抢滚动位置，仅显示回到底部提示
+  - 对话气泡改为常见聊天布局：用户提问、头像和附件右对齐，OpenClaw 回复保持左对齐
+  - 消息气泡增强边框、背景、方向化圆角和轻微阴影，左右两侧对话页框更清晰
+  - assistant 消息通过 `marked + DOMPurify` 安全渲染 markdown
+  - 导航名称和页面标题从“招商加盟”改成 `OpenClaw`
+  - `front/src/api/index.js` 新增 OpenClaw 登录、历史、发送、会话、模型、指令和产物下载 API
+- 后端：
+  - 新增 `config/OpenClawConfig.java`
+  - 新增 `openclaw/OpenClawController.java`
+  - 新增 `openclaw/OpenClawService.java`
+  - 提供 `/api/openclaw/login`、`/history`、`/send`、`/sessions`、`/sessions/reset`、`/models`、`/commands`、`/artifacts`、`/artifacts/{artifactId}/download`
+  - 后端启动本机 `openclaw gateway call` 子进程，代理 `chat.*`、`sessions.*`、`models.list`、`commands.list`、`artifacts.*`，浏览器不接触 Gateway token
+  - 上传附件校验数量、文件名和 base64 体积；下载只接受 Gateway artifactId，不开放任意本机路径
+  - 增加 `/api/openclaw/media/inbound/{filename}`，仅允许读取 `~/.openclaw/media/inbound/` 下非软链接普通文件，用于恢复历史图片 Blob
+  - CLI stdout 使用异步读取，避免历史 JSON 较大时填满管道导致 `OpenClaw Gateway 响应超时`
+- 配置：
+  - `.env.local.example` 新增 `OPENCLAW_COMMAND`、`OPENCLAW_SESSION_KEY`、`OPENCLAW_TIMEOUT_SECONDS`
+  - `application.yml` 新增 `openclaw.*`
+
+**部署 / 迁移**：
+1. 新机器安装 OpenClaw CLI：`npm install -g openclaw`
+2. 安装前端依赖：`cd front && npm install && cd ..`
+3. 执行 `openclaw setup` 或 `openclaw onboard`
+4. Gateway 默认只监听 `127.0.0.1`，因此 Spring Boot 与 OpenClaw 必须部署在同一台主机
+5. 启动服务并确认连通：
+
+```bash
+openclaw gateway start
+openclaw gateway status
+```
+
+6. `.env.local` 设置强 `ADMIN_KEY` 和 OpenClaw 参数
+7. `./project.sh start`
+8. 首次站内发送消息前确认 `openclaw gateway status` 显示 `Capability: admin-capable`
+9. 若为 `read-only`，触发发送后运行 `openclaw devices list --json`，批准 CLI scope upgrade
+10. 公网部署时在前面放 HTTPS 反向代理，并额外限制 `/api/openclaw/*`；不要把 Gateway 本身直接暴露公网
+
+**踩坑**：
+- OpenClaw 官方控制台不能 iframe；这是响应头安全策略，不是前端样式问题
+- `chat.history` 可以在只读权限下工作，但 `chat.send` 需要写权限。只验证历史接口会产生“看似正常，实际不能聊天”的假象
+- 本机 OpenClaw `2026.5.28` 在 CLI 只读设备给自己升级时出现 request id 滚动和 `unknown requestId`。普通 `openclaw devices approve` 未命中后，使用 OpenClaw 自身 `device-pairing` 内部模块在 Gateway 主机本地批准最新 repair request
+- `Process.waitFor()` 之前如果不并行消费 stdout，大段 `chat.history` JSON 会填满子进程管道，形成阻塞直到超时
+- `/api/openclaw/*` 不能公开匿名发送，否则访问主页的人都能驱动本机 OpenClaw。当前复用 `ADMIN_KEY` 保护
+
+**验证**：
+- `npm run build` 通过（仅已有 Sass deprecation 和 chunk-size 警告）
+- `mvn -q -DskipTests package` 通过
+- `git diff --check` 通过
+- 正确密钥登录 `200`
+- 未授权历史请求 `401`
+- 空消息发送 `400`
+- 历史读取 `200`，成功返回 `main` 会话
+- 后端直连发送 `200`，OpenClaw 回复：`代理发送测试成功`
+- 浏览器实际 Vite `/api` 代理发送 `200`，OpenClaw 回复：`网页代理测试成功`
+- 多会话 API 读取 `2` 个已有 session、`2` 个模型和 `65` 条 `/` 指令
+- 通过 Vite `/api` 代理新建隔离会话 `网页控制台联调`，切换到 `deepseek/deepseek-v4-pro` + `thinkingLevel=low`
+- 隔离会话发送 `200`，OpenClaw 回复：`控制台联调成功`
+- 隔离会话上传 `openclaw-upload-test.txt`，Gateway 保存 inbound media 后 agent 成功回读：`attachment bridge verified`
+- `artifacts.list` 代理返回 `200`；当前隔离会话没有生成 artifact，列表为空
+- 隔离会话上传 `openclaw-image-test.png`，Gateway 记录 `MediaType=image/png`，agent 回复：`图片附件已收到`
+- 历史图片恢复接口：正确密钥返回 `68` 字节 PNG，未授权 `401`，不存在文件 `404`
+- 自动模型发现验证：站内接口返回 `8` 个显式配置模型，包含未加入官方白名单的 `deepseek-chat`、`deepseek-reasoner`
+- 最终 Gateway：`Connectivity probe: ok`、`Capability: admin-capable`、pending approvals `0`
+
+---
+
+### feat: 翻译完成后先内嵌预览 PDF
+
+**问题**：用户当前最关心翻译 PDF 的版式保持，结果页只有段落级文本预览，无法第一时间判断生成的 PDF 是否保持原页面布局、页码、图片、表格和公式位置。
+
+**改动**：
+- 前端 `Translate/index.vue` 结果态新增“翻译 PDF 预览”面板
+- 翻译完成后自动调用 `/api/translate/download-pdf/{taskId}` 获取 PDF Blob
+- 使用 `URL.createObjectURL()` 生成本地预览 URL，并用 iframe 内嵌显示
+- 提供“刷新预览”按钮，下载 PDF 按钮保留
+- 重置任务和组件卸载时释放 Object URL，避免 Blob 泄漏
+- `front/src/api/index.js` 新增 `getTranslatedPdfBlob()`
+
+**验证**：
+- `mvn -q -DskipTests package` 通过
+- `npm run build` 通过（仅已有 Sass deprecation 和 chunk-size 警告）
+
+**仍未完全解决**：
+- 预览能让用户先检查版式，但真实论文复杂排版是否足够像原文，仍取决于后端 PDF 内容流重建质量。
+
+---
+
+### fix: 长译文不再静默截断
+
+**问题**：旧渲染逻辑里，如果译文换行后超过原文 bounding box，高度不够时会 `break` 停止绘制后续行。这会造成“输出 PDF 看似成功，但译文尾部被删除”，违反“不删除任何内容”。
+
+**改动**：
+- `PdfRenderService` 新增 `TextLayout`，统一记录行列表、字号、行高和 overflow 状态
+- 翻译块优先尝试缩小字号和压缩行距来塞进原框
+- 即使仍然超出原框，也继续完整绘制所有行，不再静默截断
+- protected 原文块仍保持单行原样绘制，避免短标签/单位被换行拆坏
+
+**验证**：
+- `mvn -q -DskipTests package` 通过
+- 临时长译文 PDF 验证：输出 `pages=1`，末尾标记 `ENDMARK` 可从 PDF 文本层抽取到，原英文不残留
+- `npm run build` 通过（仅已有 Sass deprecation 和 chunk-size 警告）
+
+**仍未完全解决**：
+- 极端长译文完整绘制时可能向下侵入相邻区域；后续更高保真方案需要按邻近块动态让位或做页面内局部重排。
+
+---
+
+### fix: 按水平空隙拆分表格行，保留列结构
+
+**问题**：PDFBox 可能把同一行中的多个表格单元格合成一行文本，例如 `Method    95%    12 ms`。如果整行作为一个翻译块，会破坏表格列结构，也容易把数字/单位跟英文列名一起送去 LLM。
+
+**改动**：
+- `PdfParseService.PositionStripper.flushLine()` 不再把整行直接生成一个 `LineBox`
+- 根据相邻 `TextPosition` 的水平空隙拆分为多个 segment/cell
+- `shouldStartNewBlock()` 识别同一 baseline 上的不同水平 segment，避免后续又合并回一个段落块
+- `PdfRenderService` 对 `translatable=false` 的 ASCII 文本使用 Helvetica 单行原样绘制，避免 `%`、`s` 这类字符在中文字体/窄框换行中丢失
+
+**验证**：
+- `mvn -q -DskipTests package` 通过
+- 临时表格 PDF 解析验证：`Method / Accuracy / Latency / Ours / 95% / 12 ms` 被拆成独立块，数字和单位块为 protected，未合并成整行
+- 临时表格 PDF 渲染验证：输出 `pages=1`，`hasChinese=true`，`hasOriginalEnglish=false`，`hasNumber=true`，`hasUnit=true`
+
+**仍未完全解决**：
+- 长英文表头目前会作为独立翻译块处理，但还没有真正的表格区域检测/列宽自适应。
+- 复杂跨行表头、合并单元格、斜线表头仍需要真实论文样本继续验证。
+
+---
+
+### fix: 保留短表格值、单位和变量标签
+
+**问题**：清理原页文本显示操作后，只重绘翻译块和公式/页码会带来一个新风险：表格里的短数字、单位、坐标轴标签、变量名等可能既不该翻译，也不该删除。临时验证里 `95% 12 ms x_i` 被 PDFBox 合成一行后，一开始会被当成可翻译块，导致原样内容丢失。
+
+**改动**：
+- `PdfParseService.shouldTranslateText()` 先判断短保护文本，再决定是否送翻译
+- 新增 `looksLikeShortProtectedText()`：
+  - 保护短数字/百分比/单位
+  - 保护短变量名和带符号标签，例如 `x_i`
+  - 保护短表格值、坐标轴标签、单位行
+- `shouldPreserveOriginalText()` 复用同一套短文本保护规则，确保清理原文字流后会原样重绘
+
+**验证**：
+- `mvn -q -DskipTests package` 通过
+- 临时 Java 验证 PDF：英文长段落不残留，`E = m + c`、`95%`、`12 ms`、`x_i`、页码 `1` 均可在输出 PDF 文本层中保留
+
+**仍未完全解决**：
+- 表格内部的长英文列名/句子仍会被当作翻译块，可能需要更细的表格区域识别。
+- 多行复杂公式和特殊数学字体仍依赖启发式判断。
+
+---
+
+### fix: 清理原页文本显示操作，减少复制到底层英文
+
+**问题**：上一轮已经把输出改为“原页矢量背景 + 中文文本叠加”，但复制/文本抽取时仍可能读到底层被遮罩的英文，因为导入的原页 Form XObject 里还保留英文内容流。
+
+**尝试**：
+- 先验证 `/Artifact ... EMC` 标记原页背景，结果 PDFBox `PDFTextStripper` 仍会抽到底层英文，不能解决问题。
+- 改用 PDFBox 内容流解析/重写：`PDFStreamParser` 解析导入页 Form XObject，删除文本显示操作（`Tj/TJ/'/"`），再用 `ContentStreamWriter` 写回。
+
+**改动**：
+- `PdfRenderService.stripTextShowingOperators()` 删除导入页 Form XObject 的文本显示操作
+- 保留图片、路径、表格线等矢量/图像背景，不回退到整页截图
+- `PdfParseService.Paragraph` 新增 `translatable` 标记
+- 页码、公式样文本标记为 `translatable=false`，不送 LLM 翻译
+- `TranslationService` 对 `translatable=false` 块直接保留原文，并通过 SSE 标记 `preserved=true`
+- `PdfRenderService` 对 `translatable=false` 块在清理原文字流后原样重绘，避免页码/公式样文本跟着消失
+
+**验证**：
+- `mvn -q -DskipTests package` 通过
+- 临时 Java 验证程序生成 3 页 PDF，只渲染第 2 页，输出 `pages=1`
+- 输出 PDF 文本抽取结果：`hasChinese=true`，`hasOriginalEnglish=false`
+- 同一验证里公式样文本 `E = m + c` 和页码 `2` 可被原样重绘并抽取到
+
+**仍未完全解决**：
+- 复杂公式如果不是被当前启发式识别成公式样文本，而是混在普通英文段落或拆成特殊字形，仍可能被清掉或被翻译块覆盖。
+- 当前是更接近“文本替换”的 PDFBox 自研路线，还不是 PDFMathTranslate/PDF2ZH 那种完整版面重建。复杂双栏、表格内部文字、多字体数学符号仍需要继续验证和优化。
+
+---
+
+### fix: PDF 翻译按行坐标重建文本块 + 修正绘制坐标
+
+**问题**：翻译 PDF 虽然已经改成选页输出和矢量背景，但版型仍容易错位。旧解析逻辑先用 `PDFTextStripper` 拿纯文本段落，再用“段落换行数”去匹配行坐标；遇到双栏、标题、图注、图表附近文本时，很容易把遮罩和译文画到错误区域。另外 PDFBox 提取的 y 坐标接近左上角阅读坐标，渲染时直接写入 PDF 内容流会发生上下坐标系错配。
+
+**改动**：
+- `PdfParseService.PositionStripper` 改为同时记录每行文本和 bounding box
+- 不再用纯文本段落反推坐标，改为按同栏、行距、缩进、标题/图注边界重建 layout block
+- 保留页码/公式样文本跳过逻辑，避免遮罩公式和页码
+- `PdfRenderService` 绘制遮罩/译文前把阅读坐标转换为 PDF 左下角坐标：`pageHeight - y - height`
+- 中文自动换行和字号适配改用 PDFBox 字体真实宽度，减少中英文缩写、数字混排时的溢出
+
+**验证**：
+- `mvn -q -DskipTests package` 通过
+- 临时 Java 验证程序生成 3 页 PDF，只渲染第 2 页，输出 `pages=1`
+- 输出 PDF 可通过 PDFBox `PDFTextStripper` 提取到中文译文，证明译文仍是可复制文本
+
+**仍未完全解决**：
+- 当前仍是“原页矢量背景 + 遮罩 + 中文文本叠加”。为了保留图片、表格、公式和页面结构，暂未全局删除原页文本显示操作。
+- 因为底层原页 Form XObject 仍包含英文内容流，复制/抽取文本时可能同时读到被遮罩的英文。要完全达到“仅英文替换为中文、复制内容也只有中文”，还需要做坐标级 PDF 内容流编辑，或更深入借鉴 PDFMathTranslate/PDF2ZH 的版面重建/文本替换方案。
+
+---
+
+### fix: 翻译 PDF 输出改为选中页 + 非扫描型可复制译文
+
+**问题**：翻译 PDF 旧实现有两个明显问题：
+1. 用户只选择部分页面翻译，但下载 PDF 仍导出原文全部页。
+2. `PdfRenderService` 把每页先渲染为 200 DPI 图片当背景，再盖白框写译文，输出接近扫描型 PDF，版型粗糙，文件也偏大。
+
+**参考方向**：优先调研开源方案，PDFMathTranslate / PDF2ZH 是更接近目标的路线：做版面分析、文本块级替换、保留公式/图表/表格，而不是整页截图。当前项目先落地可控的 PDFBox 改造，后续继续往内容流级替换推进。
+
+**改动**：
+- `TranslationSession` 记录 `startPage/endPage`
+- `TranslationService.startTranslation()` 校验并保存有效页面范围
+- `TranslateController.status()` 返回 `startPage/endPage`
+- `PdfRenderService.renderTranslatedPdf()` 改为只循环用户选择的页面范围
+- `PdfRenderService` 不再用 `PDFRenderer.renderImageWithDPI()` 生成整页图片背景
+- 改用 PDFBox `LayerUtility.importPageAsForm()` 把原页面作为矢量 Form XObject 画入新 PDF
+- 在矢量原页上叠加白色遮罩和中文译文，中文译文是 PDF 文本对象，可被复制/搜索
+- 根据原段落 bounding box 动态缩小译文字号，减少溢出
+
+**验证**：
+- `mvn -q -DskipTests package` 通过
+- `npm run build` 通过
+- 临时 Java 验证程序生成 3 页 PDF，只导出第 2 页，输出 PDF 页数为 1
+- 用 PDFBox `PDFTextStripper` 能从输出 PDF 提取到中文译文，证明叠加译文不是扫描图片
+
+**仍未完全解决**：
+- 目前是“原页矢量背景 + 白框遮罩 + 可复制中文叠加”，还不是彻底删除英文内容流再替换中文。
+- PDFTextStripper 仍可能提取到底层被遮罩的英文（视觉上被遮住，但内容流还在）。要完全满足“仅语言由英文变中文”，后续需要更深入的内容流编辑或引入 PDFMathTranslate/PDF2ZH 类似版面重建方案。
+- 公式/表格/图注精细识别仍依赖当前段落提取质量，复杂双栏论文可能还会有错位。
+
+---
+
+### fix: 翻译保护层 + 公式过滤启发式
+
+**问题**：LLM 可能把论文中的缩写、变量、引用编号、单位、公式片段误翻；解析阶段也可能把数学公式当成段落送去翻译，导致公式区域被白框遮罩。
+
+**改动**：
+- 新增 `TranslationProtector`
+  - 翻译前保护 CNN/LSTM/Transformer/YOLO/PointPillars/VoxelNet/KITTI/Waymo/NuScenes/LiDAR/SLAM/mAP/IoU 等缩写
+  - 保护引用编号 `[12]`、公式编号 `(3)`、变量样式 `x_i` / `x^2`、百分比和常见单位
+  - 翻译后恢复占位符
+  - 规范 Figure/Fig. → “图”，Table → “表”
+- `LlmService.SYSTEM_PROMPT` 强化：要求保留公式、变量、引用、占位符和指定英文缩写，只输出译文
+- `TranslationService` 接入保护层：每段翻译前 protect，翻译后 restore
+- `PdfParseService.looksLikeFormula()` 粗略过滤数学符号密集、变量/公式样文本，减少公式被翻译/遮罩
+
+**验证**：
+- 临时 Java 验证：`CNN`、`x_i`、`KITTI`、`[12]`、`95%` 可被保护并恢复；`Figure 2` 可规范成“图 2”
+- `mvn -q -DskipTests package` 通过
+- `npm run build` 通过
+
+**仍未完全解决**：
+- 公式过滤还是启发式，复杂公式、多行公式、表格内数学文本仍可能误判。
+- 真正高保真方案仍需继续向 PDFMathTranslate/PDF2ZH 的版面分析和内容流级替换靠近。
+
+---
+
 ### feat: PDF 论文翻译功能（LLM + SSE + 翻译 PDF 渲染 + 页面范围选择）
 
 **问题**：用户需要在网站中嵌入 PDF 论文翻译功能，上传英文 PDF 后自动翻译为中文，并支持将译文填回原 PDF 输出。

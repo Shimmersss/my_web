@@ -49,3 +49,19 @@ llm:
   max-tokens: ${LLM_MAX_TOKENS:8192}
   # 每段文本最大字符数，超长段落会按句号拆分后分批翻译
   chunk-size: ${LLM_CHUNK_SIZE:6000}
+
+babeldoc:
+  # 排版版 PDF 由 BabelDOC CLI 生成；首次运行 uvx 会自动下载运行时和模型资源
+  enabled: ${BABELDOC_ENABLED:true}
+  command: ${BABELDOC_COMMAND:uv run --with babeldoc python}
+  openai-base-url: ${BABELDOC_OPENAI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
+  openai-api-key: ${BABELDOC_OPENAI_API_KEY:${LLM_API_KEY:}}
+  openai-model: ${BABELDOC_OPENAI_MODEL:mimo-v2.5-pro}
+  timeout-seconds: ${BABELDOC_TIMEOUT_SECONDS:1800}
+  qps: ${BABELDOC_QPS:8}
+
+openclaw:
+  # 后端通过本机 CLI 访问 Gateway，凭证不会暴露给浏览器
+  command: ${OPENCLAW_COMMAND:openclaw}
+  session-key: ${OPENCLAW_SESSION_KEY:main}
+  timeout-seconds: ${OPENCLAW_TIMEOUT_SECONDS:30}

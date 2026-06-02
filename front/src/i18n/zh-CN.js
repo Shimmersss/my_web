@@ -6,7 +6,7 @@ export default {
     cases: '案例展示',
     news: '开源项目',
     contact: '联系我们',
-    franchise: '招商加盟',
+    franchise: 'OpenClaw',
     search: '搜索',
     readMore: '了解更多',
     viewAll: '查看全部',
@@ -76,7 +76,7 @@ export default {
     service: '客服咨询'
   },
   franchise: {
-    title: '招商加盟',
+    title: 'OpenClaw 对话',
     apply: '立即申请',
     benefits: '加盟优势',
     process: '加盟流程',

@@ -4,10 +4,10 @@
 
 ## 这是什么
 
-个人主页 + Zotero 文献库展示 + GitHub 开源项目展示。
+个人主页 + Zotero 文献库展示 + GitHub 开源项目展示 + PDF 论文翻译。
 - 前端：Vue 3 + Vite + Naive UI
 - 后端：Spring Boot 3 + Java 17（包名 `com.web.backen`，目录拼写就是 `backen`，别改）
-- 数据源：Zotero Web API v3（用户的私有库）+ GitHub API / raw README
+- 数据源：Zotero Web API v3（用户的私有库）+ GitHub API / raw README + LLM 翻译 API
 
 ## 一句话流程
 
@@ -36,6 +36,11 @@ PID/日志在 `.run/`（已 gitignore）。
 ZOTERO_API_KEY=...
 ZOTERO_USER_ID=...
 ADMIN_KEY=...
+
+# LLM 翻译 API（Anthropic Messages API 格式）
+LLM_API_URL=https://token-plan-cn.xiaomimimo.com/anthropic
+LLM_API_KEY=...
+LLM_MODEL=mimo-v2.5-pro
 ```
 
 `project.sh` 启动时自动 source。`.env.local.example` 是模板，可提交。
@@ -55,9 +60,18 @@ backen/                                      Spring Boot 后端
       GithubProjectStore.java                `.run/github-projects.json` 本地展示配置读写
       GithubProjectService.java              后端请求 GitHub API / raw README 并补全字段
       GithubProjectController.java           REST 接口，前端只调用这里
+    config/LlmConfig.java                    @ConfigurationProperties 读 llm.* 环境变量（翻译 API）
+    translate/
+      PdfParseService.java                   PDFBox 提取 PDF 文本+坐标，按段落拆分，支持页面范围过滤
+      PdfRenderService.java                  翻译 PDF 渲染：原页面→图片背景→白色遮罩→中文译文
+      LlmService.java                        调 Anthropic Messages API 翻译，含重试
+      TranslationSession.java                单次翻译任务的内存状态（含页面范围）
+      TranslationService.java                编排器：预览→页面范围→解析→翻译→SSE 推送
+      TranslateController.java               REST 接口，上传/开始/流式/状态/下载
 front/                                       Vue 3 前端
   src/views/Publications/index.vue           文献库主页面（核心，所有 Zotero 展示逻辑都在这）
   src/views/News/index.vue                   GitHub 开源项目页 + 管理后台 + README 弹窗
+  src/views/Translate/index.vue              PDF 论文翻译页（上传/配置/进度/结果四态）
   src/api/index.js                           getZoteroItems / getZoteroCollections
   src/utils/request.js                       fetch 请求封装
   vite.config.js                             /api 代理到 :8080
@@ -78,6 +92,12 @@ project.sh                                   一键启停
 | `GET /api/github-projects/{owner}/{repo}/readme` | README.md 代理。后端尝试 default_branch/main/master + README 文件名变体 | 取决于上游 |
 | `POST /api/github-projects/login` | 管理员密钥登录 | 校验 `ADMIN_KEY` |
 | `PUT /api/github-projects` | 保存展示配置，需 `X-Admin-Key` | 写入 `.run/github-projects.json` |
+| `POST /api/translate/upload` | 上传 PDF，返回 taskId + totalPages（不立即翻译）| PDFBox 解析 |
+| `POST /api/translate/start/{taskId}?startPage=1&endPage=10` | 指定页面范围，提取段落并准备翻译 | PDFBox 按页提取 |
+| `GET /api/translate/stream/{taskId}` | SSE 流式推送翻译进度（progress/done/error 事件）| 逐段翻译 |
+| `GET /api/translate/status/{taskId}` | 查询任务状态（断线重连用）| 内存读 |
+| `GET /api/translate/download/{taskId}?mode=bilingual\|translated` | 下载翻译结果 .txt | 内存拼接 |
+| `GET /api/translate/download-pdf/{taskId}` | 下载翻译 PDF（译文覆盖原位置，保留图片公式）| PDF 渲染 |
 
 `/items` 返回结构：
 
@@ -117,6 +137,33 @@ project.sh                                   一键启停
 - **跟 302**：Zotero 用 S3 存大文件，会 302 跳转。Spring `RestClient` 默认不跟，所以这里改用 JDK `HttpClient.followRedirects(NORMAL)`
 - **解 ZIP**：Zotero 把 markdown / 网页快照 / 部分单文件附件**用 ZIP 打包存**。上游 content-type 可能写 `text/plain` 但字节是 ZIP（前 4 字节 `PK\003\004`）。后端检测到 ZIP 头会解出第一个非目录条目
 - **推断 content-type**：解压后按文件名后缀返回正确类型（.md → `text/markdown`，.html → `text/html` 等）。如果上游不是 ZIP 就保留上游 content-type
+
+## PDF 论文翻译功能
+
+**四步流程**：
+1. 上传 PDF → 返回 taskId + totalPages
+2. 选择页面范围（默认全部）→ 点击"开始翻译"
+3. SSE 实时推送翻译进度 → 前端实时渲染
+4. 下载 TXT / 翻译 PDF
+
+**页面范围选择**：用户可指定翻译第几页到第几页。上传后进入配置态，选择起止页码后点击"开始翻译"。
+
+**翻译 PDF 渲染**（`PdfRenderService`）：
+- 原 PDF 页面渲染为 200 DPI 高清图片作为背景（保留图片、公式、表格）
+- 白色矩形遮罩覆盖原文区域
+- 中文译文绘制在同一位置，自动换行
+- 使用 `/Library/Fonts/Arial Unicode.ttf`（macOS 系统字体）
+- 输出 PDF 保留原版页面尺寸
+
+**LLM 配置**：`.env.local` 中设置 `LLM_API_URL`、`LLM_API_KEY`、`LLM_MODEL`。当前使用 Anthropic Messages API（`mimo-v2.5-pro` 模型）。
+
+**前端四态**：上传态（拖拽/选择）→ 配置态（页面范围选择）→ 翻译中态（进度条 + 实时预览）→ 结果态（双语对照 / 纯中文切换，复制/下载 TXT/下载翻译 PDF）。
+
+**SSE 事件**：`progress`（每段完成）、`done`（全部完成）、`error`（失败）。前端通过 `EventSource` 监听。
+
+**内存存储**：翻译结果存在 `ConcurrentHashMap`，不持久化到 H2。重启后端丢失。
+
+**关键依赖**：`org.apache.pdfbox:pdfbox:3.0.3`（PDF 解析 + 渲染）+ `RestClient`（LLM 调用）。
 
 ## 前端 markdown 渲染
 

@@ -106,6 +106,11 @@ const menuOptions = computed(() => [
     onClick: () => navigateTo('/publications')
   },
   {
+    label: '翻译',
+    key: 'Translate',
+    onClick: () => navigateTo('/translate')
+  },
+  {
     label: () => t('common.franchise'),
     key: 'Franchise',
     onClick: () => navigateTo('/franchise')

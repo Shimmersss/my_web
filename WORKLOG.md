@@ -6,6 +6,52 @@
 
 ---
 
+## 2026-06-02
+
+### feat: PDF 论文翻译功能（LLM + SSE + 翻译 PDF 渲染 + 页面范围选择）
+
+**问题**：用户需要在网站中嵌入 PDF 论文翻译功能，上传英文 PDF 后自动翻译为中文，并支持将译文填回原 PDF 输出。
+
+**改动**：
+- 后端新增 `translate/` 包：
+  - `PdfParseService`：PDFBox 提取文本+坐标，按段落拆分，支持页面范围过滤
+  - `PdfRenderService`：翻译 PDF 渲染——原页面渲染为 200 DPI 图片背景，白色遮罩覆盖原文，中文译文绘制在同一位置
+  - `LlmService`：调用 Anthropic Messages API 翻译（`mimo-v2.5-pro` 模型），含指数退避重试
+  - `TranslationSession`：单次翻译任务的内存状态，支持页面范围
+  - `TranslationService`：编排器——预览→页面范围→解析→翻译→SSE 推送
+  - `TranslateController`：6 个接口（upload / start / stream / status / download / download-pdf）
+- 后端新增 `config/LlmConfig.java`：`@ConfigurationProperties(prefix="llm")` + `RestClient` Bean
+- 后端 `pom.xml` 添加 `org.apache.pdfbox:pdfbox:3.0.3`
+- 后端 `application.yml` 添加 `llm.*` 配置 + `spring.servlet.multipart` 50MB 限制
+- 前端新增 `views/Translate/index.vue`：四态页面（上传/配置/翻译中/结果）
+  - 拖拽上传 + 文件选择
+  - 配置态：页面范围选择器（起止页码 + 全选按钮）
+  - SSE 实时接收翻译进度 + 进度条
+  - 双语对照 / 纯中文两种显示模式切换
+  - 复制全文 / 下载 TXT / 下载翻译 PDF / 重新翻译
+- 前端 `api/index.js` 添加 `uploadPdf` / `startTranslation` / `getTranslationStatus` / `downloadTranslation` / `downloadTranslatedPdf`
+- 前端 `router/index.js` 添加 `/translate` 路由
+- 前端 `AppHeader.vue` 导航栏添加"翻译"菜单项
+
+**技术方案**：
+- PDF 解析用 Apache PDFBox 3.0，`PDFTextStripper` 子类化提取文字坐标
+- 翻译 PDF 渲染：`PDFRenderer` 渲染原页面为图片→`PDImageXObject` 作为背景→白色遮罩+中文文字叠加
+- LLM 使用 Anthropic Messages API（代理地址 `token-plan-cn.xiaomimimo.com`，模型 `mimo-v2.5-pro`）
+- 实时推送用 SSE（`SseEmitter` + `EventSource`），比 WebSocket 简单
+- 长段落按句号边界拆分后分批翻译，拼接结果
+- 翻译结果存内存（ConcurrentHashMap），不持久化
+
+**踩坑**：
+- `application.yml` 不能有两个 `spring:` 顶级 key，YAML 不允许重复 key
+- PDFBox 3.0 的 `PDDocument.load()` 改为 `Loader.loadPDF()`
+- PDFBox 3.0 颜色值需要 0-1 范围，不是 0-255
+- TTC 字体文件（STHeiti、Songti）在 PDFBox 3.0 中无法直接用 `PDType0Font.load()` 加载，改用 `/Library/Fonts/Arial Unicode.ttf`
+- Anthropic 代理不认标准 Claude 模型名，需要用 `mimo-v2.5-pro`
+
+**配置**：`.env.local` 中设置 `LLM_API_URL`、`LLM_API_KEY`、`LLM_MODEL`。
+
+---
+
 ## 2026-06-01
 
 ### feat: GitHub 开源项目后台 + 后端代理 README / 仓库数据
@@ -157,13 +203,15 @@
 
 ---
 
-## 状态快照（2026-06-01 18:00）
+## 状态快照（2026-06-02 03:00）
 
 - `main` ↔ `zotero-b-custom` 同步在 `b726af8`
 - `zotero-a-official` 备选，停在 `c938948`
-- 后端：47 条母条目（16 条带 PDF）+ 4 个 collection，缓存命中 ~2ms
+- 后端：50 条母条目 + 4 个 collection，缓存命中 ~2ms
 - 前端：分页 20 条 / 批，PDF 内嵌 iframe，三种导出
-- 接口在 `http://localhost:8080/api/zotero/*`，前端在 `http://localhost:3000`
+- 新增：PDF 论文翻译功能（上传→页面范围选择→LLM 翻译→下载翻译 PDF）
+- LLM 使用 Anthropic Messages API（`mimo-v2.5-pro` 模型）
+- 接口在 `http://localhost:8080/api/*`，前端在 `http://localhost:3000`
 
 下一步可能要做（未排期）：
 - [ ] 文献按年份/期刊聚合视图
@@ -171,3 +219,5 @@
 - [ ] 标签云
 - [ ] 把首页其他模块的 mock 数据接真实后端
 - [ ] 上线部署（Caddy 反代 / Docker compose）
+- [ ] 翻译 PDF 字体打包（Noto Sans SC）替代系统字体依赖
+- [ ] 翻译结果持久化（H2 数据库）

@@ -60,6 +60,12 @@ const routes = [
     name: 'Publications',
     component: () => import('@/views/Publications/index.vue'),
     meta: { title: '文献库' }
+  },
+  {
+    path: '/translate',
+    name: 'Translate',
+    component: () => import('@/views/Translate/index.vue'),
+    meta: { title: '论文翻译' }
   }
 ]
 

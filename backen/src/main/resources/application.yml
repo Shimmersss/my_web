@@ -17,6 +17,10 @@ spring:
       mode: always
       schema-locations: classpath:schema.sql
       data-locations: classpath:data.sql
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
 
 mybatis-plus:
   configuration:
@@ -36,3 +40,12 @@ zotero:
 admin:
   # 后台管理密钥，用于管理 GitHub 开源项目展示列表
   key: ${ADMIN_KEY:change-me}
+
+llm:
+  # Anthropic Messages API（支持 Claude 模型）
+  api-url: ${LLM_API_URL:https://token-plan-cn.xiaomimimo.com/anthropic}
+  api-key: ${LLM_API_KEY:}
+  model: ${LLM_MODEL:mimo-v2.5-pro}
+  max-tokens: ${LLM_MAX_TOKENS:8192}
+  # 每段文本最大字符数，超长段落会按句号拆分后分批翻译
+  chunk-size: ${LLM_CHUNK_SIZE:6000}

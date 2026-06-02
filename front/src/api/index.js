@@ -230,3 +230,57 @@ export async function getGithubProjectReadme(fullName) {
   if (!res.ok) throw new Error(await res.text())
   return res.text()
 }
+
+// ==================== PDF 翻译 API ====================
+
+/**
+ * 上传 PDF 文件（获取页数信息，不立即翻译）
+ * @param {File} file - PDF 文件
+ * @returns {Promise}
+ */
+export async function uploadPdf(file) {
+  const formData = new FormData()
+  formData.append('file', file)
+  const res = await fetch('/api/translate/upload', {
+    method: 'POST',
+    body: formData
+  })
+  return res.json()
+}
+
+/**
+ * 开始翻译（指定页面范围）
+ * @param {string} taskId
+ * @param {number} startPage - 起始页码（从 1 开始）
+ * @param {number} endPage - 结束页码
+ * @returns {Promise}
+ */
+export function startTranslation(taskId, startPage, endPage) {
+  return post(`/translate/start/${taskId}?startPage=${startPage}&endPage=${endPage}`)
+}
+
+/**
+ * 获取翻译任务状态（断线重连用）
+ * @param {string} taskId
+ * @returns {Promise}
+ */
+export function getTranslationStatus(taskId) {
+  return get(`/translate/status/${taskId}`)
+}
+
+/**
+ * 下载翻译结果
+ * @param {string} taskId
+ * @param {string} mode - 'bilingual' 或 'translated'
+ */
+export function downloadTranslation(taskId, mode) {
+  window.open(`/api/translate/download/${taskId}?mode=${mode}`)
+}
+
+/**
+ * 下载翻译后的 PDF（译文填回原位置）
+ * @param {string} taskId
+ */
+export function downloadTranslatedPdf(taskId) {
+  window.open(`/api/translate/download-pdf/${taskId}`)
+}

@@ -371,7 +371,10 @@ export function getTranslationStatus(taskId) {
  * @returns {Promise}
  */
 export function getRecentTranslations() {
-  return get('/translate/recent')
+  return requestWithOptions('/translate/recent', {
+    method: 'GET',
+    cache: 'no-store'
+  })
 }
 
 /**

@@ -107,6 +107,10 @@ public class TranslationService {
             session.setPageRange(effectiveStart, effectiveEnd);
             session.setFontFamily(validateFontFamily(fontFamily));
             session.setQps(validateQps(qps));
+            session.setRequestedQps(session.getQps());
+            session.setResourceDowngraded(false);
+            session.setResourceDowngradeReason(null);
+            session.setResourceDowngradeCount(0);
             session.setErrorMessage(null);
             session.setProgress(0);
             session.setProgressStage("queued");
@@ -141,6 +145,7 @@ public class TranslationService {
     public List<TranslationSession> getRecentSessions() {
         updateQueuePositions();
         return sessions.values().stream()
+                .filter(session -> !"preview".equals(session.getStatus()))
                 .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt).reversed())
                 .limit(Math.max(1, config.getMaxHistory()))
                 .toList();
@@ -190,35 +195,78 @@ public class TranslationService {
         session.setStatus("translating");
         session.setProgressStage("starting");
         session.setQueuePosition(0);
+        session.setCompletedAt(0);
         saveMetadata(session);
         updateQueuePositions();
         emit(session, "layout", Map.of("message", "正在使用 BabelDOC 分析版面、翻译并重建 PDF"));
 
-        try {
-            babelDocService.translatePdf(
-                    session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
-                    session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
-                    progress -> sendProgress(session, progress));
-            session.setProgress(100);
-            session.setProgressStage("completed");
-            session.setCompletedAt(System.currentTimeMillis());
-            session.setStatus("completed");
-            saveMetadata(session);
-            emit(session, "done", Map.of("taskId", session.getTaskId()));
-            completeEmitters(session.getTaskId());
-        } catch (Exception e) {
-            log.error("翻译任务失败: taskId={}", session.getTaskId(), e);
-            session.setStatus("error");
-            session.setErrorMessage(e.getMessage());
-            session.setProgressStage("error");
-            saveMetadata(session);
-            emit(session, "task-error", Map.of(
-                    "message", e.getMessage() != null ? e.getMessage() : "翻译过程中发生未知错误"));
-            completeEmitters(session.getTaskId());
-        } finally {
-            cleanupHistory();
-            updateQueuePositions();
+        while (true) {
+            try {
+                babelDocService.translatePdf(
+                        session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
+                        session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
+                        progress -> sendProgress(session, progress));
+                session.setProgress(100);
+                session.setProgressStage("completed");
+                session.setCompletedAt(System.currentTimeMillis());
+                session.setStatus("completed");
+                saveMetadata(session);
+                emit(session, "done", Map.of("taskId", session.getTaskId()));
+                completeEmitters(session.getTaskId());
+                break;
+            } catch (BabelDocService.ResourcePressureException e) {
+                if (downgradeForResourcePressure(session, e)) {
+                    continue;
+                }
+                failTranslation(session, e);
+                break;
+            } catch (Exception e) {
+                failTranslation(session, e);
+                break;
+            } finally {
+                cleanupHistory();
+                updateQueuePositions();
+            }
         }
+    }
+
+    private boolean downgradeForResourcePressure(TranslationSession session, BabelDocService.ResourcePressureException e) {
+        int stableQps = stableQps();
+        if (session.getQps() <= stableQps || session.getResourceDowngradeCount() > 0) {
+            return false;
+        }
+
+        log.warn("翻译任务触发资源保护，自动降级重试: taskId={}, qps={} -> {}, reason={}",
+                session.getTaskId(), session.getQps(), stableQps, e.getMessage());
+        session.setResourceDowngraded(true);
+        session.setResourceDowngradeReason(e.getMessage());
+        session.setResourceDowngradeCount(session.getResourceDowngradeCount() + 1);
+        session.setQps(stableQps);
+        session.setProgress(0);
+        session.setProgressStage("resource-downgrade");
+        session.setStatus("translating");
+        saveMetadata(session);
+        emit(session, "progress", Map.of(
+                "progress", 0,
+                "stage", "resource-downgrade",
+                "stageLabel", stageLabel("resource-downgrade"),
+                "current", 0,
+                "total", 0,
+                "qps", session.getQps(),
+                "resourceDowngraded", true,
+                "resourceDowngradeReason", session.getResourceDowngradeReason()));
+        return true;
+    }
+
+    private void failTranslation(TranslationSession session, Exception e) {
+        log.error("翻译任务失败: taskId={}", session.getTaskId(), e);
+        session.setStatus("error");
+        session.setErrorMessage(e.getMessage());
+        session.setProgressStage("error");
+        saveMetadata(session);
+        emit(session, "task-error", Map.of(
+                "message", e.getMessage() != null ? e.getMessage() : "翻译过程中发生未知错误"));
+        completeEmitters(session.getTaskId());
     }
 
     private void sendProgress(TranslationSession session, BabelDocService.ProgressUpdate progress) {
@@ -233,7 +281,11 @@ public class TranslationService {
                 "stage", progress.stage(),
                 "stageLabel", stageLabel(progress.stage()),
                 "current", progress.current(),
-                "total", progress.total()));
+                "total", progress.total(),
+                "qps", session.getQps(),
+                "resourceDowngraded", session.isResourceDowngraded(),
+                "resourceDowngradeReason", session.getResourceDowngradeReason() == null
+                        ? "" : session.getResourceDowngradeReason()));
     }
 
     private void sendSnapshot(TranslationSession session, SseEmitter emitter) {
@@ -253,7 +305,11 @@ public class TranslationService {
                     "stage", session.getProgressStage(),
                     "stageLabel", stageLabel(session.getProgressStage()),
                     "current", 0,
-                    "total", 0));
+                    "total", 0,
+                    "qps", session.getQps(),
+                    "resourceDowngraded", session.isResourceDowngraded(),
+                    "resourceDowngradeReason", session.getResourceDowngradeReason() == null
+                            ? "" : session.getResourceDowngradeReason()));
         }
     }
 
@@ -366,13 +422,23 @@ public class TranslationService {
     }
 
     private void cleanupHistory() {
-        List<TranslationSession> terminal = sessions.values().stream()
-                .filter(session -> !Set.of("queued", "translating").contains(session.getStatus()))
+        int keep = Math.max(1, config.getMaxHistory());
+        List<TranslationSession> previews = sessions.values().stream()
+                .filter(session -> "preview".equals(session.getStatus()))
                 .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt).reversed())
                 .toList();
-        int keep = Math.max(1, config.getMaxHistory());
-        for (int index = keep; index < terminal.size(); index++) {
-            TranslationSession session = terminal.get(index);
+        cleanupSessionsAfter(previews, keep);
+
+        List<TranslationSession> terminal = sessions.values().stream()
+                .filter(session -> Set.of("completed", "error").contains(session.getStatus()))
+                .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt).reversed())
+                .toList();
+        cleanupSessionsAfter(terminal, keep);
+    }
+
+    private void cleanupSessionsAfter(List<TranslationSession> orderedSessions, int keep) {
+        for (int index = keep; index < orderedSessions.size(); index++) {
+            TranslationSession session = orderedSessions.get(index);
             sessions.remove(session.getTaskId(), session);
             deleteRecursively(session.getTaskDir());
         }
@@ -423,6 +489,11 @@ public class TranslationService {
         return qps;
     }
 
+    private int stableQps() {
+        int maxQps = Math.max(1, config.getMaxQps());
+        return Math.max(1, Math.min(config.getStableQps(), maxQps));
+    }
+
     private int effectiveStart(TranslationSession session) { return session.getStartPage(); }
     private int effectiveEnd(TranslationSession session) { return session.getEndPage(); }
 
@@ -430,6 +501,7 @@ public class TranslationService {
         return switch (stage) {
             case "queued" -> "等待后台翻译";
             case "starting" -> "正在启动 BabelDOC";
+            case "resource-downgrade" -> "内存压力较高，已切换稳定模式重试";
             case "Parse PDF and Create Intermediate Representation" -> "解析 PDF";
             case "DetectScannedFile" -> "检测 PDF 类型";
             case "Parse Page Layout" -> "分析页面版式";

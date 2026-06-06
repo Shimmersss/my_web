@@ -58,6 +58,10 @@ class TranslationServiceTest {
             assertTrue(Files.isRegularFile(completed.getTranslatedPdfPath()));
             assertTrue(Files.isRegularFile(completed.getBilingualPdfPath()));
             assertEquals(session.getTaskId(), service.getRecentSessions().get(0).getTaskId());
+
+            service.createSessionPreview("not-submitted.pdf", new ByteArrayInputStream("pdf".getBytes()));
+            assertEquals(1, service.getRecentSessions().size());
+            assertEquals(session.getTaskId(), service.getRecentSessions().get(0).getTaskId());
         } finally {
             service.shutdown();
         }
@@ -111,6 +115,56 @@ class TranslationServiceTest {
             awaitStatus(service, "resume01", "completed");
             verify(babelDocService).translatePdf(
                     eq(queued.getInputPdfPath()), eq(taskDir), eq("paper.pdf"), eq(1), eq(2), eq("auto"), eq(4), any());
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void downgradesAcceleratedTranslationOnceWhenResourcePressureIsDetected() throws Exception {
+        PdfParseService pdfParseService = mock(PdfParseService.class);
+        BabelDocService babelDocService = mock(BabelDocService.class);
+        TranslationConfig config = new TranslationConfig();
+        config.setStorageDir(tempDir.toString());
+        config.setMaxHistory(5);
+        config.setQueueCapacity(2);
+        config.setMaxQps(4);
+        config.setStableQps(2);
+
+        when(pdfParseService.getTotalPages(any(Path.class))).thenReturn(3);
+        when(babelDocService.translatePdf(any(Path.class), any(Path.class), anyString(),
+                anyInt(), anyInt(), anyString(), anyInt(), any()))
+                .thenAnswer(invocation -> {
+                    int qps = invocation.getArgument(6);
+                    if (qps == 4) {
+                        throw new BabelDocService.ResourcePressureException("检测到服务器内存压力");
+                    }
+                    Path resultDir = invocation.getArgument(1);
+                    Path translated = resultDir.resolve("translated.pdf");
+                    Path bilingual = resultDir.resolve("bilingual.pdf");
+                    Files.writeString(translated, "translated");
+                    Files.writeString(bilingual, "bilingual");
+                    return new BabelDocService.TranslationResult(translated, bilingual);
+                });
+
+        TranslationService service = new TranslationService(
+                pdfParseService, babelDocService, config, new ObjectMapper());
+        service.initialize();
+        try {
+            TranslationSession session = service.createSessionPreview(
+                    "paper.pdf", new ByteArrayInputStream("pdf".getBytes()));
+            service.startTranslation(session.getTaskId(), 1, 3, "auto", 4);
+            awaitStatus(service, session.getTaskId(), "completed");
+
+            TranslationSession completed = service.getSession(session.getTaskId());
+            assertEquals(4, completed.getRequestedQps());
+            assertEquals(2, completed.getQps());
+            assertTrue(completed.isResourceDowngraded());
+            assertEquals(1, completed.getResourceDowngradeCount());
+            verify(babelDocService).translatePdf(
+                    any(Path.class), any(Path.class), eq("paper.pdf"), eq(1), eq(3), eq("auto"), eq(4), any());
+            verify(babelDocService).translatePdf(
+                    any(Path.class), any(Path.class), eq("paper.pdf"), eq(1), eq(3), eq("auto"), eq(2), any());
         } finally {
             service.shutdown();
         }

@@ -3,8 +3,10 @@
 ## 当前线上状态
 
 - 项目目录：`/home/admin/web-homepage`
-- 公网入口：`http://115.28.129.221/`
-- 前端：Nginx 监听 `80`，静态目录为 `/home/admin/web-homepage/front/dist`
+- 公网入口：`https://shimmer.help/`
+- 域名：`shimmer.help`、`www.shimmer.help`，HTTP 自动跳转 HTTPS
+- SSL：Let's Encrypt / Certbot，证书目录 `/etc/letsencrypt/live/shimmer.help/`
+- 前端：Nginx 监听 `80/443`，静态目录为 `/home/admin/web-homepage/front/dist`
 - 后端：`web-backen.service` 通过 systemd 运行 Spring Boot JAR，监听 `8080`
 - 环境变量：`/etc/web-homepage/web.env`
 - Nginx 站点配置：`/etc/nginx/sites-available/corporate-site`
@@ -20,6 +22,8 @@
 ```
 
 脚本默认部署到当前线上目录，自动生成发布包、上传、备份旧应用目录、安装并检查后端健康接口与公网首页。它不会上传 `.env.local`，也不会覆盖服务器上的 `/etc/web-homepage/web.env`。
+
+已有 `/etc/nginx/sites-available/corporate-site` 会被部署脚本保留，避免覆盖 Certbot 管理的 SSL 配置。不要在普通发布时传 `FORCE_NGINX_CONFIG=1`。
 
 部署参数需要调整时复制 `.deploy.local.example` 为 `.deploy.local`。该文件已被 gitignore，不要在其中保存密码或 API Key。
 
@@ -143,3 +147,76 @@ models / commands 预热后约 2-4ms
 ```
 
 页面空闲历史轮询已从 2 秒调整为 5 秒。若仍需进一步降低首屏冷启动延迟，下一步应改为后端长连接或进程内 Gateway client，而不是增加服务器带宽。
+
+## 2026-06-06 已同步的线上修复
+
+### 生产 API 同源配置
+
+前端生产 API 基址已从示例地址 `https://api.example.com` 修正为同源 `/api`。浏览器现在只请求 `https://shimmer.help/api/*`，由 Nginx 转发到后端，避免跨域请求失败。
+
+发布脚本构建前会显式设置 `VITE_API_BASE_URL=/api`，并拒绝打包仍包含 `api.example.com` 的前端产物。
+
+### 最近翻译记录
+
+- `/api/translate/recent` 只返回已经提交翻译的任务；仅上传但尚未点击“开始翻译”的 `preview` 任务不再显示，也不会挤掉完成结果的历史名额。
+- 最近翻译和结果文件默认保留 5 条，完成结果在后端重启后仍可恢复。
+- 前端最近记录请求禁用缓存；加载失败时保留上一次成功数据并显示错误，不再误显示“暂无翻译记录”。
+- 2026-06-06 线上验证：公网接口返回 `200`，列表返回 3 条真实已完成任务。
+
+### PDF 上传配置页即时切换
+
+选择 PDF 后，前端立即进入页数与翻译选项配置页，不再等待整个文件上传和 PDFBox 页数读取完成后才切换。
+
+上传解析期间页面显示“正在上传并读取 PDF 页数”，页码、字体、速度和开始翻译按钮保持禁用；服务器返回 `taskId` 和总页数后自动解锁。这样不会改变后台存储和翻译队列逻辑，只改善上传阶段反馈。
+
+### Markdown 同步检查
+
+项目规定功能、接口、配置、部署流程或线上行为有变化时，必须同步更新 `AGENTS.md` 或 `MAINTENANCE.md`。一键部署脚本默认启用 `REQUIRE_DOCS_SYNC=1`：检测到代码改动但没有 Markdown 改动时会停止部署。
+
+发布包会携带 `AGENTS.md` 和 `MAINTENANCE.md`，服务器安装脚本会将它们同步到 `/home/admin/web-homepage/`。此前安装脚本没有复制 Markdown，导致服务器目录长期停留在 2026-06-03 的旧文档；该遗漏已修复。
+
+### PDF 翻译服务器保护
+
+2026-06-06 排查到一次 `666.pdf` 全 18 页翻译导致服务器在 20:06 左右重启，任务恢复后最终因 `BABELDOC_TIMEOUT_SECONDS=1800` 超时失败。未在内核日志中看到明确 OOM kill 记录，但生产机无 swap，且 systemd 只限制 JVM 堆、不限制 BabelDOC/Python 子进程，是主要风险点。
+
+已采用稳妥优先配置：
+
+```bash
+BABELDOC_TIMEOUT_SECONDS=21600
+TRANSLATION_MAX_QPS=4
+TRANSLATION_STABLE_QPS=2
+BABELDOC_QPS=2
+BABELDOC_RESOURCE_CGROUP_LIMIT_MIB=2600
+BABELDOC_RESOURCE_MIN_AVAILABLE_MIB=400
+BABELDOC_RESOURCE_MAX_SWAP_USED_MIB=1200
+```
+
+加速模式仍允许提交 4 QPS。后端会在 BabelDOC 运行期间监控 cgroup 内存、系统可用内存和 swap 使用量；如果接近风险阈值，会终止当前 BabelDOC 进程树，并用同一任务自动按 2 QPS 稳定模式重试一次。稳定模式仍触发资源风险时任务失败，用户需要缩小页码范围。
+
+2026-06-06 23:34 线上验证发现原阈值把 `MemoryHigh=2200M` 当作终止点过于保守：1 页翻译在加速模式触发 `服务内存 2200 MiB` 后降级，稳定模式又在 `2199 MiB` 被终止。`MemoryHigh` 是 systemd 软限制/节流点，不是硬 OOM 边界；保护阈值已放宽到 cgroup `2600 MiB`，仍低于 `MemoryMax=2800M`。
+
+`web-backen.service` 已同时限制整个服务 cgroup：
+
+```ini
+MemoryAccounting=yes
+MemoryHigh=2200M
+MemoryMax=2800M
+TasksMax=256
+```
+
+生产机已启用 2 GB `/swapfile`，`vm.swappiness=10`。验证命令：
+
+```bash
+free -h
+swapon --show
+cat /proc/sys/vm/swappiness
+systemctl show web-backen.service -p MemoryHigh -p MemoryMax -p MemoryCurrent -p TasksMax
+curl -fsS http://127.0.0.1:8080/api/health
+```
+
+Zotero 文献缓存只保存在 JVM 内存，不写入磁盘；附件代理按请求临时拉取，不持久化。硬盘增长重点是：
+
+- `/home/admin/web-homepage/.run/translation-tasks/`：翻译任务文件，`preview` 和 `completed/error` 各默认保留 5 条，超出后删除整个任务目录。
+- `/home/admin/.web-homepage-releases/`：部署发布包和备份包，一键部署后默认各保留最近 3 个。
+
+2026-06-06 排查时目录大小：翻译任务约 `130M`，OpenClaw 编译缓存约 `46M`，release/backup 目录约 `3.6G`。按最近 3 个发布包 + 最近 3 个备份包清理后，release/backup 目录约 `1.3G`。

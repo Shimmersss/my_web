@@ -44,17 +44,23 @@
             </n-icon>
             <div>
               <h2>{{ fileName }}</h2>
-              <p>共 {{ totalPages }} 页</p>
+              <p v-if="isUploading">正在上传并读取 PDF 页数...</p>
+              <p v-else>共 {{ totalPages }} 页</p>
             </div>
           </div>
 
           <div class="config-body">
+            <n-alert v-if="isUploading" type="info" title="正在准备翻译配置" style="margin-bottom: 20px">
+              文件正在上传到服务器并读取页数，完成后即可选择翻译范围。
+            </n-alert>
+
             <div class="range-label">翻译页面范围</div>
             <div class="range-row">
               <n-input-number
                 v-model:value="startPage"
                 :min="1"
                 :max="endPage"
+                :disabled="isUploading || !taskId"
                 placeholder="起始页"
                 style="width: 120px"
               />
@@ -63,41 +69,45 @@
                 v-model:value="endPage"
                 :min="startPage"
                 :max="totalPages"
+                :disabled="isUploading || !taskId"
                 placeholder="结束页"
                 style="width: 120px"
               />
-              <n-button text type="primary" @click="selectAll" style="margin-left: 8px">
+              <n-button text type="primary" :disabled="isUploading || !taskId" @click="selectAll" style="margin-left: 8px">
                 全选
               </n-button>
             </div>
-            <p class="range-hint">将翻译第 {{ startPage }} 到 {{ endPage }} 页的内容</p>
+            <p v-if="isUploading" class="range-hint">页数读取完成后可选择翻译范围</p>
+            <p v-else class="range-hint">将翻译第 {{ startPage }} 到 {{ endPage }} 页的内容</p>
 
             <div class="range-label option-label">译文字体风格</div>
             <n-select
               v-model:value="fontFamily"
               :options="fontFamilyOptions"
+              :disabled="isUploading || !taskId"
               style="width: 100%"
             />
             <p class="range-hint">字号由 BabelDOC 根据原始文本框自动适配，以尽量保持版式。</p>
 
             <div class="range-label option-label">翻译速度</div>
-            <n-radio-group v-model:value="translationQps" size="small">
+            <n-radio-group v-model:value="translationQps" size="small" :disabled="isUploading || !taskId">
               <n-radio-button :value="2">稳定模式</n-radio-button>
               <n-radio-button :value="4">加速模式</n-radio-button>
             </n-radio-group>
-            <p class="range-hint">服务器按 2 核 / 4 GB 配置运行，同一时间只处理一个 PDF，其他任务会排队。</p>
+            <p class="range-hint">加速模式会监控服务器内存，压力较高时自动切换稳定模式重试。</p>
 
             <n-button
               type="primary"
               size="large"
-              :loading="isStarting"
+              :loading="isUploading || isStarting"
+              :disabled="isUploading || !taskId"
               @click="handleStartTranslate"
               style="margin-top: 24px; width: 100%"
             >
-              开始翻译
+              {{ isUploading ? '正在读取 PDF...' : '开始翻译' }}
             </n-button>
 
-            <n-button text @click="resetToUpload" style="margin-top: 12px; width: 100%">
+            <n-button text :disabled="isUploading" @click="resetToUpload" style="margin-top: 12px; width: 100%">
               重新选择文件
             </n-button>
           </div>
@@ -130,6 +140,15 @@
             {{ progressStageLabel }}
           </p>
         </div>
+
+        <n-alert
+          v-if="resourceDowngraded"
+          type="warning"
+          title="已自动切换稳定模式"
+          style="margin-top: 16px"
+        >
+          服务器内存压力较高，已停止加速翻译并使用稳定模式重新处理当前任务。
+        </n-alert>
 
         <n-alert v-if="errorMsg" type="error" :title="errorMsg" closable @close="errorMsg = ''" style="margin-top: 16px">
           <template #default>
@@ -198,10 +217,23 @@
         <div class="recent-header">
           <div>
             <h2>最近翻译</h2>
-            <p>仅保留最近几次任务和结果文件，后端重启后未完成任务会重新排队。</p>
+            <p>
+              服务器保留最近几次任务和结果文件
+              <span v-if="recentTasks.length">，当前 {{ recentTasks.length }} 条</span>
+              ；后端重启后未完成任务会重新排队。
+            </p>
           </div>
           <n-button size="small" :loading="isLoadingRecent" @click="loadRecentTranslations">刷新</n-button>
         </div>
+
+        <n-alert
+          v-if="recentLoadError"
+          type="warning"
+          title="最近翻译记录加载失败"
+          style="margin-bottom: 12px"
+        >
+          {{ recentLoadError }}
+        </n-alert>
 
         <div v-if="recentTasks.length" class="recent-list">
           <button
@@ -213,7 +245,9 @@
           >
             <div class="recent-copy">
               <strong>{{ item.fileName }}</strong>
-              <span>第 {{ item.startPage }}-{{ item.endPage }} 页 · {{ formatTaskTime(item.createdAt) }}</span>
+              <span>
+                第 {{ item.startPage }}-{{ item.endPage }} 页 · {{ speedLabel(item) }} · {{ formatTaskTime(item.createdAt) }}
+              </span>
             </div>
             <div class="recent-status">
               <n-tag size="small" :type="taskTagType(item.status)">
@@ -271,12 +305,16 @@ const fontFamilyOptions = [
   { label: '手写 / 斜体风格', value: 'script' }
 ]
 const translationQps = ref(4)
+const requestedQps = ref(4)
+const resourceDowngraded = ref(false)
 const translationProgress = ref(0)
 const progressStageLabel = ref('正在启动 BabelDOC...')
 const queuePosition = ref(0)
 const recentTasks = ref([])
 const isLoadingRecent = ref(false)
+const recentLoadError = ref('')
 const pdfPreviewMode = ref('translated')
+const isUploading = ref(false)
 const isStarting = ref(false)
 const isLoadingPdfPreview = ref(false)
 const isGeneratingPdf = ref(false)
@@ -322,6 +360,12 @@ async function processFile(file) {
   }
 
   fileName.value = file.name
+  taskId.value = ''
+  totalPages.value = 0
+  startPage.value = 1
+  endPage.value = 1
+  isUploading.value = true
+  step.value = 'config'
 
   try {
     const res = await uploadPdf(file)
@@ -337,11 +381,11 @@ async function processFile(file) {
     // 保存 taskId 用于断线重连
     sessionStorage.setItem('translateTaskId', taskId.value)
 
-    // 进入配置态
-    step.value = 'config'
     loadRecentTranslations()
   } catch (e) {
     errorMsg.value = e.message || '上传失败，请重试'
+  } finally {
+    isUploading.value = false
   }
 }
 
@@ -364,6 +408,8 @@ async function handleStartTranslate() {
 
     translateStartPage.value = startPage.value
     translateEndPage.value = endPage.value
+    requestedQps.value = translationQps.value
+    resourceDowngraded.value = false
     isGeneratingPdf.value = false
     translationProgress.value = 0
     progressStageLabel.value = '正在启动 BabelDOC...'
@@ -421,6 +467,8 @@ function startSSE() {
       const data = JSON.parse(e.data)
       translationProgress.value = Math.round(data.progress || 0)
       progressStageLabel.value = data.stageLabel || '处理中...'
+      translationQps.value = data.qps || translationQps.value
+      resourceDowngraded.value = Boolean(data.resourceDowngraded)
     } catch (err) {
       console.error('解析 BabelDOC 进度失败:', err)
     }
@@ -476,6 +524,9 @@ async function reconnectSSE() {
 
       queuePosition.value = data.queuePosition || 0
       translationProgress.value = Math.round(data.progress || 0)
+      translationQps.value = data.qps || translationQps.value
+      requestedQps.value = data.requestedQps || requestedQps.value
+      resourceDowngraded.value = Boolean(data.resourceDowngraded)
       progressStageLabel.value = data.status === 'queued'
         ? `等待后台翻译，当前队列第 ${queuePosition.value || 1} 位`
         : data.progressStageLabel || '正在使用 BabelDOC 处理...'
@@ -529,9 +580,12 @@ function resetToUpload() {
   pdfPreviewError.value = ''
   step.value = 'upload'
   errorMsg.value = ''
+  isUploading.value = false
   isGeneratingPdf.value = false
   fontFamily.value = 'auto'
   translationQps.value = 4
+  requestedQps.value = 4
+  resourceDowngraded.value = false
   translationProgress.value = 0
   queuePosition.value = 0
   progressStageLabel.value = '正在启动 BabelDOC...'
@@ -546,9 +600,13 @@ async function loadRecentTranslations() {
   isLoadingRecent.value = true
   try {
     const res = await getRecentTranslations()
-    recentTasks.value = res.code === 200 ? res.data : []
-  } catch {
-    recentTasks.value = []
+    if (res.code !== 200 || !Array.isArray(res.data)) {
+      throw new Error(res.message || '服务器返回的翻译记录格式不正确')
+    }
+    recentTasks.value = res.data
+    recentLoadError.value = ''
+  } catch (e) {
+    recentLoadError.value = e.message || '无法连接服务器，请稍后重试'
   } finally {
     isLoadingRecent.value = false
   }
@@ -560,6 +618,12 @@ function taskStatusLabel(item) {
   if (item.status === 'completed') return '已完成'
   if (item.status === 'error') return '失败'
   return '待配置'
+}
+
+function speedLabel(item) {
+  const currentQps = item.qps || item.requestedQps || 4
+  if (item.resourceDowngraded) return `已降级稳定模式 · ${currentQps} QPS`
+  return currentQps >= 4 ? `加速模式 · ${currentQps} QPS` : `稳定模式 · ${currentQps} QPS`
 }
 
 function taskTagType(status) {
@@ -595,6 +659,8 @@ async function restoreTask(savedTaskId, notify = false) {
   translateEndPage.value = data.endPage || data.totalPages || 1
   fontFamily.value = data.fontFamily || 'auto'
   translationQps.value = data.qps || 4
+  requestedQps.value = data.requestedQps || translationQps.value
+  resourceDowngraded.value = Boolean(data.resourceDowngraded)
   translationProgress.value = Math.round(data.progress || 0)
   queuePosition.value = data.queuePosition || 0
   progressStageLabel.value = data.status === 'queued'

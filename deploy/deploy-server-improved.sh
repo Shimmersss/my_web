@@ -22,15 +22,19 @@ REMOTE_UPLOAD_DIR="${REMOTE_UPLOAD_DIR:-/home/admin/.web-homepage-releases}"
 CONFIG_DIR="${CONFIG_DIR:-/etc/web-homepage}"
 SERVICE_NAME="${SERVICE_NAME:-web-backen}"
 NGINX_SITE_NAME="${NGINX_SITE_NAME:-corporate-site}"
-DOMAIN="${DOMAIN:-115.28.129.221}"
-PUBLIC_URL="${PUBLIC_URL:-http://115.28.129.221/}"
+DOMAIN="${DOMAIN:-shimmer.help}"
+PUBLIC_URL="${PUBLIC_URL:-https://shimmer.help/}"
+FORCE_NGINX_CONFIG="${FORCE_NGINX_CONFIG:-0}"
 RUN_TESTS="${RUN_TESTS:-1}"
 REQUIRE_CLEAN="${REQUIRE_CLEAN:-0}"
+REQUIRE_DOCS_SYNC="${REQUIRE_DOCS_SYNC:-1}"
 DRY_RUN="${DRY_RUN:-0}"
 BACKEND_HEALTH_URL="${BACKEND_HEALTH_URL:-http://127.0.0.1:8080/api/health}"
 LOCAL_SITE_URL="${LOCAL_SITE_URL:-http://127.0.0.1/}"
+LOCAL_SITE_HOST="${LOCAL_SITE_HOST:-$DOMAIN}"
 VERIFY_TIMEOUT="${VERIFY_TIMEOUT:-120}"
 VERIFY_INTERVAL="${VERIFY_INTERVAL:-3}"
+REMOTE_RELEASE_KEEP="${REMOTE_RELEASE_KEEP:-3}"
 
 if [[ -z "${JAVA_HOME:-}" && -x /opt/homebrew/opt/openjdk@17/bin/java ]]; then
   export JAVA_HOME=/opt/homebrew/opt/openjdk@17
@@ -79,16 +83,20 @@ for pair in \
   "CONFIG_DIR=$CONFIG_DIR" \
   "SERVICE_NAME=$SERVICE_NAME" \
   "NGINX_SITE_NAME=$NGINX_SITE_NAME" \
-  "DOMAIN=$DOMAIN"; do
+  "DOMAIN=$DOMAIN" \
+  "LOCAL_SITE_HOST=$LOCAL_SITE_HOST"; do
   validate_simple_value "${pair%%=*}" "${pair#*=}"
 done
 
 [[ "$DEPLOY_PORT" =~ ^[0-9]+$ ]] || die "DEPLOY_PORT must be a number"
 [[ "$RUN_TESTS" == "0" || "$RUN_TESTS" == "1" ]] || die "RUN_TESTS must be 0 or 1"
 [[ "$REQUIRE_CLEAN" == "0" || "$REQUIRE_CLEAN" == "1" ]] || die "REQUIRE_CLEAN must be 0 or 1"
+[[ "$REQUIRE_DOCS_SYNC" == "0" || "$REQUIRE_DOCS_SYNC" == "1" ]] || die "REQUIRE_DOCS_SYNC must be 0 or 1"
 [[ "$DRY_RUN" == "0" || "$DRY_RUN" == "1" ]] || die "DRY_RUN must be 0 or 1"
+[[ "$FORCE_NGINX_CONFIG" == "0" || "$FORCE_NGINX_CONFIG" == "1" ]] || die "FORCE_NGINX_CONFIG must be 0 or 1"
 [[ "$VERIFY_TIMEOUT" =~ ^[0-9]+$ ]] || die "VERIFY_TIMEOUT must be a number"
 [[ "$VERIFY_INTERVAL" =~ ^[0-9]+$ ]] || die "VERIFY_INTERVAL must be a number"
+[[ "$REMOTE_RELEASE_KEEP" =~ ^[0-9]+$ ]] || die "REMOTE_RELEASE_KEEP must be a number"
 
 TARGET="$DEPLOY_USER@$DEPLOY_HOST"
 SSH_OPTIONS=(-p "$DEPLOY_PORT")
@@ -115,6 +123,15 @@ if [[ -n "$(git -C "$ROOT" status --porcelain)" ]]; then
     die "Git worktree is not clean. Commit or stash changes, or run with REQUIRE_CLEAN=0."
   fi
   warn "Git worktree contains uncommitted changes; they will be included in the release."
+fi
+
+if [[ "$REQUIRE_DOCS_SYNC" == "1" ]]; then
+  CHANGED_PATHS="$(git -C "$ROOT" status --porcelain --untracked-files=all | sed 's/^...//')"
+  if printf '%s\n' "$CHANGED_PATHS" | grep -Eq '^(backen/|front/|deploy/|project\.sh$)' \
+      && ! printf '%s\n' "$CHANGED_PATHS" | grep -Eq '(^|/)(AGENTS|MAINTENANCE|README|WORKLOG)\.md$|\.md$'; then
+    die "Code or deployment files changed without a Markdown update. Sync AGENTS.md or MAINTENANCE.md before deploying, or explicitly set REQUIRE_DOCS_SYNC=0."
+  fi
+  ok "Markdown sync check passed."
 fi
 
 if [[ "$RUN_TESTS" == "1" ]]; then
@@ -158,14 +175,14 @@ run "${SSH[@]}" \
 
 info "Installing release. sudo may ask for the server password..."
 run "${SSH_TTY[@]}" \
-  "sudo env INSTALL_DIR='$REMOTE_DIR' CONFIG_DIR='$CONFIG_DIR' SERVICE_NAME='$SERVICE_NAME' NGINX_SITE_NAME='$NGINX_SITE_NAME' DOMAIN='$DOMAIN' bash '$REMOTE_PACKAGE/install-linux.sh'"
+  "sudo env INSTALL_DIR='$REMOTE_DIR' CONFIG_DIR='$CONFIG_DIR' SERVICE_NAME='$SERVICE_NAME' NGINX_SITE_NAME='$NGINX_SITE_NAME' DOMAIN='$DOMAIN' FORCE_NGINX_CONFIG='$FORCE_NGINX_CONFIG' bash '$REMOTE_PACKAGE/install-linux.sh'"
 
 info "Verifying backend, Nginx, and local server response..."
 run "${SSH[@]}" \
   "set -e; \
   systemctl is-active '$SERVICE_NAME.service' >/dev/null; \
   deadline=\$((\$(date +%s) + $VERIFY_TIMEOUT)); \
-  until curl -fsS '$BACKEND_HEALTH_URL' >/dev/null; do \
+  until curl -fsS '$BACKEND_HEALTH_URL' >/dev/null 2>&1; do \
     if [ \"\$(date +%s)\" -ge \"\$deadline\" ]; then \
       echo '[x] Backend health check timed out: $BACKEND_HEALTH_URL' >&2; \
       systemctl status '$SERVICE_NAME.service' -n 50 --no-pager >&2 || true; \
@@ -174,13 +191,25 @@ run "${SSH[@]}" \
     fi; \
     sleep '$VERIFY_INTERVAL'; \
   done; \
-  curl -fsSI '$LOCAL_SITE_URL' >/dev/null"
+  curl -fsSI -H 'Host: $LOCAL_SITE_HOST' '$LOCAL_SITE_URL' >/dev/null"
 
 info "Verifying public response: $PUBLIC_URL"
-run curl -fsSI "$PUBLIC_URL"
+run "${SSH[@]}" "curl -fsSI '$PUBLIC_URL' >/dev/null"
 
 info "Cleaning extracted staging directory..."
 run "${SSH[@]}" "rm -rf '$REMOTE_STAGE'"
+
+info "Pruning old release archives on server..."
+run "${SSH[@]}" \
+  "set -e; \
+  cd '$REMOTE_UPLOAD_DIR'; \
+  find . -maxdepth 1 -type f -name 'web-homepage-[0-9]*.tar.gz' -printf '%T@ %p\n' \
+    | sort -rn | awk 'NR>$REMOTE_RELEASE_KEEP {print substr(\$0, index(\$0,\$2))}' \
+    | xargs -r rm -f --; \
+  find . -maxdepth 1 -type f -name 'web-homepage-backup-[0-9]*.tar.gz' -printf '%T@ %p\n' \
+    | sort -rn | awk 'NR>$REMOTE_RELEASE_KEEP {print substr(\$0, index(\$0,\$2))}' \
+    | xargs -r rm -f --; \
+  du -sh '$REMOTE_UPLOAD_DIR'"
 
 if [[ "$DRY_RUN" == "1" ]]; then
   ok "Dry run completed. No files were uploaded or installed."

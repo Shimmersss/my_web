@@ -27,9 +27,14 @@ info "Building backend jar..."
 
 info "Building frontend static files..."
 if [[ -f "$FRONTEND_DIR/package-lock.json" ]]; then
-  (cd "$FRONTEND_DIR" && npm ci --cache "$NPM_CACHE_DIR" && npm run build)
+  (cd "$FRONTEND_DIR" && npm ci --cache "$NPM_CACHE_DIR" && VITE_API_BASE_URL=/api npm run build)
 else
-  (cd "$FRONTEND_DIR" && npm install --cache "$NPM_CACHE_DIR" && npm run build)
+  (cd "$FRONTEND_DIR" && npm install --cache "$NPM_CACHE_DIR" && VITE_API_BASE_URL=/api npm run build)
+fi
+
+if grep -Rqs 'api\.example\.com' "$FRONTEND_DIR/dist"; then
+  echo "Frontend build contains placeholder API host api.example.com"
+  exit 1
 fi
 
 info "Collecting release files..."
@@ -44,6 +49,9 @@ cp "$ROOT/deploy/README.md" "$PACKAGE_ROOT/README.md"
 
 if [[ -f "$ROOT/MAINTENANCE.md" ]]; then
   cp "$ROOT/MAINTENANCE.md" "$PACKAGE_ROOT/MAINTENANCE.md"
+fi
+if [[ -f "$ROOT/AGENTS.md" ]]; then
+  cp "$ROOT/AGENTS.md" "$PACKAGE_ROOT/AGENTS.md"
 fi
 
 if [[ -f "$ROOT/.run/github-projects.json" ]]; then

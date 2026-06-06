@@ -75,7 +75,7 @@ public class TranslateController {
                                     @RequestParam(defaultValue = "1") int startPage,
                                     @RequestParam(required = false) Integer endPage,
                                     @RequestParam(defaultValue = "auto") String fontFamily,
-                                    @RequestParam(defaultValue = "8") int qps) {
+                                    @RequestParam(defaultValue = "4") int qps) {
         try {
             TranslationSession session = translationService.startTranslation(
                     taskId, startPage, endPage != null ? endPage : Integer.MAX_VALUE, fontFamily, qps);
@@ -86,6 +86,9 @@ public class TranslateController {
                             "taskId", session.getTaskId(),
                             "pageCount", session.getEndPage() - session.getStartPage() + 1,
                             "status", session.getStatus(),
+                            "qps", session.getQps(),
+                            "requestedQps", session.getRequestedQps(),
+                            "resourceDowngraded", session.isResourceDowngraded(),
                             "queuePosition", session.getQueuePosition()
                     )
             ));
@@ -138,6 +141,10 @@ public class TranslateController {
         data.put("endPage", session.getEndPage());
         data.put("fontFamily", session.getFontFamily());
         data.put("qps", session.getQps());
+        data.put("requestedQps", session.getRequestedQps());
+        data.put("resourceDowngraded", session.isResourceDowngraded());
+        data.put("resourceDowngradeReason", session.getResourceDowngradeReason() != null ? session.getResourceDowngradeReason() : "");
+        data.put("resourceDowngradeCount", session.getResourceDowngradeCount());
         data.put("progress", session.getProgress());
         data.put("progressStage", session.getProgressStage());
         data.put("progressStageLabel", translationService.stageLabel(session.getProgressStage()));
@@ -215,6 +222,10 @@ public class TranslateController {
         data.put("endPage", session.getEndPage());
         data.put("progress", session.getProgress());
         data.put("progressStageLabel", translationService.stageLabel(session.getProgressStage()));
+        data.put("qps", session.getQps());
+        data.put("requestedQps", session.getRequestedQps());
+        data.put("resourceDowngraded", session.isResourceDowngraded());
+        data.put("resourceDowngradeReason", session.getResourceDowngradeReason() != null ? session.getResourceDowngradeReason() : "");
         data.put("queuePosition", session.getQueuePosition());
         data.put("createdAt", session.getCreatedAt());
         data.put("completedAt", session.getCompletedAt());

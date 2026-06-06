@@ -14,6 +14,9 @@ public class BabelDocConfig {
     private String openaiModel = "mimo-v2.5-pro";
     private int timeoutSeconds = 1800;
     private int qps = 4;
+    private int resourceCgroupLimitMiB = 2600;
+    private int resourceMinAvailableMiB = 400;
+    private int resourceMaxSwapUsedMiB = 1200;
 
     public boolean isEnabled() {
         return enabled;
@@ -69,5 +72,29 @@ public class BabelDocConfig {
 
     public void setQps(int qps) {
         this.qps = qps;
+    }
+
+    public int getResourceCgroupLimitMiB() {
+        return resourceCgroupLimitMiB;
+    }
+
+    public void setResourceCgroupLimitMiB(int resourceCgroupLimitMiB) {
+        this.resourceCgroupLimitMiB = resourceCgroupLimitMiB;
+    }
+
+    public int getResourceMinAvailableMiB() {
+        return resourceMinAvailableMiB;
+    }
+
+    public void setResourceMinAvailableMiB(int resourceMinAvailableMiB) {
+        this.resourceMinAvailableMiB = resourceMinAvailableMiB;
+    }
+
+    public int getResourceMaxSwapUsedMiB() {
+        return resourceMaxSwapUsedMiB;
+    }
+
+    public void setResourceMaxSwapUsedMiB(int resourceMaxSwapUsedMiB) {
+        this.resourceMaxSwapUsedMiB = resourceMaxSwapUsedMiB;
     }
 }

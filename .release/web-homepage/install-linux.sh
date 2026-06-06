@@ -11,6 +11,7 @@ ENV_FILE="$CONFIG_DIR/web.env"
 SERVICE_NAME="${SERVICE_NAME:-web-backen}"
 NGINX_SITE_NAME="${NGINX_SITE_NAME:-web-homepage}"
 DOMAIN="${DOMAIN:-_}"
+FORCE_NGINX_CONFIG="${FORCE_NGINX_CONFIG:-0}"
 CURRENT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 info() { printf '\033[36m[i]\033[0m %s\n' "$*"; }
@@ -42,6 +43,13 @@ cp -R "$CURRENT_DIR/backen/scripts" "$INSTALL_DIR/backen/scripts"
 rm -rf "$INSTALL_DIR/front/dist"
 cp -R "$CURRENT_DIR/front/dist" "$INSTALL_DIR/front/dist"
 
+for document in AGENTS.md MAINTENANCE.md README.md; do
+  if [[ -f "$CURRENT_DIR/$document" ]]; then
+    cp "$CURRENT_DIR/$document" "$INSTALL_DIR/$document"
+    chmod 644 "$INSTALL_DIR/$document"
+  fi
+done
+
 if [[ -f "$CURRENT_DIR/.run/github-projects.json" && ! -f "$INSTALL_DIR/.run/github-projects.json" ]]; then
   cp "$CURRENT_DIR/.run/github-projects.json" "$INSTALL_DIR/.run/github-projects.json"
 fi
@@ -72,8 +80,13 @@ if command -v nginx >/dev/null 2>&1; then
     NGINX_CONF="/etc/nginx/$NGINX_SITE_NAME.conf"
   fi
 
-  sed "s#__INSTALL_DIR__#$INSTALL_DIR#g; s#__DOMAIN__#$DOMAIN#g" \
-    "$CURRENT_DIR/deploy/nginx.conf.template" > "$NGINX_CONF"
+  if [[ -f "$NGINX_CONF" && "$FORCE_NGINX_CONFIG" != "1" ]]; then
+    ok "Keeping existing Nginx config: $NGINX_CONF"
+  else
+    sed "s#__INSTALL_DIR__#$INSTALL_DIR#g; s#__DOMAIN__#$DOMAIN#g" \
+      "$CURRENT_DIR/deploy/nginx.conf.template" > "$NGINX_CONF"
+    ok "Installed Nginx config: $NGINX_CONF"
+  fi
   if [[ -d /etc/nginx/sites-enabled && "$NGINX_CONF" == /etc/nginx/sites-available/* ]]; then
     ln -sfn "/etc/nginx/sites-available/$NGINX_SITE_NAME" "/etc/nginx/sites-enabled/$NGINX_SITE_NAME"
   fi

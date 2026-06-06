@@ -6,6 +6,22 @@
 
 ---
 
+## 2026-06-06
+
+### ops: PDF 翻译服务器保护与部署包清理
+
+**问题**：生产机 2 核 / 4 GB 且无 swap，`666.pdf` 全 18 页 BabelDOC 翻译期间服务器出现重启；后端只限制 JVM 堆，BabelDOC/Python 子进程没有 cgroup 内存上限，远端 release 备份目录也已增长到约 3.6 GB。
+
+**改动**：
+- systemd 模板增加 `MemoryAccounting=yes`、`MemoryHigh=2200M`、`MemoryMax=2800M`、`TasksMax=256`
+- 生产保留 4 QPS 加速模式入口，新增资源监控保护；内存压力较高时自动终止当前 BabelDOC 并按 2 QPS 稳定模式重试一次
+- 长任务超时设置为 6 小时，稳定降级目标为 `TRANSLATION_STABLE_QPS=2`
+- 线上 1 页翻译实测发现把 `MemoryHigh=2200M` 当终止点过于保守，稳定/加速都会被误杀；资源保护阈值改为可配置，默认 cgroup `2600 MiB`、系统可用内存 `400 MiB`、swap 已用 `1200 MiB`
+- 一键部署脚本增加远端 release tarball 保留策略，默认发布包和备份包各保留最近 3 个
+- 文档明确 Zotero 文献缓存只在 JVM 内存，磁盘增长重点是翻译任务目录和部署 release 备份目录
+
+---
+
 ## 2026-06-03
 
 ### chore: 增加本地一键部署收尾脚本

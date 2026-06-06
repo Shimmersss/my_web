@@ -13,9 +13,11 @@ import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.stream.Stream;
@@ -25,6 +27,7 @@ public class BabelDocService {
 
     private static final Logger log = LoggerFactory.getLogger(BabelDocService.class);
     private static final int MAX_OUTPUT_CHARS = 64 * 1024;
+    private static final long MONITOR_INTERVAL_MILLIS = 2000;
 
     private final BabelDocConfig config;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -63,9 +66,9 @@ public class BabelDocService {
             outputReader.setDaemon(true);
             outputReader.start();
 
-            boolean completed = process.waitFor(config.getTimeoutSeconds(), TimeUnit.SECONDS);
+            boolean completed = waitForCompletionOrResourceRisk(process, Duration.ofSeconds(config.getTimeoutSeconds()));
             if (!completed) {
-                process.destroyForcibly();
+                terminateProcessTree(process);
                 throw new IllegalStateException("BabelDOC 处理超时，请缩小页面范围或调大 BABELDOC_TIMEOUT_SECONDS");
             }
 
@@ -177,6 +180,12 @@ public class BabelDocService {
     public record TranslationResult(Path translatedPdf, Path bilingualPdf) {}
     public record ProgressUpdate(double progress, String stage, int current, int total) {}
 
+    public static class ResourcePressureException extends IllegalStateException {
+        public ResourcePressureException(String message) {
+            super(message);
+        }
+    }
+
     private String tail(String text, int maxLength) {
         if (text == null || text.isBlank()) {
             return "(没有命令输出)";
@@ -200,4 +209,131 @@ public class BabelDocService {
             log.warn("清理 BabelDOC 临时目录失败: {}", path, e);
         }
     }
+
+    private boolean waitForCompletionOrResourceRisk(Process process, Duration timeout) throws InterruptedException {
+        long deadline = System.nanoTime() + timeout.toNanos();
+        while (System.nanoTime() < deadline) {
+            long remainingMillis = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
+            long waitMillis = Math.max(1, Math.min(MONITOR_INTERVAL_MILLIS, remainingMillis));
+            if (process.waitFor(waitMillis, TimeUnit.MILLISECONDS)) {
+                return true;
+            }
+
+            Optional<String> risk = detectResourceRisk();
+            if (risk.isPresent()) {
+                terminateProcessTree(process);
+                throw new ResourcePressureException("检测到服务器内存压力，已停止当前翻译进程: " + risk.get());
+            }
+        }
+        return process.waitFor(1, TimeUnit.MILLISECONDS);
+    }
+
+    private Optional<String> detectResourceRisk() {
+        long cgroupMemory = readCgroupMemoryCurrent();
+        long cgroupRiskBytes = mibToBytes(config.getResourceCgroupLimitMiB());
+        if (cgroupMemory > cgroupRiskBytes) {
+            return Optional.of("服务内存 " + formatMiB(cgroupMemory)
+                    + " MiB 超过阈值 " + config.getResourceCgroupLimitMiB() + " MiB");
+        }
+
+        MemoryInfo memoryInfo = readMemoryInfo();
+        long minAvailableBytes = mibToBytes(config.getResourceMinAvailableMiB());
+        if (memoryInfo.memAvailableBytes > 0 && memoryInfo.memAvailableBytes < minAvailableBytes) {
+            return Optional.of("系统可用内存 " + formatMiB(memoryInfo.memAvailableBytes)
+                    + " MiB 低于阈值 " + config.getResourceMinAvailableMiB() + " MiB");
+        }
+        long swapUsed = memoryInfo.swapTotalBytes - memoryInfo.swapFreeBytes;
+        long maxSwapUsedBytes = mibToBytes(config.getResourceMaxSwapUsedMiB());
+        if (memoryInfo.swapTotalBytes > 0 && swapUsed > maxSwapUsedBytes) {
+            return Optional.of("Swap 已用 " + formatMiB(swapUsed)
+                    + " MiB 超过阈值 " + config.getResourceMaxSwapUsedMiB() + " MiB");
+        }
+        return Optional.empty();
+    }
+
+    private long readCgroupMemoryCurrent() {
+        for (Path path : cgroupMemoryPaths()) {
+            try {
+                if (Files.isRegularFile(path)) {
+                    return Long.parseLong(Files.readString(path).trim());
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return -1;
+    }
+
+    private List<Path> cgroupMemoryPaths() {
+        List<Path> paths = new ArrayList<>();
+        try {
+            for (String line : Files.readAllLines(Path.of("/proc/self/cgroup"))) {
+                String[] parts = line.split(":", 3);
+                if (parts.length != 3) continue;
+                if ("0".equals(parts[0])) {
+                    paths.add(Path.of("/sys/fs/cgroup").resolve(parts[2].replaceFirst("^/", "")).resolve("memory.current"));
+                } else if (parts[1].contains("memory")) {
+                    paths.add(Path.of("/sys/fs/cgroup/memory").resolve(parts[2].replaceFirst("^/", "")).resolve("memory.usage_in_bytes"));
+                }
+            }
+        } catch (IOException ignored) {
+        }
+        paths.add(Path.of("/sys/fs/cgroup/memory.current"));
+        paths.add(Path.of("/sys/fs/cgroup/memory/memory.usage_in_bytes"));
+        return paths;
+    }
+
+    private MemoryInfo readMemoryInfo() {
+        long memAvailable = -1;
+        long swapTotal = 0;
+        long swapFree = 0;
+        try {
+            for (String line : Files.readAllLines(Path.of("/proc/meminfo"))) {
+                if (line.startsWith("MemAvailable:")) {
+                    memAvailable = parseMeminfoBytes(line);
+                } else if (line.startsWith("SwapTotal:")) {
+                    swapTotal = parseMeminfoBytes(line);
+                } else if (line.startsWith("SwapFree:")) {
+                    swapFree = parseMeminfoBytes(line);
+                }
+            }
+        } catch (IOException ignored) {
+        }
+        return new MemoryInfo(memAvailable, swapTotal, swapFree);
+    }
+
+    private long parseMeminfoBytes(String line) {
+        String[] parts = line.trim().split("\\s+");
+        if (parts.length < 2) return -1;
+        try {
+            return Long.parseLong(parts[1]) * 1024;
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    private String formatMiB(long bytes) {
+        return String.valueOf(bytes / 1024 / 1024);
+    }
+
+    private long mibToBytes(int mib) {
+        return Math.max(1L, mib) * 1024 * 1024;
+    }
+
+    private void terminateProcessTree(Process process) {
+        ProcessHandle handle = process.toHandle();
+        handle.descendants().forEach(ProcessHandle::destroy);
+        handle.destroy();
+        try {
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                handle.descendants().forEach(ProcessHandle::destroyForcibly);
+                process.destroyForcibly();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            handle.descendants().forEach(ProcessHandle::destroyForcibly);
+            process.destroyForcibly();
+        }
+    }
+
+    private record MemoryInfo(long memAvailableBytes, long swapTotalBytes, long swapFreeBytes) {}
 }

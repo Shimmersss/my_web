@@ -18,6 +18,10 @@ public class TranslationSession {
     private volatile String errorMessage;
     private String fontFamily = "auto";
     private int qps = 4;
+    private int requestedQps = 4;
+    private volatile boolean resourceDowngraded;
+    private volatile String resourceDowngradeReason;
+    private volatile int resourceDowngradeCount;
     private volatile double progress;
     private volatile String progressStage = "";
     private long createdAt;
@@ -47,6 +51,10 @@ public class TranslationSession {
     public String getErrorMessage() { return errorMessage; }
     public String getFontFamily() { return fontFamily; }
     public int getQps() { return qps; }
+    public int getRequestedQps() { return requestedQps; }
+    public boolean isResourceDowngraded() { return resourceDowngraded; }
+    public String getResourceDowngradeReason() { return resourceDowngradeReason; }
+    public int getResourceDowngradeCount() { return resourceDowngradeCount; }
     public double getProgress() { return progress; }
     public String getProgressStage() { return progressStage; }
     public long getCreatedAt() { return createdAt; }
@@ -77,6 +85,10 @@ public class TranslationSession {
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; touch(); }
     public void setFontFamily(String fontFamily) { this.fontFamily = fontFamily; touch(); }
     public void setQps(int qps) { this.qps = qps; touch(); }
+    public void setRequestedQps(int requestedQps) { this.requestedQps = requestedQps; touch(); }
+    public void setResourceDowngraded(boolean resourceDowngraded) { this.resourceDowngraded = resourceDowngraded; touch(); }
+    public void setResourceDowngradeReason(String resourceDowngradeReason) { this.resourceDowngradeReason = resourceDowngradeReason; touch(); }
+    public void setResourceDowngradeCount(int resourceDowngradeCount) { this.resourceDowngradeCount = resourceDowngradeCount; touch(); }
     public void setProgress(double progress) { this.progress = progress; touch(); }
     public void setProgressStage(String progressStage) { this.progressStage = progressStage; touch(); }
     public void setCompletedAt(long completedAt) { this.completedAt = completedAt; touch(); }

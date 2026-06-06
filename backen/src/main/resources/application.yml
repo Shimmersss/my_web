@@ -59,6 +59,9 @@ babeldoc:
   openai-model: ${BABELDOC_OPENAI_MODEL:mimo-v2.5-pro}
   timeout-seconds: ${BABELDOC_TIMEOUT_SECONDS:21600}
   qps: ${BABELDOC_QPS:4}
+  resource-cgroup-limit-mi-b: ${BABELDOC_RESOURCE_CGROUP_LIMIT_MIB:2600}
+  resource-min-available-mi-b: ${BABELDOC_RESOURCE_MIN_AVAILABLE_MIB:400}
+  resource-max-swap-used-mi-b: ${BABELDOC_RESOURCE_MAX_SWAP_USED_MIB:1200}
 
 translation:
   # 2 核 / 4 GB 服务器只运行一个 BabelDOC 子进程，结果落盘避免长期占用 JVM 堆
@@ -66,6 +69,7 @@ translation:
   max-history: ${TRANSLATION_MAX_HISTORY:5}
   queue-capacity: ${TRANSLATION_QUEUE_CAPACITY:5}
   max-qps: ${TRANSLATION_MAX_QPS:4}
+  stable-qps: ${TRANSLATION_STABLE_QPS:2}
 
 openclaw:
   # 后端通过本机 CLI 访问 Gateway，凭证不会暴露给浏览器

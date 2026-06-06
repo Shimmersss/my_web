@@ -15,6 +15,10 @@ ExecStart=/usr/bin/env java -jar __INSTALL_DIR__/backen/backen.jar
 Restart=always
 RestartSec=5
 SuccessExitStatus=143
+MemoryAccounting=yes
+MemoryHigh=2200M
+MemoryMax=2800M
+TasksMax=256
 
 [Install]
 WantedBy=multi-user.target

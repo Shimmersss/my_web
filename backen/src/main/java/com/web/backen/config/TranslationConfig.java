@@ -11,6 +11,7 @@ public class TranslationConfig {
     private int maxHistory = 5;
     private int queueCapacity = 5;
     private int maxQps = 4;
+    private int stableQps = 2;
 
     public String getStorageDir() { return storageDir; }
     public void setStorageDir(String storageDir) { this.storageDir = storageDir; }
@@ -20,4 +21,6 @@ public class TranslationConfig {
     public void setQueueCapacity(int queueCapacity) { this.queueCapacity = queueCapacity; }
     public int getMaxQps() { return maxQps; }
     public void setMaxQps(int maxQps) { this.maxQps = maxQps; }
+    public int getStableQps() { return stableQps; }
+    public void setStableQps(int stableQps) { this.stableQps = stableQps; }
 }

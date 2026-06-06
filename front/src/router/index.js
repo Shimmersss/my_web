@@ -51,6 +51,7 @@ const routes = [
   },
   {
     path: '/franchise',
+    alias: '/openclaw',
     name: 'Franchise',
     component: () => import('@/views/Franchise/index.vue'),
     meta: { title: 'OpenClaw 对话' }

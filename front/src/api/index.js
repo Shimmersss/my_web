@@ -350,8 +350,11 @@ export async function uploadPdf(file) {
  * @param {number} endPage - 结束页码
  * @returns {Promise}
  */
-export function startTranslation(taskId, startPage, endPage, fontFamily = 'auto', qps = 8) {
-  return post(`/translate/start/${taskId}?startPage=${startPage}&endPage=${endPage}&fontFamily=${encodeURIComponent(fontFamily)}&qps=${qps}`)
+export async function startTranslation(taskId, startPage, endPage, fontFamily = 'auto', qps = 4) {
+  const res = await fetch(`/api/translate/start/${taskId}?startPage=${startPage}&endPage=${endPage}&fontFamily=${encodeURIComponent(fontFamily)}&qps=${qps}`, {
+    method: 'POST'
+  })
+  return res.json()
 }
 
 /**
@@ -361,6 +364,14 @@ export function startTranslation(taskId, startPage, endPage, fontFamily = 'auto'
  */
 export function getTranslationStatus(taskId) {
   return get(`/translate/status/${taskId}`)
+}
+
+/**
+ * 获取最近翻译任务
+ * @returns {Promise}
+ */
+export function getRecentTranslations() {
+  return get('/translate/recent')
 }
 
 /**

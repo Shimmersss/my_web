@@ -5,7 +5,7 @@
       <div v-if="step === 'upload'" class="upload-section">
         <div class="upload-header">
           <h1>论文翻译</h1>
-          <p>上传英文 PDF 论文，AI 自动翻译为中文</p>
+          <p>上传英文 PDF 论文，任务将进入后台队列并自动翻译为中文</p>
         </div>
 
         <div
@@ -82,10 +82,10 @@
 
             <div class="range-label option-label">翻译速度</div>
             <n-radio-group v-model:value="translationQps" size="small">
-              <n-radio-button :value="4">稳定模式</n-radio-button>
-              <n-radio-button :value="8">加速模式</n-radio-button>
+              <n-radio-button :value="2">稳定模式</n-radio-button>
+              <n-radio-button :value="4">加速模式</n-radio-button>
             </n-radio-group>
-            <p class="range-hint">加速模式会提高并发请求数；如果接口限流，可切回稳定模式。</p>
+            <p class="range-hint">服务器按 2 核 / 4 GB 配置运行，同一时间只处理一个 PDF，其他任务会排队。</p>
 
             <n-button
               type="primary"
@@ -114,7 +114,8 @@
           </n-icon>
           <div>
             <h2>{{ fileName }}</h2>
-            <p>第 {{ translateStartPage }}-{{ translateEndPage }} 页 · BabelDOC 保留版式翻译</p>
+            <p v-if="queuePosition > 0">第 {{ translateStartPage }}-{{ translateEndPage }} 页 · 队列第 {{ queuePosition }} 位</p>
+            <p v-else>第 {{ translateStartPage }}-{{ translateEndPage }} 页 · BabelDOC 保留版式翻译</p>
           </div>
         </div>
 
@@ -192,6 +193,38 @@
           </n-alert>
         </div>
       </div>
+
+      <section class="recent-section">
+        <div class="recent-header">
+          <div>
+            <h2>最近翻译</h2>
+            <p>仅保留最近几次任务和结果文件，后端重启后未完成任务会重新排队。</p>
+          </div>
+          <n-button size="small" :loading="isLoadingRecent" @click="loadRecentTranslations">刷新</n-button>
+        </div>
+
+        <div v-if="recentTasks.length" class="recent-list">
+          <button
+            v-for="item in recentTasks"
+            :key="item.taskId"
+            class="recent-item"
+            type="button"
+            @click="openRecentTask(item)"
+          >
+            <div class="recent-copy">
+              <strong>{{ item.fileName }}</strong>
+              <span>第 {{ item.startPage }}-{{ item.endPage }} 页 · {{ formatTaskTime(item.createdAt) }}</span>
+            </div>
+            <div class="recent-status">
+              <n-tag size="small" :type="taskTagType(item.status)">
+                {{ taskStatusLabel(item) }}
+              </n-tag>
+              <span v-if="item.status === 'translating'">{{ Math.round(item.progress || 0) }}%</span>
+            </div>
+          </button>
+        </div>
+        <n-empty v-else-if="!isLoadingRecent" description="暂无翻译记录" />
+      </section>
     </div>
   </div>
 </template>
@@ -210,6 +243,7 @@ import {
   uploadPdf,
   startTranslation,
   getTranslationStatus,
+  getRecentTranslations,
   downloadTranslation,
   downloadTranslatedPdf,
   getTranslatedPdfBlob
@@ -236,9 +270,12 @@ const fontFamilyOptions = [
   { label: '无衬线字体', value: 'sans-serif' },
   { label: '手写 / 斜体风格', value: 'script' }
 ]
-const translationQps = ref(8)
+const translationQps = ref(4)
 const translationProgress = ref(0)
 const progressStageLabel = ref('正在启动 BabelDOC...')
+const queuePosition = ref(0)
+const recentTasks = ref([])
+const isLoadingRecent = ref(false)
 const pdfPreviewMode = ref('translated')
 const isStarting = ref(false)
 const isLoadingPdfPreview = ref(false)
@@ -246,6 +283,7 @@ const isGeneratingPdf = ref(false)
 const pdfPreviewUrl = ref('')
 const pdfPreviewError = ref('')
 let eventSource = null
+let recentRefreshTimer = null
 
 // 触发文件选择
 function triggerFileInput() {
@@ -301,6 +339,7 @@ async function processFile(file) {
 
     // 进入配置态
     step.value = 'config'
+    loadRecentTranslations()
   } catch (e) {
     errorMsg.value = e.message || '上传失败，请重试'
   }
@@ -328,10 +367,12 @@ async function handleStartTranslate() {
     isGeneratingPdf.value = false
     translationProgress.value = 0
     progressStageLabel.value = '正在启动 BabelDOC...'
+    queuePosition.value = res.data.queuePosition || 0
 
     // 进入翻译态并开始 SSE
     step.value = 'translating'
     startSSE()
+    loadRecentTranslations()
   } catch (e) {
     errorMsg.value = e.message || '启动翻译失败，请重试'
   } finally {
@@ -356,11 +397,23 @@ function startSSE() {
     eventSource = null
     message.success('翻译完成！')
     loadPdfPreview()
+    loadRecentTranslations()
   })
 
   eventSource.addEventListener('layout', () => {
     isGeneratingPdf.value = true
+    queuePosition.value = 0
     progressStageLabel.value = '正在使用 BabelDOC 分析版面、翻译并重建 PDF...'
+  })
+
+  eventSource.addEventListener('queued', (e) => {
+    try {
+      const data = JSON.parse(e.data)
+      queuePosition.value = data.queuePosition || 1
+      progressStageLabel.value = `等待后台翻译，当前队列第 ${queuePosition.value} 位`
+    } catch {
+      progressStageLabel.value = '等待后台翻译'
+    }
   })
 
   eventSource.addEventListener('progress', (e) => {
@@ -373,7 +426,7 @@ function startSSE() {
     }
   })
 
-  eventSource.addEventListener('error', (e) => {
+  eventSource.addEventListener('task-error', (e) => {
     try {
       const data = JSON.parse(e.data)
       errorMsg.value = data.message || '翻译过程中发生错误'
@@ -417,11 +470,15 @@ async function reconnectSSE() {
 
       if (data.status === 'error') {
         errorMsg.value = data.errorMessage || '翻译失败'
+        loadRecentTranslations()
         return
       }
 
+      queuePosition.value = data.queuePosition || 0
       translationProgress.value = Math.round(data.progress || 0)
-      progressStageLabel.value = data.progressStageLabel || '正在使用 BabelDOC 处理...'
+      progressStageLabel.value = data.status === 'queued'
+        ? `等待后台翻译，当前队列第 ${queuePosition.value || 1} 位`
+        : data.progressStageLabel || '正在使用 BabelDOC 处理...'
       setTimeout(() => {
         if (step.value === 'translating') {
           reconnectSSE()
@@ -474,8 +531,9 @@ function resetToUpload() {
   errorMsg.value = ''
   isGeneratingPdf.value = false
   fontFamily.value = 'auto'
-  translationQps.value = 8
+  translationQps.value = 4
   translationProgress.value = 0
+  queuePosition.value = 0
   progressStageLabel.value = '正在启动 BabelDOC...'
   pdfPreviewMode.value = 'translated'
   totalPages.value = 0
@@ -484,41 +542,91 @@ function resetToUpload() {
   sessionStorage.removeItem('translateTaskId')
 }
 
+async function loadRecentTranslations() {
+  isLoadingRecent.value = true
+  try {
+    const res = await getRecentTranslations()
+    recentTasks.value = res.code === 200 ? res.data : []
+  } catch {
+    recentTasks.value = []
+  } finally {
+    isLoadingRecent.value = false
+  }
+}
+
+function taskStatusLabel(item) {
+  if (item.status === 'queued') return `排队中 · 第 ${item.queuePosition || 1} 位`
+  if (item.status === 'translating') return item.progressStageLabel || '翻译中'
+  if (item.status === 'completed') return '已完成'
+  if (item.status === 'error') return '失败'
+  return '待配置'
+}
+
+function taskTagType(status) {
+  if (status === 'completed') return 'success'
+  if (status === 'error') return 'error'
+  if (status === 'queued') return 'warning'
+  return 'info'
+}
+
+function formatTaskTime(timestamp) {
+  return timestamp ? new Date(timestamp).toLocaleString() : ''
+}
+
+async function openRecentTask(item) {
+  sessionStorage.setItem('translateTaskId', item.taskId)
+  await restoreTask(item.taskId, true)
+}
+
+async function restoreTask(savedTaskId, notify = false) {
+  const res = await getTranslationStatus(savedTaskId)
+  if (res.code !== 200) return
+  const data = res.data
+  if (taskId.value !== savedTaskId && pdfPreviewUrl.value) {
+    URL.revokeObjectURL(pdfPreviewUrl.value)
+    pdfPreviewUrl.value = ''
+  }
+  taskId.value = savedTaskId
+  fileName.value = data.fileName
+  totalPages.value = data.totalPages || 0
+  startPage.value = data.startPage || 1
+  endPage.value = data.endPage || data.totalPages || 1
+  translateStartPage.value = data.startPage || 1
+  translateEndPage.value = data.endPage || data.totalPages || 1
+  fontFamily.value = data.fontFamily || 'auto'
+  translationQps.value = data.qps || 4
+  translationProgress.value = Math.round(data.progress || 0)
+  queuePosition.value = data.queuePosition || 0
+  progressStageLabel.value = data.status === 'queued'
+    ? `等待后台翻译，当前队列第 ${queuePosition.value || 1} 位`
+    : data.progressStageLabel || '正在使用 BabelDOC 处理...'
+
+  if (data.status === 'completed') {
+    progressStageLabel.value = '翻译完成'
+    step.value = 'result'
+    if (notify) message.info('已打开翻译结果')
+    loadPdfPreview()
+  } else if (data.status === 'queued' || data.status === 'translating') {
+    step.value = 'translating'
+    isGeneratingPdf.value = data.status === 'translating'
+    if (notify) message.info(data.status === 'queued' ? '已恢复排队任务' : '已恢复翻译进度')
+    reconnectSSE()
+  } else if (data.status === 'preview') {
+    step.value = 'config'
+  } else {
+    errorMsg.value = data.errorMessage || '翻译失败'
+    step.value = 'translating'
+  }
+}
+
 // 页面加载时检查是否有进行中的任务
 onMounted(async () => {
+  await loadRecentTranslations()
+  recentRefreshTimer = window.setInterval(loadRecentTranslations, 5000)
   const savedTaskId = sessionStorage.getItem('translateTaskId')
   if (savedTaskId) {
     try {
-      const res = await getTranslationStatus(savedTaskId)
-      if (res.code === 200) {
-        const data = res.data
-        taskId.value = savedTaskId
-        fileName.value = data.fileName
-        totalPages.value = data.totalPages || 0
-        translateStartPage.value = data.startPage || 1
-        translateEndPage.value = data.endPage || data.totalPages || 1
-        fontFamily.value = data.fontFamily || 'auto'
-        translationQps.value = data.qps || 8
-        translationProgress.value = Math.round(data.progress || 0)
-        progressStageLabel.value = data.progressStageLabel || '正在使用 BabelDOC 处理...'
-        if (data.status === 'completed') {
-          progressStageLabel.value = '翻译完成'
-          step.value = 'result'
-          message.info('已恢复之前的翻译结果')
-          loadPdfPreview()
-        } else if (data.status === 'translating') {
-          step.value = 'translating'
-          isGeneratingPdf.value = true
-          message.info('恢复翻译进度...')
-          reconnectSSE()
-        } else if (data.status === 'preview') {
-          step.value = 'config'
-        } else {
-          sessionStorage.removeItem('translateTaskId')
-        }
-      } else {
-        sessionStorage.removeItem('translateTaskId')
-      }
+      await restoreTask(savedTaskId)
     } catch {
       sessionStorage.removeItem('translateTaskId')
     }
@@ -527,6 +635,10 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   eventSource?.close()
+  if (recentRefreshTimer) {
+    window.clearInterval(recentRefreshTimer)
+    recentRefreshTimer = null
+  }
   if (pdfPreviewUrl.value) {
     URL.revokeObjectURL(pdfPreviewUrl.value)
   }
@@ -547,6 +659,89 @@ onBeforeUnmount(() => {
   max-width: 960px;
   margin: 0 auto;
   padding: 0 $spacing-lg;
+}
+
+.recent-section {
+  margin-top: 28px;
+  padding: 20px 24px;
+  border-radius: 16px;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+}
+
+.recent-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+
+  h2 {
+    margin: 0;
+    font-size: 18px;
+    color: $text-color;
+  }
+
+  p {
+    margin: 4px 0 0;
+    font-size: 13px;
+    color: #888;
+  }
+}
+
+.recent-list {
+  display: grid;
+  gap: 8px;
+}
+
+.recent-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 14px;
+  border: 1px solid #edf0f3;
+  border-radius: 10px;
+  background: #fff;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    border-color: #91caff;
+    background: #f7fbff;
+  }
+}
+
+.recent-copy,
+.recent-status {
+  display: flex;
+  min-width: 0;
+}
+
+.recent-copy {
+  flex-direction: column;
+  gap: 4px;
+
+  strong {
+    overflow: hidden;
+    color: $text-color;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  span {
+    font-size: 12px;
+    color: #888;
+  }
+}
+
+.recent-status {
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #888;
 }
 
 /* ===== 上传态 ===== */
@@ -902,6 +1097,11 @@ onBeforeUnmount(() => {
 
   .range-row {
     flex-wrap: wrap;
+  }
+
+  .recent-item {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }
 </style>

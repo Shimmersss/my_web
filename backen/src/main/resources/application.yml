@@ -57,11 +57,24 @@ babeldoc:
   openai-base-url: ${BABELDOC_OPENAI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
   openai-api-key: ${BABELDOC_OPENAI_API_KEY:${LLM_API_KEY:}}
   openai-model: ${BABELDOC_OPENAI_MODEL:mimo-v2.5-pro}
-  timeout-seconds: ${BABELDOC_TIMEOUT_SECONDS:1800}
-  qps: ${BABELDOC_QPS:8}
+  timeout-seconds: ${BABELDOC_TIMEOUT_SECONDS:21600}
+  qps: ${BABELDOC_QPS:4}
+
+translation:
+  # 2 核 / 4 GB 服务器只运行一个 BabelDOC 子进程，结果落盘避免长期占用 JVM 堆
+  storage-dir: ${TRANSLATION_STORAGE_DIR:../.run/translation-tasks}
+  max-history: ${TRANSLATION_MAX_HISTORY:5}
+  queue-capacity: ${TRANSLATION_QUEUE_CAPACITY:5}
+  max-qps: ${TRANSLATION_MAX_QPS:4}
 
 openclaw:
   # 后端通过本机 CLI 访问 Gateway，凭证不会暴露给浏览器
-  command: ${OPENCLAW_COMMAND:openclaw}
+  command: ${OPENCLAW_COMMAND:./scripts/openclaw_compat.sh}
   session-key: ${OPENCLAW_SESSION_KEY:main}
   timeout-seconds: ${OPENCLAW_TIMEOUT_SECONDS:30}
+  # 2 核服务器限制同时启动的 Node CLI 数量，并缓存高频只读调用
+  max-concurrent-calls: ${OPENCLAW_MAX_CONCURRENT_CALLS:2}
+  history-cache-millis: ${OPENCLAW_HISTORY_CACHE_MILLIS:1000}
+  sessions-cache-millis: ${OPENCLAW_SESSIONS_CACHE_MILLIS:5000}
+  models-cache-millis: ${OPENCLAW_MODELS_CACHE_MILLIS:60000}
+  commands-cache-millis: ${OPENCLAW_COMMANDS_CACHE_MILLIS:300000}

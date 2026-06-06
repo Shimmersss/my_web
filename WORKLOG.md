@@ -6,6 +6,60 @@
 
 ---
 
+## 2026-06-03
+
+### chore: 增加本地一键部署收尾脚本
+
+**改动**：
+- 新增 `deploy/deploy-server-improved.sh`，串联测试、发布包构建、上传、线上目录备份、安装和健康检查
+- `deploy/deploy-server.sh` 保留为兼容入口，转发到增强版脚本
+- 默认适配当前 `admin@115.28.129.221:/home/admin/web-homepage` 生产环境
+- 新增 `.deploy.local.example`，支持本地覆盖部署参数且不提交密钥
+- 部署过程保留服务器现有 `/etc/web-homepage/web.env`
+
+---
+
+### perf: OpenClaw CLI 缓存与低资源轮询优化
+
+**问题**：每次 `openclaw gateway call` 都会启动一次 Node CLI，实测约消耗 1 秒 CPU 时间。页面初始化和 2 秒历史轮询会在 2 核服务器上持续争抢 CPU，200 Mbps 带宽并不是主要瓶颈。
+
+**改动**：
+- 后端限制最多同时运行 2 个 OpenClaw CLI
+- 高频只读调用增加分层短缓存，并合并相同的并发缓存未命中
+- 写操作后主动失效会话和历史缓存
+- Spring 启动后后台预热模型、指令和会话数据
+- 前端空闲历史轮询调整为 5 秒，会话约 15 秒、模型约 60 秒刷新
+
+**实测**：`sessions` / `history` 热缓存响应约 2 ms，10 个并发历史请求只触发一次 CLI。
+
+---
+
+### perf: PDF 翻译后台队列 + 最近任务落盘
+
+**问题**：旧实现把输入 PDF、纯中文 PDF、双语 PDF 都长期保存在 JVM `byte[]` 中，并使用无界线程池并行启动 BabelDOC。2 核 / 4 GB 服务器上多个任务容易触发 OOM。
+
+**改动**：
+- 改为单 worker、有界等待队列，同一时间只运行一个 BabelDOC 子进程
+- PDF 输入和结果落盘到 `.run/translation-tasks/`，下载接口按文件流返回
+- 新增最近翻译任务接口和前端记录列表，完成结果在后端重启后仍可恢复
+- 翻译速度调整为 2 QPS / 4 QPS，默认最多允许 4 QPS
+
+---
+
+### chore: 回流服务器上线后的维护修复
+
+**改动**：
+- 长篇 PDF 翻译的 BabelDOC、SSE 和 Nginx 超时统一提升到 6 小时
+- OpenClaw 页面增加 `/openclaw` 路由别名
+- 新增 `openclaw_compat.sh`，兼容新版 `openclaw gateway call` CLI 格式并启用启动缓存
+- 同步生产环境变量模板、systemd/Nginx 部署模板和线上维护交接文档
+
+**线上结论**：
+- OpenClaw Gateway device 已具备写权限，站内会话接口可正常使用
+- 当前 OpenClaw 接口仍有数秒启动成本，后续性能优化方向是后端长连接或进程内 Gateway client
+
+---
+
 ## 2026-06-02
 
 ### perf: BabelDOC 实时阶段进度 + 可选并发加速

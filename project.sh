@@ -22,6 +22,12 @@ BACKEND_JAR="$BACKEND_DIR/target/backen-0.0.1-SNAPSHOT.jar"
 BACKEND_PORT=8080
 FRONTEND_PORT=3000
 
+# 超时时间（秒），可通过环境变量覆盖
+BACKEND_TIMEOUT="${BACKEND_TIMEOUT:-120}"
+FRONTEND_TIMEOUT="${FRONTEND_TIMEOUT:-60}"
+# Maven 打包超时（秒）
+MVN_TIMEOUT="${MVN_TIMEOUT:-180}"
+
 # Zotero 凭证：从 .env.local 读取，避免提交到 git
 if [[ -f "$ROOT/.env.local" ]]; then
   set -a; source "$ROOT/.env.local"; set +a
@@ -84,14 +90,53 @@ start_backend() {
   fi
   info "启动后端 ..."
   kill_port "$BACKEND_PORT"
+
+  # JAVA_HOME 有效性检查
+  if [[ ! -x "$JAVA_HOME/bin/java" ]]; then
+    err "找不到 Java: $JAVA_HOME/bin/java"
+    return 1
+  fi
+  ok "Java: $("$JAVA_HOME/bin/java" -version 2>&1 | head -1)"
+
   cd "$BACKEND_DIR"
-  info "打包后端 ..."
-  mvn -q -DskipTests package >"$BACKEND_LOG" 2>&1 || return 1
-  nohup perl -MPOSIX=setsid -e 'setsid(); exec @ARGV or die $!' "$JAVA_HOME/bin/java" -jar "$BACKEND_JAR" >"$BACKEND_LOG" 2>&1 &
+
+  # 只在源码有更新时才重新打包（跳过 tests）
+  local need_build=true
+  if [[ -f "$BACKEND_JAR" ]]; then
+    # 找到 src 目录下最近修改的文件时间
+    local newest_src
+    newest_src=$(find src -type f \( -name '*.java' -o -name '*.xml' -o -name '*.properties' -o -name '*.yml' \) -exec stat -f '%m' {} \; 2>/dev/null | sort -rn | head -1)
+    local jar_time
+    jar_time=$(stat -f '%m' "$BACKEND_JAR" 2>/dev/null)
+    if [[ -n "$newest_src" && -n "$jar_time" ]] && [[ "$jar_time" -ge "$newest_src" ]]; then
+      ok "JAR 已是最新，跳过打包"
+      need_build=false
+    fi
+  fi
+
+  if $need_build; then
+    info "打包后端 (超时: ${MVN_TIMEOUT}s) ..."
+    # 用 timeout 限制打包时长，去掉 -q 以便看到进度
+    if command -v timeout &>/dev/null; then
+      timeout "$MVN_TIMEOUT" mvn -DskipTests package || { err "Maven 打包失败或超时"; cd - >/dev/null; return 1; }
+    else
+      mvn -DskipTests package || { err "Maven 打包失败"; cd - >/dev/null; return 1; }
+    fi
+    ok "打包完成"
+  fi
+
+  # 启动 Spring Boot
+  info "启动 Java 进程 ..."
+  nohup "$JAVA_HOME/bin/java" -jar "$BACKEND_JAR" >"$BACKEND_LOG" 2>&1 &
   echo $! >"$BACKEND_PID"
   disown "$!" 2>/dev/null || true
   cd - >/dev/null
-  wait_http "http://localhost:$BACKEND_PORT/api/health" "后端" 90 || return 1
+
+  info "等待后端就绪 (超时: ${BACKEND_TIMEOUT}s) ..."
+  wait_http "http://localhost:$BACKEND_PORT/api/health" "后端" "$BACKEND_TIMEOUT" || {
+    warn "后端可能仍在启动中，查看日志: tail -f $BACKEND_LOG"
+    return 1
+  }
 }
 
 start_frontend() {
@@ -102,14 +147,29 @@ start_frontend() {
   info "启动前端 ..."
   kill_port "$FRONTEND_PORT"
   cd "$FRONTEND_DIR"
+
   if [[ ! -d node_modules ]]; then
     info "首次运行，安装依赖 ..."
-    npm install
+    npm install || { err "npm install 失败"; cd - >/dev/null; return 1; }
   fi
+
+  # 检查依赖是否完整（vite 可执行）
+  if [[ ! -x node_modules/.bin/vite ]]; then
+    warn "vite 未找到，重新安装依赖 ..."
+    npm install || { err "npm install 失败"; cd - >/dev/null; return 1; }
+  fi
+
+  # 启动 vite
+  info "启动 Vite 开发服务器 ..."
   nohup npm run dev -- --host >"$FRONTEND_LOG" 2>&1 &
   echo $! >"$FRONTEND_PID"
   cd - >/dev/null
-  wait_http "http://localhost:$FRONTEND_PORT" "前端" 60 || return 1
+
+  info "等待前端就绪 (超时: ${FRONTEND_TIMEOUT}s) ..."
+  wait_http "http://localhost:$FRONTEND_PORT" "前端" "$FRONTEND_TIMEOUT" || {
+    warn "前端可能仍在启动中，查看日志: tail -f $FRONTEND_LOG"
+    return 1
+  }
 }
 
 stop_backend() {

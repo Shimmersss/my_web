@@ -1,5 +1,9 @@
 package com.web.backen.translate;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.web.backen.config.TranslationConfig;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
@@ -8,190 +12,399 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.*;
+import java.util.stream.Stream;
 
 @Service
 public class TranslationService {
 
     private static final Logger log = LoggerFactory.getLogger(TranslationService.class);
-
     private final PdfParseService pdfParseService;
     private final BabelDocService babelDocService;
+    private final TranslationConfig config;
+    private final ObjectMapper objectMapper;
     private final ConcurrentHashMap<String, TranslationSession> sessions = new ConcurrentHashMap<>();
-    private final ExecutorService executor = Executors.newCachedThreadPool();
+    private final ConcurrentHashMap<String, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
+    private final ThreadPoolExecutor executor;
+    private Path storageDir;
 
-    public TranslationService(PdfParseService pdfParseService, BabelDocService babelDocService) {
+    public TranslationService(PdfParseService pdfParseService, BabelDocService babelDocService,
+                              TranslationConfig config, ObjectMapper objectMapper) {
         this.pdfParseService = pdfParseService;
         this.babelDocService = babelDocService;
+        this.config = config;
+        this.objectMapper = objectMapper;
+        this.executor = new ThreadPoolExecutor(
+                1, 1, 0L, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(Math.max(1, config.getQueueCapacity())),
+                runnable -> {
+                    Thread thread = new Thread(runnable, "translation-worker");
+                    thread.setDaemon(true);
+                    return thread;
+                },
+                new ThreadPoolExecutor.AbortPolicy());
     }
 
-    /**
-     * 创建翻译任务预览：只获取 PDF 页数，不提取段落
-     */
-    public TranslationSession createSessionPreview(String fileName, byte[] pdfBytes) throws Exception {
+    @PostConstruct
+    public void initialize() throws IOException {
+        storageDir = Path.of(config.getStorageDir()).toAbsolutePath().normalize();
+        Files.createDirectories(storageDir);
+        List<TranslationSession> recoveredSessions = loadRecentSessions();
+        cleanupHistory();
+        resumeIncompleteSessions(recoveredSessions);
+        log.info("翻译队列已启动: workers=1, queueCapacity={}, maxHistory={}, storage={}",
+                config.getQueueCapacity(), config.getMaxHistory(), storageDir);
+    }
+
+    @PreDestroy
+    public void shutdown() {
+        executor.shutdownNow();
+    }
+
+    public TranslationSession createSessionPreview(String fileName, InputStream pdfStream) throws Exception {
         String taskId = UUID.randomUUID().toString().substring(0, 8);
-        int totalPages = pdfParseService.getTotalPages(pdfBytes);
-        TranslationSession session = new TranslationSession(taskId, fileName, pdfBytes);
-        session.setTotalPages(totalPages);
-        session.setPageRange(1, totalPages);
-        sessions.put(taskId, session);
-        log.info("创建翻译预览: taskId={}, file={}, totalPages={}", taskId, fileName, totalPages);
-        return session;
+        Path taskDir = Files.createDirectories(storageDir.resolve(taskId));
+        Path inputPdf = taskDir.resolve("input.pdf");
+        try (InputStream input = pdfStream) {
+            Files.copy(input, inputPdf, StandardCopyOption.REPLACE_EXISTING);
+        }
+
+        try {
+            int totalPages = pdfParseService.getTotalPages(inputPdf);
+            TranslationSession session = new TranslationSession(taskId, fileName, taskDir);
+            session.setTotalPages(totalPages);
+            session.setPageRange(1, totalPages);
+            sessions.put(taskId, session);
+            saveMetadata(session);
+            cleanupHistory();
+            log.info("创建翻译预览: taskId={}, file={}, totalPages={}", taskId, fileName, totalPages);
+            return session;
+        } catch (Exception e) {
+            deleteRecursively(taskDir);
+            throw e;
+        }
     }
 
-    /**
-     * 开始翻译：记录页面范围，PDF 解析和翻译统一交给 BabelDOC
-     */
     public TranslationSession startTranslation(String taskId, int startPage, int endPage, String fontFamily,
-                                               int qps) throws Exception {
-        TranslationSession session = sessions.get(taskId);
-        if (session == null) {
-            throw new IllegalArgumentException("任务不存在");
+                                               int qps) {
+        TranslationSession session = requireSession(taskId);
+        synchronized (session) {
+            if (Set.of("queued", "translating", "completed").contains(session.getStatus())) {
+                return session;
+            }
+
+            int effectiveStart = Math.max(1, startPage);
+            int effectiveEnd = Math.min(endPage, session.getTotalPages());
+            if (effectiveStart > effectiveEnd) {
+                throw new IllegalArgumentException("页面范围无效");
+            }
+
+            session.setPageRange(effectiveStart, effectiveEnd);
+            session.setFontFamily(validateFontFamily(fontFamily));
+            session.setQps(validateQps(qps));
+            session.setErrorMessage(null);
+            session.setProgress(0);
+            session.setProgressStage("queued");
+            session.setStatus("queued");
+            saveMetadata(session);
         }
 
-        int effectiveStart = Math.max(1, startPage);
-        int effectiveEnd = Math.min(endPage, session.getTotalPages());
-        if (effectiveStart > effectiveEnd) {
-            throw new IllegalArgumentException("页面范围无效");
+        try {
+            executor.execute(() -> runTranslation(session));
+        } catch (RejectedExecutionException e) {
+            session.setStatus("preview");
+            session.setProgressStage("");
+            saveMetadata(session);
+            throw new IllegalStateException("翻译队列已满，请等待前面的任务完成后再提交");
         }
 
-        session.setPageRange(effectiveStart, effectiveEnd);
-        session.setFontFamily(validateFontFamily(fontFamily));
-        session.setQps(validateQps(qps));
-        session.setStatus("ready");
-        log.info("准备 BabelDOC 翻译: taskId={}, pages={}-{}, fontFamily={}, qps={}",
-                taskId, effectiveStart, effectiveEnd, session.getFontFamily(), session.getQps());
+        updateQueuePositions();
+        emit(session, "queued", Map.of(
+                "message", "任务已进入后台队列",
+                "queuePosition", session.getQueuePosition()));
+        log.info("提交 BabelDOC 翻译队列: taskId={}, pages={}-{}, fontFamily={}, qps={}, queuePosition={}",
+                taskId, effectiveStart(session), effectiveEnd(session), session.getFontFamily(),
+                session.getQps(), session.getQueuePosition());
         return session;
     }
 
-    /**
-     * 获取任务状态
-     */
     public TranslationSession getSession(String taskId) {
+        updateQueuePositions();
         return sessions.get(taskId);
     }
 
-    /**
-     * 异步翻译并通过 SSE 推送进度
-     */
-    public void translateAsync(String taskId, SseEmitter emitter) {
+    public List<TranslationSession> getRecentSessions() {
+        updateQueuePositions();
+        return sessions.values().stream()
+                .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt).reversed())
+                .limit(Math.max(1, config.getMaxHistory()))
+                .toList();
+    }
+
+    public void subscribe(String taskId, SseEmitter emitter) {
         TranslationSession session = sessions.get(taskId);
         if (session == null) {
-            try {
-                emitter.send(SseEmitter.event().name("error").data(Map.of("message", "任务不存在")));
-            } catch (IOException ignored) {}
-            emitter.complete();
+            sendAndComplete(emitter, "task-error", Map.of("message", "任务不存在"));
             return;
         }
 
-        synchronized (session) {
-            if ("translating".equals(session.getStatus())) {
-                try {
-                    emitter.send(SseEmitter.event().name("layout").data(
-                            Map.of("message", "BabelDOC 翻译任务已在运行")
-                    ));
-                } catch (IOException ignored) {}
-                emitter.complete();
-                return;
-            }
-            if ("completed".equals(session.getStatus())) {
-                try {
-                    emitter.send(SseEmitter.event().name("done").data(Map.of("taskId", taskId)));
-                } catch (IOException ignored) {}
-                emitter.complete();
-                return;
-            }
-            session.setStatus("translating");
-        }
-
-        executor.submit(() -> {
-            try {
-                try {
-                    emitter.send(SseEmitter.event().name("layout").data(
-                            Map.of("message", "正在使用 BabelDOC 分析版面、翻译并重建 PDF")
-                    ));
-                } catch (IOException e) {
-                    log.warn("SSE 客户端已断开，BabelDOC 继续执行: taskId={}", taskId);
-                }
-                BabelDocService.TranslationResult result = babelDocService.translatePdf(
-                        session.getPdfBytes(), session.getFileName(),
-                        session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
-                        progress -> sendProgress(session, emitter, progress));
-                session.setTranslatedPdfBytes(result.translatedPdfBytes());
-                session.setBilingualPdfBytes(result.bilingualPdfBytes());
-                session.setProgress(100);
-                session.setProgressStage("completed");
-                session.setStatus("completed");
-
-                try {
-                    emitter.send(SseEmitter.event().name("done").data(Map.of("taskId", taskId)));
-                } catch (IOException e) {
-                    log.warn("SSE 完成事件未送达，客户端可通过 status 恢复: taskId={}", taskId);
-                }
-                emitter.complete();
-
-            } catch (Exception e) {
-                log.error("翻译任务失败: taskId={}", taskId, e);
-                session.setStatus("error");
-                session.setErrorMessage(e.getMessage());
-                try {
-                    emitter.send(SseEmitter.event().name("error").data(
-                            Map.of("message", e.getMessage() != null ? e.getMessage() : "翻译过程中发生未知错误")
-                    ));
-                } catch (IOException ignored) {}
-                emitter.complete();
-            }
-        });
+        emitters.computeIfAbsent(taskId, ignored -> new CopyOnWriteArrayList<>()).add(emitter);
+        Runnable remove = () -> removeEmitter(taskId, emitter);
+        emitter.onCompletion(remove);
+        emitter.onTimeout(remove);
+        emitter.onError(error -> remove.run());
+        sendSnapshot(session, emitter);
     }
 
-    /**
-     * 构建下载内容
-     */
     public String buildDownloadContent(String taskId) {
-        TranslationSession session = sessions.get(taskId);
-        if (session == null) {
-            throw new IllegalArgumentException("任务不存在");
-        }
-        if (!"completed".equals(session.getStatus())) {
-            throw new IllegalStateException("翻译尚未完成");
-        }
-
-        byte[] translatedPdf = session.getTranslatedPdfBytes();
-        if (translatedPdf == null || translatedPdf.length == 0) {
+        TranslationSession session = requireCompletedSession(taskId);
+        Path translatedPdf = session.getTranslatedPdfPath();
+        if (!Files.isRegularFile(translatedPdf)) {
             throw new IllegalStateException("BabelDOC 翻译 PDF 尚未生成");
         }
-        try (var document = Loader.loadPDF(translatedPdf)) {
+        try (var document = Loader.loadPDF(translatedPdf.toFile())) {
             return new PDFTextStripper().getText(document);
         } catch (IOException e) {
             throw new IllegalStateException("提取中文 TXT 失败: " + e.getMessage(), e);
         }
     }
 
-    /**
-     * 生成翻译后的 PDF 文件
-     */
-    public byte[] buildTranslatedPdf(String taskId, String mode) {
-        TranslationSession session = sessions.get(taskId);
-        if (session == null) {
-            throw new IllegalArgumentException("任务不存在");
-        }
-        if (!"completed".equals(session.getStatus())) {
-            throw new IllegalStateException("翻译尚未完成");
-        }
-
+    public Path getTranslatedPdf(String taskId, String mode) {
+        TranslationSession session = requireCompletedSession(taskId);
         if (!Set.of("translated", "bilingual").contains(mode)) {
             throw new IllegalArgumentException("不支持的 PDF 模式: " + mode);
         }
-        byte[] translatedPdf = "bilingual".equals(mode)
-                ? session.getBilingualPdfBytes()
-                : session.getTranslatedPdfBytes();
-        if (translatedPdf == null || translatedPdf.length == 0) {
+        Path pdf = "bilingual".equals(mode) ? session.getBilingualPdfPath() : session.getTranslatedPdfPath();
+        if (!Files.isRegularFile(pdf)) {
             throw new IllegalStateException("BabelDOC 翻译 PDF 尚未生成");
         }
-        return translatedPdf;
+        return pdf;
+    }
+
+    private void runTranslation(TranslationSession session) {
+        session.setStatus("translating");
+        session.setProgressStage("starting");
+        session.setQueuePosition(0);
+        saveMetadata(session);
+        updateQueuePositions();
+        emit(session, "layout", Map.of("message", "正在使用 BabelDOC 分析版面、翻译并重建 PDF"));
+
+        try {
+            babelDocService.translatePdf(
+                    session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
+                    session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
+                    progress -> sendProgress(session, progress));
+            session.setProgress(100);
+            session.setProgressStage("completed");
+            session.setCompletedAt(System.currentTimeMillis());
+            session.setStatus("completed");
+            saveMetadata(session);
+            emit(session, "done", Map.of("taskId", session.getTaskId()));
+            completeEmitters(session.getTaskId());
+        } catch (Exception e) {
+            log.error("翻译任务失败: taskId={}", session.getTaskId(), e);
+            session.setStatus("error");
+            session.setErrorMessage(e.getMessage());
+            session.setProgressStage("error");
+            saveMetadata(session);
+            emit(session, "task-error", Map.of(
+                    "message", e.getMessage() != null ? e.getMessage() : "翻译过程中发生未知错误"));
+            completeEmitters(session.getTaskId());
+        } finally {
+            cleanupHistory();
+            updateQueuePositions();
+        }
+    }
+
+    private void sendProgress(TranslationSession session, BabelDocService.ProgressUpdate progress) {
+        if (Double.compare(session.getProgress(), progress.progress()) == 0
+                && Objects.equals(session.getProgressStage(), progress.stage())) {
+            return;
+        }
+        session.setProgress(progress.progress());
+        session.setProgressStage(progress.stage());
+        emit(session, "progress", Map.of(
+                "progress", progress.progress(),
+                "stage", progress.stage(),
+                "stageLabel", stageLabel(progress.stage()),
+                "current", progress.current(),
+                "total", progress.total()));
+    }
+
+    private void sendSnapshot(TranslationSession session, SseEmitter emitter) {
+        String status = session.getStatus();
+        if ("completed".equals(status)) {
+            sendAndComplete(emitter, "done", Map.of("taskId", session.getTaskId()));
+        } else if ("error".equals(status)) {
+            sendAndComplete(emitter, "task-error", Map.of("message",
+                    session.getErrorMessage() == null ? "翻译失败" : session.getErrorMessage()));
+        } else if ("queued".equals(status)) {
+            send(emitter, "queued", Map.of(
+                    "message", "任务正在等待后台翻译",
+                    "queuePosition", session.getQueuePosition()));
+        } else {
+            send(emitter, "progress", Map.of(
+                    "progress", session.getProgress(),
+                    "stage", session.getProgressStage(),
+                    "stageLabel", stageLabel(session.getProgressStage()),
+                    "current", 0,
+                    "total", 0));
+        }
+    }
+
+    private void emit(TranslationSession session, String eventName, Object data) {
+        List<SseEmitter> taskEmitters = emitters.get(session.getTaskId());
+        if (taskEmitters == null) return;
+        taskEmitters.forEach(emitter -> {
+            if (!send(emitter, eventName, data)) {
+                removeEmitter(session.getTaskId(), emitter);
+            }
+        });
+    }
+
+    private boolean send(SseEmitter emitter, String eventName, Object data) {
+        try {
+            emitter.send(SseEmitter.event().name(eventName).data(data));
+            return true;
+        } catch (IOException | IllegalStateException e) {
+            return false;
+        }
+    }
+
+    private void sendAndComplete(SseEmitter emitter, String eventName, Object data) {
+        send(emitter, eventName, data);
+        emitter.complete();
+    }
+
+    private void removeEmitter(String taskId, SseEmitter emitter) {
+        List<SseEmitter> taskEmitters = emitters.get(taskId);
+        if (taskEmitters == null) return;
+        taskEmitters.remove(emitter);
+        if (taskEmitters.isEmpty()) emitters.remove(taskId, taskEmitters);
+    }
+
+    private void completeEmitters(String taskId) {
+        List<SseEmitter> taskEmitters = emitters.remove(taskId);
+        if (taskEmitters != null) taskEmitters.forEach(SseEmitter::complete);
+    }
+
+    private void updateQueuePositions() {
+        List<TranslationSession> queued = sessions.values().stream()
+                .filter(session -> "queued".equals(session.getStatus()))
+                .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt))
+                .toList();
+        for (int index = 0; index < queued.size(); index++) {
+            queued.get(index).setQueuePosition(index + 1);
+        }
+    }
+
+    private List<TranslationSession> loadRecentSessions() {
+        List<TranslationSession> incompleteSessions = new ArrayList<>();
+        try (Stream<Path> taskDirs = Files.list(storageDir)) {
+            taskDirs.filter(Files::isDirectory).forEach(taskDir -> {
+                Path metadata = taskDir.resolve("task.json");
+                if (!Files.isRegularFile(metadata)) return;
+                try {
+                    TranslationSession session = objectMapper.readValue(metadata.toFile(), TranslationSession.class);
+                    session.setTaskDir(taskDir);
+                    if (Set.of("queued", "translating").contains(session.getStatus())) {
+                        incompleteSessions.add(session);
+                    }
+                    sessions.put(session.getTaskId(), session);
+                } catch (Exception e) {
+                    log.warn("读取翻译任务记录失败: {}", metadata, e);
+                }
+            });
+        } catch (IOException e) {
+            log.warn("读取翻译任务目录失败: {}", storageDir, e);
+        }
+        return incompleteSessions;
+    }
+
+    private void resumeIncompleteSessions(List<TranslationSession> incompleteSessions) {
+        incompleteSessions.stream()
+                .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt))
+                .forEach(session -> {
+                    if (!Files.isRegularFile(session.getInputPdfPath())) {
+                        session.setStatus("error");
+                        session.setProgressStage("error");
+                        session.setErrorMessage("后端重启后未找到原始 PDF，请重新上传");
+                        saveMetadata(session);
+                        return;
+                    }
+
+                    session.setStatus("queued");
+                    session.setProgress(0);
+                    session.setProgressStage("queued");
+                    session.setErrorMessage(null);
+                    session.setCompletedAt(0);
+                    saveMetadata(session);
+                    try {
+                        executor.execute(() -> runTranslation(session));
+                        log.info("恢复未完成翻译任务: taskId={}, file={}", session.getTaskId(), session.getFileName());
+                    } catch (RejectedExecutionException e) {
+                        session.setStatus("error");
+                        session.setProgressStage("error");
+                        session.setErrorMessage("后端重启后翻译队列已满，请重新提交");
+                        saveMetadata(session);
+                    }
+                });
+        updateQueuePositions();
+    }
+
+    private void saveMetadata(TranslationSession session) {
+        try {
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(session.getMetadataPath().toFile(), session);
+        } catch (IOException e) {
+            log.warn("保存翻译任务记录失败: taskId={}", session.getTaskId(), e);
+        }
+    }
+
+    private void cleanupHistory() {
+        List<TranslationSession> terminal = sessions.values().stream()
+                .filter(session -> !Set.of("queued", "translating").contains(session.getStatus()))
+                .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt).reversed())
+                .toList();
+        int keep = Math.max(1, config.getMaxHistory());
+        for (int index = keep; index < terminal.size(); index++) {
+            TranslationSession session = terminal.get(index);
+            sessions.remove(session.getTaskId(), session);
+            deleteRecursively(session.getTaskDir());
+        }
+    }
+
+    private void deleteRecursively(Path path) {
+        if (path == null || !Files.exists(path)) return;
+        try (Stream<Path> paths = Files.walk(path)) {
+            paths.sorted(Comparator.reverseOrder()).forEach(item -> {
+                try {
+                    Files.deleteIfExists(item);
+                } catch (IOException e) {
+                    log.warn("清理翻译任务文件失败: {}", item, e);
+                }
+            });
+        } catch (IOException e) {
+            log.warn("清理翻译任务目录失败: {}", path, e);
+        }
+    }
+
+    private TranslationSession requireSession(String taskId) {
+        TranslationSession session = sessions.get(taskId);
+        if (session == null) throw new IllegalArgumentException("任务不存在");
+        return session;
+    }
+
+    private TranslationSession requireCompletedSession(String taskId) {
+        TranslationSession session = requireSession(taskId);
+        if (!"completed".equals(session.getStatus())) {
+            throw new IllegalStateException("翻译尚未完成");
+        }
+        return session;
     }
 
     private String validateFontFamily(String fontFamily) {
@@ -203,35 +416,20 @@ public class TranslationService {
     }
 
     private int validateQps(int qps) {
-        if (qps < 1 || qps > 12) {
-            throw new IllegalArgumentException("并发数必须在 1-12 之间");
+        int maxQps = Math.max(1, config.getMaxQps());
+        if (qps < 1 || qps > maxQps) {
+            throw new IllegalArgumentException("2 核 / 4 GB 服务器并发数必须在 1-" + maxQps + " 之间");
         }
         return qps;
     }
 
-    private void sendProgress(TranslationSession session, SseEmitter emitter,
-                              BabelDocService.ProgressUpdate progress) {
-        if (Double.compare(session.getProgress(), progress.progress()) == 0
-                && Objects.equals(session.getProgressStage(), progress.stage())) {
-            return;
-        }
-        session.setProgress(progress.progress());
-        session.setProgressStage(progress.stage());
-        try {
-            emitter.send(SseEmitter.event().name("progress").data(Map.of(
-                    "progress", progress.progress(),
-                    "stage", progress.stage(),
-                    "stageLabel", stageLabel(progress.stage()),
-                    "current", progress.current(),
-                    "total", progress.total()
-            )));
-        } catch (IOException ignored) {
-            // The task continues; the browser can recover the latest progress through /status.
-        }
-    }
+    private int effectiveStart(TranslationSession session) { return session.getStartPage(); }
+    private int effectiveEnd(TranslationSession session) { return session.getEndPage(); }
 
     public String stageLabel(String stage) {
         return switch (stage) {
+            case "queued" -> "等待后台翻译";
+            case "starting" -> "正在启动 BabelDOC";
             case "Parse PDF and Create Intermediate Representation" -> "解析 PDF";
             case "DetectScannedFile" -> "检测 PDF 类型";
             case "Parse Page Layout" -> "分析页面版式";
@@ -245,6 +443,7 @@ public class TranslationService {
             case "Subset font" -> "嵌入字体";
             case "Save PDF" -> "保存 PDF";
             case "completed" -> "翻译完成";
+            case "error" -> "翻译失败";
             default -> stage == null || stage.isBlank() ? "处理中" : stage;
         };
     }

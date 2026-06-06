@@ -18,6 +18,7 @@ target/
 .env
 .env.local
 .env.*.local
+.deploy.local
 
 # os
 .DS_Store

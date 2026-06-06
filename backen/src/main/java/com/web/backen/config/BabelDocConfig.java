@@ -13,7 +13,7 @@ public class BabelDocConfig {
     private String openaiApiKey = "";
     private String openaiModel = "mimo-v2.5-pro";
     private int timeoutSeconds = 1800;
-    private int qps = 8;
+    private int qps = 4;
 
     public boolean isEnabled() {
         return enabled;

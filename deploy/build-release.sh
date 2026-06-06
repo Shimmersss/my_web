@@ -42,12 +42,16 @@ cp "$ROOT/deploy/nginx.conf.template" "$PACKAGE_ROOT/deploy/nginx.conf.template"
 cp "$ROOT/deploy/web-backen.service.template" "$PACKAGE_ROOT/deploy/web-backen.service.template"
 cp "$ROOT/deploy/README.md" "$PACKAGE_ROOT/README.md"
 
+if [[ -f "$ROOT/MAINTENANCE.md" ]]; then
+  cp "$ROOT/MAINTENANCE.md" "$PACKAGE_ROOT/MAINTENANCE.md"
+fi
+
 if [[ -f "$ROOT/.run/github-projects.json" ]]; then
   mkdir -p "$PACKAGE_ROOT/.run"
   cp "$ROOT/.run/github-projects.json" "$PACKAGE_ROOT/.run/github-projects.json"
 fi
 
-chmod +x "$PACKAGE_ROOT/install-linux.sh"
+chmod +x "$PACKAGE_ROOT/install-linux.sh" "$PACKAGE_ROOT/backen/scripts/openclaw_compat.sh"
 
 info "Creating archive..."
 (cd "$RELEASE_DIR" && tar -czf "$ARCHIVE" web-homepage)

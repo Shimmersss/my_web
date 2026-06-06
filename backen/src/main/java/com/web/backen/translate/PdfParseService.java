@@ -8,6 +8,7 @@ import org.apache.pdfbox.text.TextPosition;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -23,6 +24,12 @@ public class PdfParseService {
      */
     public int getTotalPages(byte[] pdfBytes) throws IOException {
         try (PDDocument document = Loader.loadPDF(pdfBytes)) {
+            return document.getNumberOfPages();
+        }
+    }
+
+    public int getTotalPages(Path pdfPath) throws IOException {
+        try (PDDocument document = Loader.loadPDF(pdfPath.toFile())) {
             return document.getNumberOfPages();
         }
     }

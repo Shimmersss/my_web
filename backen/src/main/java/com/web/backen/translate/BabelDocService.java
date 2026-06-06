@@ -24,6 +24,7 @@ import java.util.stream.Stream;
 public class BabelDocService {
 
     private static final Logger log = LoggerFactory.getLogger(BabelDocService.class);
+    private static final int MAX_OUTPUT_CHARS = 64 * 1024;
 
     private final BabelDocConfig config;
     private final ObjectMapper objectMapper = new ObjectMapper();
@@ -32,7 +33,7 @@ public class BabelDocService {
         this.config = config;
     }
 
-    public TranslationResult translatePdf(byte[] pdfBytes, String fileName, int startPage, int endPage,
+    public TranslationResult translatePdf(Path inputPdf, Path resultDir, String fileName, int startPage, int endPage,
                                           String fontFamily, int qps, Consumer<ProgressUpdate> progressConsumer) {
         if (!config.isEnabled()) {
             throw new IllegalStateException("BabelDOC 未启用，请设置 BABELDOC_ENABLED=true");
@@ -46,7 +47,7 @@ public class BabelDocService {
             workDir = Files.createTempDirectory("web-babeldoc-");
             Path inputFile = workDir.resolve(sanitizeFileName(fileName));
             Path outputDir = Files.createDirectories(workDir.resolve("output"));
-            Files.write(inputFile, pdfBytes);
+            Files.copy(inputPdf, inputFile);
 
             List<String> command = buildCommand(inputFile, outputDir, startPage, endPage, fontFamily, qps);
             log.info("启动 BabelDOC: file={}, pages={}-{}, fontFamily={}, qps={}",
@@ -76,9 +77,14 @@ public class BabelDocService {
 
             Path translatedPdf = findPdf(outputDir, ".zh.mono.pdf", "纯中文");
             Path bilingualPdf = findPdf(outputDir, ".zh.dual.pdf", "双语");
+            Files.createDirectories(resultDir);
+            Path translatedResult = resultDir.resolve("translated.pdf");
+            Path bilingualResult = resultDir.resolve("bilingual.pdf");
+            Files.copy(translatedPdf, translatedResult, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(bilingualPdf, bilingualResult, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
             log.info("BabelDOC 完成: file={}, mono={}, dual={}", fileName,
                     translatedPdf.getFileName(), bilingualPdf.getFileName());
-            return new TranslationResult(Files.readAllBytes(translatedPdf), Files.readAllBytes(bilingualPdf));
+            return new TranslationResult(translatedResult, bilingualResult);
         } catch (IllegalStateException e) {
             throw e;
         } catch (InterruptedException e) {
@@ -129,11 +135,18 @@ public class BabelDocService {
                 new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             String line;
             while ((line = reader.readLine()) != null) {
-                output.append(line).append('\n');
+                appendOutputTail(output, line);
                 parseProgress(line, progressConsumer);
             }
         } catch (IOException e) {
-            output.append("无法读取 BabelDOC 输出: ").append(e.getMessage());
+            appendOutputTail(output, "无法读取 BabelDOC 输出: " + e.getMessage());
+        }
+    }
+
+    private void appendOutputTail(StringBuilder output, String line) {
+        output.append(line).append('\n');
+        if (output.length() > MAX_OUTPUT_CHARS) {
+            output.delete(0, output.length() - MAX_OUTPUT_CHARS);
         }
     }
 
@@ -161,7 +174,7 @@ public class BabelDocService {
         }
     }
 
-    public record TranslationResult(byte[] translatedPdfBytes, byte[] bilingualPdfBytes) {}
+    public record TranslationResult(Path translatedPdf, Path bilingualPdf) {}
     public record ProgressUpdate(double progress, String stage, int current, int total) {}
 
     private String tail(String text, int maxLength) {

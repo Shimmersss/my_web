@@ -16,6 +16,16 @@
 
 GitHub 开源项目也一样：浏览器只请求 `/api/github-projects*`，由后端 `GithubProjectService` 去请求 GitHub API / raw README。**前端不要直接 fetch `api.github.com` 或 `raw.githubusercontent.com`**。
 
+## 服务器资源基线
+
+当前生产服务器配置为 **2 核 CPU / 4 GB 内存**。以后本地测试、功能迭代和性能评估都要以这个资源上限为基线，不要默认生产环境有更多 CPU、内存或并发余量。
+
+- 新功能优先选择低内存、低线程数、可控并发的实现，避免无上限线程池、无界队列、大对象长期驻留和一次性全量加载。
+- 调整 BabelDOC、LLM、OpenClaw、外部 API 请求或后台任务并发时，要考虑 2 核 CPU 的实际吞吐；不要仅按开发机速度提高 worker、QPS 或并行任务数。
+- 涉及大文件、PDF、附件、缓存和历史消息时，关注 4 GB 内存限制，优先流式处理、分页、按需加载、及时释放临时对象和 Blob URL。
+- 本地做性能测试时，至少补一轮接近 2 核 / 4 GB 环境的验证；Docker 或其他可控环境可使用类似 `--cpus=2 --memory=4g` 的限制。
+- 如果某项功能在 2 核 / 4 GB 下存在明显风险，必须在实现说明、测试结果或维护文档中写明，并给出限流、降级或资源扩容建议。
+
 ## 启停
 
 ```bash
@@ -47,11 +57,14 @@ BABELDOC_COMMAND="uv run --with babeldoc python"
 BABELDOC_OPENAI_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
 BABELDOC_OPENAI_API_KEY=...
 BABELDOC_OPENAI_MODEL=mimo-v2.5-pro
+BABELDOC_TIMEOUT_SECONDS=21600
 
 # OpenClaw Gateway 后端代理
-OPENCLAW_COMMAND=openclaw
+OPENCLAW_COMMAND=./scripts/openclaw_compat.sh
 OPENCLAW_SESSION_KEY=main
 OPENCLAW_TIMEOUT_SECONDS=30
+OPENCLAW_NO_RESPAWN=1
+NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache
 ```
 
 `project.sh` 启动时自动 source。`.env.local.example` 是模板，可提交。
@@ -82,9 +95,10 @@ backen/                                      Spring Boot 后端
       PdfRenderService.java                  翻译 PDF 渲染：原页面矢量导入→白色遮罩→可复制中文译文
       BabelDocService.java                   调 BabelDOC CLI 生成保留版式的纯中文 PDF
       LlmService.java                        调 Anthropic Messages API 翻译，含重试
-      TranslationSession.java                单次翻译任务的内存状态（含页面范围）
-      TranslationService.java                编排器：预览→页面范围→BabelDOC→缓存→SSE 状态
+      TranslationSession.java                单次翻译任务轻量元数据（PDF 只保存磁盘路径）
+      TranslationService.java                单 worker 有界队列 + 最近任务落盘 + SSE 状态
       TranslateController.java               REST 接口，上传/开始/流式/状态/下载
+  scripts/openclaw_compat.sh                  兼容新版 OpenClaw gateway call CLI 格式并启用启动缓存
 front/                                       Vue 3 前端
   src/views/Publications/index.vue           文献库主页面（核心，所有 Zotero 展示逻辑都在这）
   src/views/News/index.vue                   GitHub 开源项目页 + 管理后台 + README 弹窗
@@ -94,6 +108,11 @@ front/                                       Vue 3 前端
   src/utils/request.js                       fetch 请求封装
   vite.config.js                             /api 代理到 :8080
 project.sh                                   一键启停
+deploy/deploy-server-improved.sh             本地测试、打包、上传、服务器安装和健康检查
+deploy/deploy-server.sh                      兼容入口，转发到 improved 脚本
+deploy/build-release.sh                      仅生成 Linux 发布包
+.deploy.local.example                       一键部署参数模板；本地覆盖写到 `.deploy.local`
+MAINTENANCE.md                               线上部署状态、维护命令和热修回流记录
 ```
 
 ## 后端接口
@@ -126,6 +145,7 @@ project.sh                                   一键启停
 | `POST /api/translate/start/{taskId}?startPage=1&endPage=10&fontFamily=auto&qps=8` | 指定页面范围、译文字体族和并发速度并准备翻译 | 内存写入 |
 | `GET /api/translate/stream/{taskId}` | SSE 启动 BabelDOC 并推送状态（layout/progress/done/error）| BabelDOC 单链路 |
 | `GET /api/translate/status/{taskId}` | 查询任务状态（断线重连用）| 内存读 |
+| `GET /api/translate/recent` | 最近翻译任务与队列状态 | 轻量元数据 |
 | `GET /api/translate/download/{taskId}` | 下载纯中文 .txt | 从 BabelDOC PDF 提取 |
 | `GET /api/translate/download-pdf/{taskId}?mode=translated\|bilingual` | 下载纯中文或双语 PDF（保留版式、图片和公式）| BabelDOC 缓存 |
 
@@ -172,8 +192,8 @@ project.sh                                   一键启停
 
 **四步流程**：
 1. 上传 PDF → 返回 taskId + totalPages
-2. 选择页面范围（默认全部）、字体族和速度模式 → 点击"开始翻译"
-3. SSE 启动 BabelDOC，实时推送版面分析、正文翻译、重新排版和 PDF 重建进度
+2. 选择页面范围（默认全部）、字体族和速度模式 → 点击"开始翻译"提交后台队列
+3. 单 worker 队列依次启动 BabelDOC，SSE 实时推送排队、版面分析、正文翻译、重新排版和 PDF 重建进度
 4. 预览或下载翻译 PDF，也可下载从最终 PDF 提取的纯中文 TXT
 
 **页面范围选择**：用户可指定翻译第几页到第几页。上传后进入配置态，选择起止页码后点击"开始翻译"。
@@ -187,7 +207,12 @@ project.sh                                   一键启停
 - 本机需安装 `uv`；默认通过 `uv run --with babeldoc python backen/scripts/babeldoc_runner.py` 调用结构化 runner，首次运行会自动下载 Python 运行时依赖和模型资源
 - runner 在收到 BabelDOC `finish` 后主动退出；macOS 上 ONNX/CoreML 可能保留原生后台线程，不能只等待 Python 自然结束
 - API Key 通过子进程环境变量传给 runner，不要放进命令行参数，避免本机 `ps` 暴露密钥
-- 配置态提供稳定模式（4 QPS）和加速模式（8 QPS），worker 数与 QPS 对齐；接口校验范围为 `1-12`
+- 生产服务器为 2 核 / 4 GB，配置态提供稳定模式（2 QPS）和加速模式（4 QPS），接口默认最多允许 `4 QPS`
+- 同一时间只允许一个 BabelDOC 子进程运行，等待队列默认最多 5 个任务，避免并行翻译触发 OOM
+- 上传 PDF、纯中文 PDF、双语 PDF 和任务元数据保存在 `.run/translation-tasks/`，JVM 不长期持有大文件 `byte[]`
+- 最近任务默认保留 5 条，完成结果可在页面重新打开；后端重启后已完成记录仍可恢复
+- BabelDOC 子进程日志只保留最近 64 KB 用于错误诊断，避免长任务日志无限增长
+- 生产 systemd 模板将 Spring Boot JVM 堆限制为 `-Xmx768m`，为 BabelDOC、Nginx 和系统本身预留内存
 - BabelDOC 是唯一主翻译链路，不要在生成 PDF 前再逐段调用 `LlmService`；否则同一篇论文会翻译两次
 - 中文 TXT 从 BabelDOC 已生成的 PDF 提取，不会再次调用模型
 - `PdfRenderService` 暂时保留，作为旧版实现参考，不要再接回默认下载链路
@@ -218,7 +243,7 @@ project.sh                                   一键启停
 
 **SSE 事件**：`layout`（BabelDOC 正在处理）、`progress`（真实阶段、当前项、总项、整体百分比）、`done`（全部完成）、`error`（失败）。断线恢复只轮询 `/status/{taskId}`，不要重新建立 SSE 启动第二个 BabelDOC 子进程。
 
-**内存存储**：翻译结果存在 `ConcurrentHashMap`，不持久化到 H2。重启后端丢失。
+**任务存储**：`ConcurrentHashMap` 只保存轻量任务元数据，PDF 结果落盘到 `.run/translation-tasks/`。翻译任务不使用 H2；后端重启后会从任务目录恢复最近记录，未完成任务只要原始 PDF 仍在就会重新进入单 worker 队列并从头翻译。
 
 **关键依赖**：`org.apache.pdfbox:pdfbox:3.0.3`（上传页数和中文 TXT 提取）+ `uv run --with babeldoc python`（排版版 PDF runner）。
 
@@ -258,12 +283,12 @@ project.sh                                   一键启停
 - 所有 `/api/openclaw/*` 业务接口都要求 `X-Admin-Key`，只有 `/login` 用于校验密钥
 - 前端登录密钥存在 `sessionStorage`，关闭标签页后失效
 - assistant markdown 使用 `marked + DOMPurify` 渲染，不能省略 sanitize
-- 当前聊天页每 2 秒轮询历史；不是 Gateway WebSocket 直推
+- 当前聊天页空闲时每 5 秒轮询历史；不是 Gateway WebSocket 直推
 
 **聊天页功能**：
 - 左侧对话栏读取 Gateway 的真实 sessions，可新建、搜索和切换会话
 - 顶部模型选择器读取 `models.list`，切换后写入当前 session override
-- 模型列表每 10 秒随会话侧栏后台刷新一次；顶部刷新按钮也会同时刷新历史、会话和模型
+- 会话侧栏约每 15 秒后台刷新，模型列表约每 60 秒后台刷新；顶部刷新按钮也会同时刷新历史、会话和模型
 - 站内模型列表不是直接使用 OpenClaw 默认白名单。后端调用 `models.list(view=all)`，再与 Gateway `config.get` 中 `models.providers.*.models` 的显式配置取交集；因此新增 provider/model 后不必再手工维护本站代码或 `agents.defaults.models`
 - 顶部思考级别读取当前 session 的 `thinkingOptions`，切换后写入 `thinkingLevel`
 - 输入框键入 `/` 会展示 `commands.list` 返回的指令，支持上下键选择和 Tab 补全
@@ -271,8 +296,11 @@ project.sh                                   一键启停
 - 图片可由 Gateway 内联送给支持图片的模型；非图片会由 Gateway 保存到 `~/.openclaw/media/inbound/` 并以 `media://inbound/...` 引用交给 agent
 - 用户按下发送后立即插入本地 optimistic 消息，不再等待下一轮历史刷新；图片会直接显示在消息气泡里
 - Gateway 历史会返回 `MediaPath / MediaPaths / MediaType / MediaTypes`。页面刷新后通过受控 media 接口重新获取图片 Blob，再生成 Object URL 预览
-- 当前 Spring Boot 通过一次性 CLI 调用 Gateway，拿不到官方 Control UI WebSocket 的 `chat.delta` 事件。发送后会每 420 ms 跟踪历史，并在同一 assistant 气泡内逐字推进，避免等完整回复后一次性跳出
+- 当前 Spring Boot 通过一次性 CLI 调用 Gateway，拿不到官方 Control UI WebSocket 的 `chat.delta` 事件。发送后会每 750 ms 跟踪历史，并在同一 assistant 气泡内逐字推进，避免等完整回复后一次性跳出
 - 后台轮询会先比较历史签名；内容没有变化时不替换 Vue 消息数组。用户滚动查看旧消息时也不会强制滚到底部，只显示“有新消息，回到底部”提示
+- 2 核 / 4 GB 服务器上每次 OpenClaw CLI 冷启动约需 1 秒 CPU 时间，200 Mbps 带宽不是主要瓶颈。后端必须限制同时启动的 CLI 数量，并缓存高频只读调用
+- 当前默认最多并发 2 个 CLI；历史缓存 1 秒、会话缓存 5 秒、模型缓存 60 秒、指令缓存 5 分钟。相同缓存未命中会合并为一次 CLI 调用，写操作后主动失效相关缓存
+- 页面空闲历史轮询为 5 秒，会话约 15 秒、模型约 60 秒刷新；不要恢复为高频空闲轮询，否则会持续抢占服务器 CPU
 - 顶部文件按钮读取 `artifacts.list`，可下载 agent 生成的 artifact。下载按 `artifactId` 受控代理，不允许浏览器指定本机路径
 - 重置按钮调用 `sessions.reset(reason=new)` 清空当前会话；不会删除其他会话
 - 当前选中会话 key 存在 `sessionStorage`，刷新页面后保持
@@ -299,16 +327,25 @@ openclaw gateway status
 
 ```bash
 ADMIN_KEY=换成强密钥
-OPENCLAW_COMMAND=openclaw
+OPENCLAW_COMMAND=./scripts/openclaw_compat.sh
 OPENCLAW_SESSION_KEY=main
 OPENCLAW_TIMEOUT_SECONDS=30
+OPENCLAW_NO_RESPAWN=1
+NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache
+OPENCLAW_MAX_CONCURRENT_CALLS=2
+OPENCLAW_HISTORY_CACHE_MILLIS=1000
+OPENCLAW_SESSIONS_CACHE_MILLIS=5000
+OPENCLAW_MODELS_CACHE_MILLIS=60000
+OPENCLAW_COMMANDS_CACHE_MILLIS=300000
 ```
+
+`openclaw_compat.sh` 会把旧后端使用的 `openclaw gateway --json --params ...` 调用格式转换为新版 CLI 的 `openclaw gateway call ...`，并减少 CLI 重复启动开销。站内聊天页同时支持 `/franchise` 和 `/openclaw`。
 
 **以后新增 OpenClaw 模型**：
 1. 把 provider/model 写入 OpenClaw 配置的 `models.providers.<provider>.models`
 2. 运行 `openclaw config validate`
 3. 运行 `openclaw gateway restart`
-4. 网页最多 10 秒自动出现新模型，也可以点击聊天页顶部刷新按钮立即同步
+4. 网页最多 60 秒自动出现新模型，也可以点击聊天页顶部刷新按钮立即同步
 
 本站后端只把 OpenClaw 配置里显式声明的模型返回浏览器，不会把 `models.list(view=all)` 内置的 200 多个目录模型全部塞进下拉框，也不会返回 provider API key。
 
@@ -408,6 +445,7 @@ curl -H "X-Admin-Key: $ADMIN_KEY" http://localhost:8080/api/openclaw/sessions
 - **GitHub 项目字段来源**：展示配置在 `.run/github-projects.json`，实时字段由 `GithubProjectService` 补全；保存列表时只保存 repo/highlight/category/featured，不保存 stars 等上游数据。
 - **重启后端**：用 `./project.sh restart backend` 而不是 `mvn spring-boot:run`，前者管 PID 和日志
 - **前端改完不用重启**：Vite HMR 自动热更
+- **上线收尾**：本地验收完成后运行 `./deploy/deploy-server-improved.sh`。脚本默认部署到当前生产服务器并保留 `/etc/web-homepage/web.env`；换服务器参数或 SSH 私钥绝对路径写入被忽略的 `.deploy.local`，不要把密码、私钥文件或 API Key 放进项目
 - **写文件别用 cat/echo 重定向**，用专门的写工具（保护 UTF-8 中文）
 
 ## 已知小坑

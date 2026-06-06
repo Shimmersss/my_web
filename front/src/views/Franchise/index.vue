@@ -191,7 +191,8 @@ import {
 
 const STORAGE_KEY = 'openclaw-admin-key'
 const SESSION_STORAGE_KEY = 'openclaw-session-key'
-const POLL_INTERVAL_MS = 2000
+const POLL_INTERVAL_MS = 5000
+const REPLY_POLL_INTERVAL_MS = 750
 const message = useMessage()
 
 const loginKey = ref('')
@@ -327,7 +328,8 @@ function startPolling() {
   pollTimer = window.setInterval(async () => {
     await loadHistory(false)
     pollCount += 1
-    if (pollCount % 5 === 0) await Promise.all([loadSessions(), loadModels()])
+    if (pollCount % 3 === 0) await loadSessions()
+    if (pollCount % 12 === 0) await loadModels()
   }, POLL_INTERVAL_MS)
 }
 
@@ -462,9 +464,12 @@ async function loadWorkspace() {
   if (!adminKey.value || workspaceLoading.value) return
   workspaceLoading.value = true
   try {
-    const [, commandResult] = await Promise.all([loadModels(), getOpenClawCommands(adminKey.value)])
+    const [, commandResult] = await Promise.all([
+      loadModels(),
+      getOpenClawCommands(adminKey.value),
+      loadSessions()
+    ])
     commands.value = commandResult.data?.commands || []
-    await loadSessions()
     await loadHistory()
   } catch (error) {
     if (String(error).includes('401')) handleUnauthorized()
@@ -603,7 +608,7 @@ async function trackAssistantReply(baselineSeq) {
       streamingRawId.value = ''
       return
     }
-    await new Promise(resolve => window.setTimeout(resolve, 420))
+    await new Promise(resolve => window.setTimeout(resolve, REPLY_POLL_INTERVAL_MS))
   }
   message.warning('回复仍在处理中，页面会继续同步历史消息')
 }

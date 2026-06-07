@@ -100,6 +100,17 @@ start_backend() {
 
   cd "$BACKEND_DIR"
 
+  if [[ -f scripts/pptx-generator/package.json ]]; then
+    if [[ ! -d scripts/pptx-generator/node_modules ]]; then
+      info "安装 PPT 生成器依赖 ..."
+      npm install --omit=dev --prefix scripts/pptx-generator --cache /tmp/web-homepage-npm-cache || {
+        err "PPT 生成器依赖安装失败"
+        cd - >/dev/null
+        return 1
+      }
+    fi
+  fi
+
   # 只在源码有更新时才重新打包（跳过 tests）
   local need_build=true
   if [[ -f "$BACKEND_JAR" ]]; then

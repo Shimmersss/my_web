@@ -46,8 +46,8 @@ const routes = [
   {
     path: '/contact',
     name: 'Contact',
-    component: () => import('@/views/Contact/index.vue'),
-    meta: { title: '联系我们' }
+    component: () => import('@/views/PptGenerate/index.vue'),
+    meta: { title: 'PPT 生成' }
   },
   {
     path: '/franchise',

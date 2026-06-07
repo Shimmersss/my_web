@@ -27,11 +27,11 @@
             </div>
 
             <div class="detail-actions">
-              <n-button type="primary" size="large" @click="showContact = true">
-                立即咨询
+              <n-button type="primary" size="large" @click="navigateTo('/contact')">
+                生成方案 PPT
               </n-button>
               <n-button size="large" @click="navigateTo('/contact')">
-                联系我们
+                PPT 生成
               </n-button>
             </div>
           </div>
@@ -55,38 +55,17 @@
       </div>
     </section>
 
-    <!-- 联系弹窗 -->
-    <n-modal v-model:show="showContact" preset="card" title="立即咨询" :style="{ width: '500px' }">
-      <n-form ref="formRef" :model="formData" :rules="rules">
-        <n-form-item label="姓名" path="name">
-          <n-input v-model:value="formData.name" placeholder="请输入您的姓名" />
-        </n-form-item>
-        <n-form-item label="电话" path="phone">
-          <n-input v-model:value="formData.phone" placeholder="请输入您的电话" />
-        </n-form-item>
-        <n-form-item label="需求描述" path="message">
-          <n-input type="textarea" v-model:value="formData.message" placeholder="请简要描述您的需求" :rows="4" />
-        </n-form-item>
-        <n-button type="primary" block size="large" @click="handleSubmit">
-          提交咨询
-        </n-button>
-      </n-form>
-    </n-modal>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { useMessage } from 'naive-ui'
-import { NModal, NForm, NFormItem, NInput, NButton, NGrid, NGridItem, NTag, NIcon } from 'naive-ui'
+import { NButton, NGrid, NGridItem, NTag, NIcon } from 'naive-ui'
 import { CheckmarkCircleOutline } from '@vicons/ionicons5'
 
 const router = useRouter()
 const route = useRoute()
-const message = useMessage()
-const showContact = ref(false)
-const formRef = ref(null)
 
 const businessData = ref({
   id: 1,
@@ -103,18 +82,6 @@ const businessData = ref({
   scenarios: ['企业上云', '应用部署', '数据备份', '负载均衡', '容灾恢复'],
   image: 'https://picsum.photos/800/600'
 })
-
-const formData = reactive({
-  name: '',
-  phone: '',
-  message: ''
-})
-
-const rules = {
-  name: { required: true, message: '请输入姓名', trigger: 'blur' },
-  phone: { required: true, message: '请输入电话', trigger: 'blur' },
-  message: { required: true, message: '请描述您的需求', trigger: 'blur' }
-}
 
 const relatedBusiness = computed(() => [
   {
@@ -145,16 +112,6 @@ onMounted(() => {
 
 const navigateTo = (path) => {
   router.push(path)
-}
-
-const handleSubmit = () => {
-  formRef.value?.validate((errors) => {
-    if (!errors) {
-      message.success('提交成功！我们会尽快联系您。')
-      showContact.value = false
-      Object.assign(formData, { name: '', phone: '', message: '' })
-    }
-  })
 }
 </script>
 

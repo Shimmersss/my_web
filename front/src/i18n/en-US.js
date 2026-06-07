@@ -5,7 +5,7 @@ export default {
     business: 'Business',
     cases: 'Cases',
     news: 'Open Source',
-    contact: 'Contact',
+    contact: 'PPT Maker',
     franchise: 'OpenClaw',
     search: 'Search',
     readMore: 'Read More',
@@ -24,7 +24,7 @@ export default {
     hero: {
       title: 'Innovation Leads the Future, Quality Creates Glory',
       subtitle: 'Dedicated to high-end corporate services, creating exceptional value for customers',
-      cta: 'Contact Us Now'
+      cta: 'Generate PPT'
     },
     services: {
       title: 'Core Services',
@@ -67,12 +67,12 @@ export default {
     download: 'Download Case'
   },
   contact: {
-    title: 'Contact Us',
+    title: 'PPT Maker',
     address: 'Company Address',
     phone: 'Phone Number',
     email: 'Email Address',
-    message: 'Online Message',
-    submit: 'Submit Message',
+    message: 'Prompt',
+    submit: 'Generate PPT',
     service: 'Customer Service'
   },
   franchise: {

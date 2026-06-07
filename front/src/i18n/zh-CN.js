@@ -5,7 +5,7 @@ export default {
     business: '业务模块',
     cases: '案例展示',
     news: '开源项目',
-    contact: '联系我们',
+    contact: 'PPT 生成',
     franchise: 'OpenClaw',
     search: '搜索',
     readMore: '了解更多',
@@ -24,7 +24,7 @@ export default {
     hero: {
       title: '创新引领未来，品质铸就辉煌',
       subtitle: '专注高端企业服务，为客户创造卓越价值',
-      cta: '立即咨询'
+      cta: '生成 PPT'
     },
     services: {
       title: '核心业务',
@@ -67,12 +67,12 @@ export default {
     download: '案例下载'
   },
   contact: {
-    title: '联系我们',
+    title: 'PPT 生成',
     address: '公司地址',
     phone: '联系电话',
     email: '电子邮箱',
-    message: '在线留言',
-    submit: '提交留言',
+    message: '生成提示词',
+    submit: '开始生成',
     service: '客服咨询'
   },
   franchise: {

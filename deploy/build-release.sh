@@ -40,6 +40,7 @@ fi
 info "Collecting release files..."
 cp "$BACKEND_DIR/target/backen-0.0.1-SNAPSHOT.jar" "$PACKAGE_ROOT/backen/backen.jar"
 cp -R "$BACKEND_DIR/scripts" "$PACKAGE_ROOT/backen/scripts"
+find "$PACKAGE_ROOT/backen/scripts" -type d -name node_modules -prune -exec rm -rf {} +
 cp -R "$FRONTEND_DIR/dist" "$PACKAGE_ROOT/front/dist"
 cp "$ROOT/.env.local.example" "$PACKAGE_ROOT/web.env.example"
 cp "$ROOT/deploy/install-linux.sh" "$PACKAGE_ROOT/install-linux.sh"

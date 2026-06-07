@@ -410,3 +410,87 @@ export async function getTranslatedPdfBlob(taskId, mode = 'translated') {
 export function downloadTranslatedPdf(taskId, mode = 'translated') {
   window.open(`/api/translate/download-pdf/${taskId}?mode=${encodeURIComponent(mode)}`)
 }
+
+// ==================== PPT 生成 API ====================
+
+export async function createPptGenerationTask({ prompt, templateKey, templateMode, extractionPercent, templateFile, paperFile }) {
+  const formData = new FormData()
+  formData.append('prompt', prompt)
+  if (templateKey) formData.append('templateKey', templateKey)
+  if (templateMode) formData.append('templateMode', templateMode)
+  if (extractionPercent) formData.append('extractionPercent', String(extractionPercent))
+  if (templateFile) formData.append('templateFile', templateFile)
+  if (paperFile) formData.append('paperFile', paperFile)
+
+  const res = await fetch('/api/ppt-generate/tasks', {
+    method: 'POST',
+    body: formData
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(data.message || `HTTP error! status: ${res.status}`)
+  }
+  return data
+}
+
+export function getPptTemplates() {
+  return get('/ppt-generate/templates')
+}
+
+function pptTaskHeaders(accessToken) {
+  return accessToken ? { 'X-Ppt-Task-Token': accessToken } : {}
+}
+
+export function getPptGenerationStatus(taskId, accessToken) {
+  return requestWithOptions(`/ppt-generate/status/${taskId}`, {
+    method: 'GET',
+    headers: pptTaskHeaders(accessToken)
+  })
+}
+
+export function getPptDeck(taskId, accessToken) {
+  return requestWithOptions(`/ppt-generate/deck/${taskId}`, {
+    method: 'GET',
+    headers: pptTaskHeaders(accessToken)
+  })
+}
+
+export function savePptDeck(taskId, accessToken, deck) {
+  return requestWithOptions(`/ppt-generate/deck/${taskId}`, {
+    method: 'PUT',
+    headers: pptTaskHeaders(accessToken),
+    body: JSON.stringify(deck)
+  })
+}
+
+export function revisePptDeck(taskId, accessToken, instruction, deck) {
+  return requestWithOptions(`/ppt-generate/revise/${taskId}`, {
+    method: 'POST',
+    headers: pptTaskHeaders(accessToken),
+    body: JSON.stringify({ instruction, deck })
+  })
+}
+
+export function renderGeneratedPpt(taskId, accessToken, deck, options = {}) {
+  return requestWithOptions(`/ppt-generate/render/${taskId}`, {
+    method: 'POST',
+    headers: pptTaskHeaders(accessToken),
+    body: JSON.stringify({
+      deck,
+      templateMode: options.templateMode,
+      extractionPercent: options.extractionPercent
+    })
+  })
+}
+
+export function getRecentPptGenerations(accessTokens = []) {
+  return requestWithOptions('/ppt-generate/recent', {
+    method: 'GET',
+    headers: accessTokens.length ? { 'X-Ppt-Task-Tokens': accessTokens.join(',') } : {},
+    cache: 'no-store'
+  })
+}
+
+export function downloadGeneratedPpt(taskId, accessToken) {
+  window.open(`/api/ppt-generate/download/${taskId}?accessToken=${encodeURIComponent(accessToken || '')}`)
+}

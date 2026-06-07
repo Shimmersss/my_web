@@ -110,34 +110,34 @@
       </div>
     </section>
 
-    <!-- 联系方式 -->
+    <!-- PPT 生成入口 -->
     <section class="section contact-section">
       <div class="container">
         <n-grid :x-gap="48" :y-gap="24" :cols="2" :cols-sm="1">
           <n-grid-item>
             <div class="contact-info">
               <h2>{{ $t('contact.title') }}</h2>
-              <p>{{ $t('home.hero.subtitle') }}</p>
+              <p>上传论文与可选模板，让 mimo 规划结构并生成可编辑 PPTX。</p>
               <div class="contact-items">
                 <div class="contact-item">
-                  <n-icon size="24"><LocationIcon /></n-icon>
+                  <n-icon size="24"><DocumentTextIcon /></n-icon>
                   <div>
-                    <span>{{ $t('contact.address') }}</span>
-                    <p>北京市朝阳区XX路XX号</p>
+                    <span>论文输入</span>
+                    <p>支持 PDF / DOCX，也可以只输入提示词</p>
                   </div>
                 </div>
                 <div class="contact-item">
-                  <n-icon size="24"><PhoneIcon /></n-icon>
+                  <n-icon size="24"><BusinessIcon /></n-icon>
                   <div>
-                    <span>{{ $t('contact.phone') }}</span>
-                    <p>400-XXX-XXXX</p>
+                    <span>模板风格</span>
+                    <p>可上传 PPTX 模板抽取配色和素材</p>
                   </div>
                 </div>
                 <div class="contact-item">
-                  <n-icon size="24"><MailIcon /></n-icon>
+                  <n-icon size="24"><FlashOutline /></n-icon>
                   <div>
-                    <span>{{ $t('contact.email') }}</span>
-                    <p>contact@company.com</p>
+                    <span>后台队列</span>
+                    <p>单 worker 有界队列，生成完成后下载 PPTX</p>
                   </div>
                 </div>
               </div>
@@ -145,23 +145,14 @@
           </n-grid-item>
           <n-grid-item>
             <div class="contact-form">
-              <n-form ref="formRef" :model="formData" :rules="rules">
-                <n-form-item label="姓名" path="name">
-                  <n-input v-model:value="formData.name" placeholder="请输入您的姓名" />
-                </n-form-item>
-                <n-form-item label="电话" path="phone">
-                  <n-input v-model:value="formData.phone" placeholder="请输入您的电话" />
-                </n-form-item>
-                <n-form-item label="邮箱" path="email">
-                  <n-input v-model:value="formData.email" placeholder="请输入您的邮箱" />
-                </n-form-item>
-                <n-form-item label="留言" path="message">
-                  <n-input type="textarea" v-model:value="formData.message" placeholder="请输入您的留言" :rows="4" />
-                </n-form-item>
-                <n-button type="primary" block size="large" @click="handleSubmit">
-                  {{ $t('contact.submit') }}
-                </n-button>
-              </n-form>
+              <h3>从论文到答辩稿</h3>
+              <p>适合毕业答辩、项目汇报、论文分享等场景。页面保留 `/contact` URL，点击即可开始生成。</p>
+              <n-button type="primary" block size="large" @click="navigateTo('/contact')">
+                <template #icon>
+                  <n-icon><DocumentTextIcon /></n-icon>
+                </template>
+                打开 PPT 生成
+              </n-button>
             </div>
           </n-grid-item>
         </n-grid>
@@ -171,11 +162,10 @@
 </template>
 
 <script setup>
-import { onMounted, ref, reactive } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useMessage } from 'naive-ui'
 import {
-  NButton, NGrid, NGridItem, NCarousel, NForm, NFormItem, NInput, NIcon
+  NButton, NGrid, NGridItem, NCarousel, NIcon
 } from 'naive-ui'
 import {
   BusinessOutline,
@@ -186,17 +176,13 @@ import {
   PeopleOutline,
   ShieldCheckmarkOutline,
   FlashOutline,
-  LocationOutline,
-  CallOutline,
-  MailOutline,
+  DocumentTextOutline,
   LogoGithub
 } from '@vicons/ionicons5'
 import { getGithubProjects } from '@/api'
 import { defaultGithubProjects } from '@/config/githubProjects'
 
 const router = useRouter()
-const message = useMessage()
-const formRef = ref(null)
 
 const services = ref([
   { id: 1, title: '云计算服务', description: '提供稳定可靠的云计算解决方案', icon: CloudOutline, color: '#1890ff' },
@@ -222,36 +208,11 @@ const cases = ref([
 
 const projectList = ref(defaultGithubProjects.filter(item => item.featured).slice(0, 3))
 
-const formData = reactive({
-  name: '',
-  phone: '',
-  email: '',
-  message: ''
-})
-
-const rules = {
-  name: { required: true, message: '请输入姓名', trigger: 'blur' },
-  phone: { required: true, message: '请输入电话', trigger: 'blur' },
-  email: { type: 'email', message: '请输入有效的邮箱地址', trigger: 'blur' },
-  message: { required: true, message: '请输入留言', trigger: 'blur' }
-}
-
 const BusinessIcon = BusinessOutline
-const LocationIcon = LocationOutline
-const PhoneIcon = CallOutline
-const MailIcon = MailOutline
+const DocumentTextIcon = DocumentTextOutline
 
 const navigateTo = (path) => {
   router.push(path)
-}
-
-const handleSubmit = () => {
-  formRef.value?.validate((errors) => {
-    if (!errors) {
-      message.success('提交成功！我们会尽快联系您。')
-      Object.assign(formData, { name: '', phone: '', email: '', message: '' })
-    }
-  })
 }
 
 onMounted(async () => {

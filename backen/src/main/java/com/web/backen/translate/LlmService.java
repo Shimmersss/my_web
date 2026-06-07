@@ -8,6 +8,12 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -104,6 +110,132 @@ public class LlmService {
         }
 
         throw new RuntimeException("LLM API 调用失败: 未知错误");
+    }
+
+    public String complete(String systemPrompt, String userPrompt, int maxTokens) {
+        return completeWithModel(llmConfig.getModel(), systemPrompt, userPrompt, maxTokens);
+    }
+
+    public String completeWithModel(String model, String systemPrompt, String userPrompt, int maxTokens) {
+        if (llmConfig.getApiKey() == null || llmConfig.getApiKey().isBlank()) {
+            throw new IllegalStateException("LLM API Key 未配置，请在 .env.local 中设置 LLM_API_KEY");
+        }
+        if (userPrompt == null || userPrompt.isBlank()) {
+            throw new IllegalArgumentException("用户提示词不能为空");
+        }
+
+        Map<String, Object> requestBody = Map.of(
+                "model", model == null || model.isBlank() ? llmConfig.getModel() : model,
+                "max_tokens", Math.max(1024, maxTokens),
+                "system", systemPrompt == null || systemPrompt.isBlank() ? "You are a helpful assistant." : systemPrompt,
+                "messages", List.of(
+                        Map.of("role", "user", "content", userPrompt)
+                )
+        );
+
+        int maxRetries = 2;
+        long delayMs = 1000;
+        for (int attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                String responseJson = llmRestClient.post()
+                        .uri("/v1/messages")
+                        .body(requestBody)
+                        .retrieve()
+                        .body(String.class);
+                return extractContent(responseJson);
+            } catch (Exception e) {
+                String msg = e.getMessage();
+                if (msg != null && (msg.contains("401") || msg.contains("403") || msg.contains("400"))) {
+                    throw new RuntimeException("LLM API 调用失败: " + msg, e);
+                }
+                if (attempt < maxRetries) {
+                    log.warn("LLM 通用生成失败 (第{}次)，{}ms 后重试: {}", attempt + 1, delayMs, msg);
+                    try {
+                        Thread.sleep(delayMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("LLM 生成被中断", ie);
+                    }
+                    delayMs *= 2;
+                } else {
+                    throw new RuntimeException("LLM API 调用失败（已重试" + maxRetries + "次）: " + msg, e);
+                }
+            }
+        }
+        throw new RuntimeException("LLM API 调用失败: 未知错误");
+    }
+
+    public String completeWithImages(String model, String systemPrompt, String userPrompt,
+                                     List<Path> imagePaths, int maxTokens) {
+        if (llmConfig.getApiKey() == null || llmConfig.getApiKey().isBlank()) {
+            throw new IllegalStateException("LLM API Key 未配置，请在 .env.local 中设置 LLM_API_KEY");
+        }
+        if (userPrompt == null || userPrompt.isBlank()) {
+            throw new IllegalArgumentException("用户提示词不能为空");
+        }
+
+        List<Object> content = new ArrayList<>();
+        content.add(Map.of("type", "text", "text", userPrompt));
+        if (imagePaths != null) {
+            for (Path imagePath : imagePaths) {
+                if (imagePath == null || !Files.isRegularFile(imagePath)) continue;
+                try {
+                    String mediaType = mediaType(imagePath);
+                    if (mediaType.isBlank()) continue;
+                    content.add(Map.of(
+                            "type", "image",
+                            "source", Map.of(
+                                    "type", "base64",
+                                    "media_type", mediaType,
+                                    "data", Base64.getEncoder().encodeToString(Files.readAllBytes(imagePath)))));
+                } catch (IOException e) {
+                    log.warn("读取视觉模型图片失败: {}", imagePath, e);
+                }
+            }
+        }
+
+        Map<String, Object> requestBody = new LinkedHashMap<>();
+        requestBody.put("model", model == null || model.isBlank() ? llmConfig.getModel() : model);
+        requestBody.put("max_tokens", Math.max(512, maxTokens));
+        requestBody.put("system", systemPrompt == null || systemPrompt.isBlank() ? "You are a helpful assistant." : systemPrompt);
+        requestBody.put("messages", List.of(Map.of("role", "user", "content", content)));
+
+        int maxRetries = 1;
+        long delayMs = 1000;
+        for (int attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                String responseJson = llmRestClient.post()
+                        .uri("/v1/messages")
+                        .body(requestBody)
+                        .retrieve()
+                        .body(String.class);
+                return extractContent(responseJson);
+            } catch (Exception e) {
+                String msg = e.getMessage();
+                if (msg != null && (msg.contains("401") || msg.contains("403") || msg.contains("400"))) {
+                    throw new RuntimeException("LLM 视觉模型调用失败: " + msg, e);
+                }
+                if (attempt < maxRetries) {
+                    log.warn("LLM 视觉模型调用失败 (第{}次)，{}ms 后重试: {}", attempt + 1, delayMs, msg);
+                    try {
+                        Thread.sleep(delayMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("LLM 视觉模型调用被中断", ie);
+                    }
+                } else {
+                    throw new RuntimeException("LLM 视觉模型调用失败: " + msg, e);
+                }
+            }
+        }
+        throw new RuntimeException("LLM 视觉模型调用失败: 未知错误");
+    }
+
+    private String mediaType(Path imagePath) {
+        String name = imagePath.getFileName().toString().toLowerCase();
+        if (name.endsWith(".png")) return "image/png";
+        if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
+        return "";
     }
 
     /**

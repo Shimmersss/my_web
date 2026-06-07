@@ -62,8 +62,8 @@
         </n-grid>
 
         <div class="case-actions">
-          <n-button type="primary" size="large" @click="showContact = true">
-            类似需求，联系我
+          <n-button type="primary" size="large" @click="navigateTo('/contact')">
+            生成类似案例 PPT
           </n-button>
           <n-button size="large" @click="downloadCase">
             <template #icon>
@@ -91,31 +91,14 @@
       </div>
     </section>
 
-    <!-- 联系弹窗 -->
-    <n-modal v-model:show="showContact" preset="card" title="立即咨询" :style="{ width: '500px' }">
-      <n-form ref="formRef" :model="formData" :rules="rules">
-        <n-form-item label="姓名" path="name">
-          <n-input v-model:value="formData.name" placeholder="请输入您的姓名" />
-        </n-form-item>
-        <n-form-item label="电话" path="phone">
-          <n-input v-model:value="formData.phone" placeholder="请输入您的电话" />
-        </n-form-item>
-        <n-form-item label="需求描述" path="message">
-          <n-input type="textarea" v-model:value="formData.message" placeholder="请简要描述您的需求" :rows="4" />
-        </n-form-item>
-        <n-button type="primary" block size="large" @click="handleSubmit">
-          提交咨询
-        </n-button>
-      </n-form>
-    </n-modal>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
-import { NModal, NForm, NFormItem, NInput, NButton, NGrid, NGridItem, NIcon } from 'naive-ui'
+import { NButton, NGrid, NGridItem, NIcon } from 'naive-ui'
 import {
   CalendarOutline,
   PersonOutline,
@@ -127,8 +110,6 @@ import {
 const router = useRouter()
 const route = useRoute()
 const message = useMessage()
-const showContact = ref(false)
-const formRef = ref(null)
 
 const caseData = ref({
   id: 1,
@@ -148,18 +129,6 @@ const caseData = ref({
     satisfaction: 95
   }
 })
-
-const formData = reactive({
-  name: '',
-  phone: '',
-  message: ''
-})
-
-const rules = {
-  name: { required: true, message: '请输入姓名', trigger: 'blur' },
-  phone: { required: true, message: '请输入电话', trigger: 'blur' },
-  message: { required: true, message: '请描述您的需求', trigger: 'blur' }
-}
 
 const relatedCases = computed(() => [
   {
@@ -193,16 +162,6 @@ const navigateTo = (path) => {
 
 const downloadCase = () => {
   message.info('案例下载功能开发中...')
-}
-
-const handleSubmit = () => {
-  formRef.value?.validate((errors) => {
-    if (!errors) {
-      message.success('提交成功！我们会尽快联系您。')
-      showContact.value = false
-      Object.assign(formData, { name: '', phone: '', message: '' })
-    }
-  })
 }
 </script>
 

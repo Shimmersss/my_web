@@ -1,0 +1,16 @@
+{
+  "name": "web-homepage-pptx-generator",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "PptxGenJS runner for the Web PPT generation queue.",
+  "scripts": {
+    "smoke": "node generate_deck.mjs --deck fixtures/sample-deck.json --style fixtures/sample-style.json --images fixtures/sample-images.json --out /tmp/web-pptx-generator-smoke.pptx",
+    "smoke:template-fill": "node template_fill_smoke.mjs"
+  },
+  "dependencies": {
+    "image-size": "^1.2.1",
+    "jszip": "^3.10.1",
+    "pptxgenjs": "^4.0.1"
+  }
+}

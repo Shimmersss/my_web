@@ -34,19 +34,19 @@
       </div>
 
       <div class="footer-section">
-        <h4 class="footer-title">联系方式</h4>
+        <h4 class="footer-title">工具入口</h4>
         <div class="contact-info">
-          <p>
+          <p @click="navigateTo('/contact')">
             <n-icon><LocationIcon /></n-icon>
-            北京市朝阳区XX路XX号XX大厦XX层
+            PPT 生成
           </p>
-          <p>
+          <p @click="navigateTo('/translate')">
             <n-icon><PhoneIcon /></n-icon>
-            400-XXX-XXXX
+            论文翻译
           </p>
-          <p>
+          <p @click="navigateTo('/openclaw')">
             <n-icon><MailIcon /></n-icon>
-            contact@company.com
+            OpenClaw 对话
           </p>
         </div>
       </div>

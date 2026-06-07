@@ -42,7 +42,7 @@
             @click="navigateTo('/contact')"
             class="contact-btn"
           >
-            {{ $t('contact.title') }}
+            PPT 生成
           </n-button>
         </div>
       </div>
@@ -116,7 +116,7 @@ const menuOptions = computed(() => [
     onClick: () => navigateTo('/franchise')
   },
   {
-    label: () => t('common.contact'),
+    label: 'PPT 生成',
     key: 'Contact',
     onClick: () => navigateTo('/contact')
   }

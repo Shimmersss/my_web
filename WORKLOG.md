@@ -6,6 +6,260 @@
 
 ---
 
+## 2026-06-07
+
+### fix: DOCX 论文原图被表格配额挤占，成品无论文素材
+
+**问题**：任务 `c599ab24` 的 DOCX 内有 16 张 `word/media` 图片，但抽取目录只有 8 张 `paper-table-*`。原实现让 DOCX 表格截图、嵌入 Excel 和原始图片共用同一个递增计数；`word/document.xml` 先被处理并把 8 张配额占满，后续 `word/media` 全部被跳过。视觉摘要又把这些表格全部标记为 `useful=false`，最终 deck 没有任何 `imageId`，成品只剩模板装饰图。
+
+**改动**：
+- `PptInputExtractor.extractDocxTextAndImages()` 改为两遍读取 DOCX ZIP：
+  - 第一遍抽正文、收集表格候选并统计真实媒体数量
+  - 第二遍优先抽取约 60% 配额的 `word/media` 图片，再用剩余额度渲染表格
+- 真实论文图片与表格仍共享总预算，不增加 2 核 / 4 GB 生产机的素材上限
+- `normalizeImageManifest()` 对已成功渲染的 `paper-table-*` / `paper-excel-*` 设置最低可用等级，防止视觉摘要把所有表格清零
+- 大纲生成后和每次渲染前都会检查图片分配；对尚未使用的高价值素材，受控分配到方法、数据、实验、结果等语义相关页
+- 素材缓存版本升级到 3，已有任务下一次渲染会强制重新抽取，避免继续复用缺图缓存
+- 新增 `PptInputExtractorTest`，构造包含 10 张图和 10 个表格的 DOCX，验证 8 张总预算内同时保留论文原图与表格
+
+**任务修复**：
+- 用新逻辑重新渲染 `c599ab24`
+- 抽取结果从“8 张表格、0 张论文图”变为“5 张论文图、3 张表格”
+- 自动向 6 个相关页面分配论文素材
+- 已覆盖 `/Users/shimmer/Downloads/AI生成PPT-c599ab24.pptx`
+
+**验证**：
+- `cd backen && mvn test` 通过
+- `cd front && npm run build` 通过
+- `cd backen/scripts/pptx-generator && npm run smoke && npm run smoke:template-fill` 通过
+
+### fix: PPT 任务隔离、队列状态机和母版扩页关系
+
+**问题**：代码审查发现 PPT 公开入口存在四类风险：只凭 `taskId` 即可读取或篡改其他任务；对话修改绕过单 worker 并发调用 LLM；队列满或重复渲染会污染 session/deck 状态；母版填充扩页原样复制 `.rels`，导致多页引用同一个 notesSlide。
+
+**改动**：
+- 每个 PPT 任务创建 256-bit 随机 `accessToken` 并落盘；创建接口仅向创建者返回一次，前端存入当前标签页 `sessionStorage`
+- 状态、大纲、保存、修改、渲染接口校验 `X-Ppt-Task-Token`；SSE 和下载因浏览器 API 限制使用 `accessToken` 查询参数
+- `/recent` 改为按 `X-Ppt-Task-Tokens` 过滤，只返回当前浏览器持有令牌的任务，不再公开全站任务
+- 对话修改进入与大纲/PPTX 相同的有界单 worker；同一任务处理中拒绝保存、修改和重复渲染
+- 渲染入队前保存旧状态和旧 deck；队列拒绝或写盘失败时完整回滚，避免任务永久停在 `queued`
+- `template-fill` 扩页改用未占用的 slide 编号，并移除克隆页的 notes/comments 单页唯一关系，避免备注串页和 PowerPoint 修复提示
+- 新增 `PptGenerationServiceTest`，覆盖任务令牌隔离、最近任务过滤、队列满回滚、重复操作与 revise 队列拒绝
+- 新增 `npm run smoke:template-fill`，验证母版扩展到 7 页后克隆页不保留 notes/comments 关系
+
+**兼容性**：
+- 后端首次加载没有令牌的旧 PPT 任务时会生成新令牌；由于旧浏览器从未持有这些令牌，旧任务不会继续出现在公开最近任务中，这是安全迁移的预期行为。
+
+**验证**：
+- `cd backen && mvn test` 通过
+- `cd front && npm run build` 通过；仅有既有 Sass deprecation 和 chunk size 警告
+- `cd backen/scripts/pptx-generator && npm run smoke && npm run smoke:template-fill` 通过
+- `unzip -t /tmp/web-pptx-template-fill-smoke.pptx` 通过
+
+### fix: PPT 重新生成复用素材、母版填充缩字和表格抽图
+
+**问题**：同一个大纲反复点“重新生成 PPTX”时仍重新读取论文/模板，进度体验像又在生成大纲；母版填充把长文本和 notes 直接塞进模板文本框，容易字号过大、元素错位；DOCX 表格和嵌入 Excel 表格没有作为图片素材进入 PPT 链路。
+
+**改动**：
+- 新增 `asset-cache.json` 素材指纹，按论文文件、模板文件、提取比例和模板模式判断素材是否可复用；未变化时重新生成 PPTX 只重跑 runner，不再重新抽取
+- 进度阶段新增 `reusing_assets` / `refreshing_assets`，前端显示“复用素材”或“刷新素材”，避免误显示为“读取论文”
+- DOCX `<w:tbl>` 表格解析成行列并渲染为 `paper-table-*.png`
+- DOCX 内嵌 `word/embeddings/*.xlsx` 读取第一个 worksheet/sharedStrings，渲染为 `paper-excel-*.png`
+- 表格图片 fallback manifest 标记为 `kind=table/useful=true/importance=4/layoutHint=full-image`
+- `template-fill` 不再把 notes 写到模板形状里；当新文本明显长于原占位文本时，runner 会压缩对应 run 字号
+- runner 读取模板素材数量从 4 个同步到 24 个，匹配后端抽取上限
+
+**验证**：
+- `cd backen && mvn -q test` 通过
+- `cd front && npm run build` 通过；仅有既有 Sass legacy API / `darken()` deprecation 和 chunk size 警告
+- `node --check backen/scripts/pptx-generator/generate_deck.mjs` 通过
+
+### fix: PPT 大纲 JSON 被截断时自动重试
+
+**问题**：用户生成 25 页答辩 PPT 时，mimo 返回的 deck JSON 在 `slides` 数组中途被截断，后端 Jackson 报 `Unexpected end-of-input: expected close marker for Array`。根因是大纲生成固定使用 `PPT_GENERATION_LLM_MAX_TOKENS=8192`，长页数 + notes/bullets 容易把 JSON 尾部截掉。
+
+**改动**：
+- PPT 大纲默认输出上限从 8192 提高到 16384，并按目标页数动态估算 token，最高 32768
+- `buildDeckJson()` 解析失败时识别 `Unexpected end-of-input` / `expected close marker` / 未闭合括号等截断特征
+- 截断后自动用紧凑 JSON prompt 重试，限制每页 bullet 和 notes 长度，优先返回完整可解析 JSON
+- 页数纠偏 prompt 也复用动态 token 预算
+- `.env.local.example`、`AGENTS.md` 同步记录新的默认值和截断重试策略
+
+**验证**：
+- `cd backen && mvn -q test` 通过
+
+### fix: 生成 PPTX 时保留模板模式与提取比例
+
+**问题**：用户指出“大纲确认后点击生成 PPT”可能覆盖之前选择。排查后确认 `/api/ppt-generate/render/{taskId}` 旧接口只接收 deck JSON，不会重新携带 `templateMode/extractionPercent`；旧任务或缺字段任务在渲染阶段可能退回默认 `framework`，导致上传模板后仍走普通重绘。
+
+**改动**：
+- `render/{taskId}` 请求体兼容旧 deck，也支持新结构 `{ deck, templateMode, extractionPercent }`
+- `PptGenerationService.renderTask()` 在渲染前写回 `templateMode/extractionPercent` 到 session metadata，并继续校验 `template-fill` 必须有上传模板
+- 前端 `renderGeneratedPpt()` 发送 deck 的同时显式带上当前 `templateMode/extractionPercent`
+- 打开最近任务时，如果旧任务有 `templateFileName` 但没有 `templateMode`，前端默认显示为 `template-fill`
+
+**验证**：
+- `cd backen && mvn -q test` 通过
+- `node --check backen/scripts/pptx-generator/generate_deck.mjs` 通过
+- `cd front && npm run build` 通过；仅有既有 Sass legacy API / `darken()` deprecation 和 chunk size 警告
+
+### fix: 上传模板后默认进入母版填充
+
+**问题**：用户反馈任务 `ad548411` 选了模板模式但成品不像上传模板，且 `task.json` 缺少 `templateMode/extractionPercent`、`style.json` 缺少 `frameworkMode/templateFramework`，说明该任务仍走旧的 PptxGenJS 重绘链路，没有进入母版填充分支。
+
+**改动**：
+- 前端 `handleTemplateSelect()` 改为选择 `.pptx` 后自动切到 `template-fill`，用户仍可手动切回 `framework`
+- 手动用当前 runner 将 `.run/ppt-generation-tasks/ad548411/deck.json` 填充到 `.run/ppt-generation-tasks/ad548411/template.pptx`，重新生成 `.run/ppt-generation-tasks/ad548411/output.pptx`
+- 同步覆盖 `/Users/shimmer/Downloads/AI生成PPT-ad548411.pptx`
+- 补写 `ad548411/task.json` 的 `templateMode=template-fill` 和 `extractionPercent=50`
+- `AGENTS.md` 补充：上传模板默认母版填充，避免“模板模式”默认走普通重绘
+
+**验证**：
+- `node backen/scripts/pptx-generator/generate_deck.mjs --deck .run/ppt-generation-tasks/ad548411/deck.json --style .run/ppt-generation-tasks/ad548411/style.json --images .run/ppt-generation-tasks/ad548411/images.json --manifest .run/ppt-generation-tasks/ad548411/image-manifest.json --mode template-fill --template .run/ppt-generation-tasks/ad548411/template.pptx --out .run/ppt-generation-tasks/ad548411/output.pptx` 通过
+- `unzip -t .run/ppt-generation-tasks/ad548411/output.pptx` 通过
+- 对比结构：模板 24 页、14 个媒体、16 个 layout、2 个 master；输出 25 页、14 个媒体、16 个 layout、2 个 master，说明输出保留了原模板结构并只额外复制了一页
+- `cd front && npm run build` 通过；仅有既有 Sass legacy API / `darken()` deprecation 和 chunk size 警告
+
+### feat: PPT 模板母版填充与提取比例控制
+
+**目标**：用户上传 PPTX 模板时，支持完全在模板 slide 上填充替换；同时让用户自己控制 PDF/论文/模板素材提取比例，减少“模板元素提太少”和“私自缩放模板元素”的问题。
+
+**改动**：
+- 前端 `PptGenerate/index.vue` 新增“模板复用方式”：`framework` 框架复用 / `template-fill` 母版填充；母版填充必须先上传 PPTX 模板
+- 前端新增 `extractionPercent` 滑块，范围 10-100，提交到 `/api/ppt-generate/tasks`
+- `PptGenerationSession` 和 Controller summary 新增 `templateMode`、`extractionPercent`
+- `PptInputExtractor` 根据提取比例控制 PDF 页面图数量、DOCX 图片数量、PPTX framework 页数和模板媒体素材数量；PDF 页面图改为整篇均匀采样，不再只渲染前 N 页；PPTX 模板媒体素材上限提高到 24 个
+- PDF 表格通过页面图进入图片 manifest；DOCX 表格文本会追加为 `[表格 n]` 上下文，避免只抽正文丢表格信息
+- Node runner 新增 `template-fill` 模式：直接读取上传模板 PPTX zip，用 deck JSON 替换 slide XML 中的 `<a:t>` 文本，保留原 shape/media/位置/尺寸；页数不足时复制最后一页模板 slide，页数过多时只让 presentation 引用所需页
+- runner 显式依赖 `jszip`，`package-lock.json` 已更新
+- `AGENTS.md` 补充母版填充、提取比例和资源边界说明
+
+**边界**：
+- `template-fill` 当前以文本替换为主，不做图片占位符智能替换；这样能保留模板元素，不再把模板元素抽出后缩小/放大重排
+- PDF 表格“转图片”当前通过页面级 96 DPI PNG 实现，能保留表格视觉，但还不是单独裁剪表格区域
+
+**验证**：
+- `cd backen && mvn -q test` 通过
+- `cd backen/scripts/pptx-generator && npm run smoke` 通过
+- `node --check backen/scripts/pptx-generator/generate_deck.mjs` 通过
+- `node generate_deck.mjs --deck fixtures/sample-deck.json --style fixtures/sample-style.json --images fixtures/sample-images.json --manifest fixtures/sample-images.json --mode template-fill --template /tmp/web-pptx-generator-smoke.pptx --out /tmp/web-pptx-template-fill-smoke.pptx` 通过
+- `cd front && npm run build` 通过；仅有既有 Sass legacy API / `darken()` deprecation 和 chunk size 警告
+
+### feat: 上传 PPTX 模板时复用模板 framework
+
+**目标**：用户提供 PPTX 模板时，不应该只提取配色或素材，而是尽量复用模板的页面骨架、装饰节奏和版式框架。
+
+**改动**：
+- `PptInputExtractor.scanTemplate()` 增加 framework 扫描：最多读取 16 页 slide XML，记录页角色、文本块数、图片数、表格数和少量文字样本
+- 上传模板媒体素材复制上限从 4 个提高到 8 个，仍保持低内存、落盘处理
+- `PptGenerationService` prompt 告诉 mimo：`templateStyle.frameworkMode=true` 时要按 `templateFramework` 映射 cover/contents/section/content/image/conclusion/thanks 节奏
+- `generate_deck.mjs` 新增模板框架装饰层：封面/章节/致谢可复用宽幅模板素材作等比 cover 背景，内容页复用边栏、角标、分栏和模板素材节奏
+- 前端上传模板文案改为“复用模板框架和素材，配色仍跟随所选通用模板”
+- `AGENTS.md` 补充 framework mode 边界：复用框架感但不承诺高保真母版复制，生成文本和图形仍保持可编辑
+
+**验证**：
+- `cd backen && mvn -q test` 通过
+- `cd backen/scripts/pptx-generator && npm run smoke` 通过
+- `node --check backen/scripts/pptx-generator/generate_deck.mjs` 通过
+- `cd front && npm run build` 通过；仅有既有 Sass legacy API / `darken()` deprecation 和 chunk size 警告
+
+### fix: PPT 生成锁定配色、收紧配图并按页数压缩
+
+**问题**：用户反馈 PPT 生成仍有三类质量问题：成品配色没有稳定跟随一开始选择的通用模板；图片和正文主题匹配不严，出现文不对图和乱放图；提示词规定页数后，系统倾向于截断前 N 页而不是压缩整份内容。
+
+**改动**：
+- `applyBuiltInTemplateStyle()` 改为始终使用用户选择的通用模板 palette，上传 PPTX 只借用素材和文字样本，不再覆盖成品色板
+- deck JSON prompt 新增 `targetSlideCount` 和压缩策略：固定页数时必须返回精确页数，并在完整叙事上合并背景、方法、实验、结果、结论，而不是只保留前半部分
+- 后端从提示词解析 `12 页`、`10-15页`、`十二页` 等页数表达，传给 mimo 作为结构化约束
+- 如果 mimo 首次返回页数仍不匹配，后端会带着原始输入和当前 deck JSON 追加一次纠偏调用，要求精确合并/展开到目标页数
+- 视觉摘要失败时的 fallback manifest 不再把论文图片默认标记为可用，避免识图失败后仍随机配图
+- Node runner 去掉 `deck.slides.slice(0, 24)` 硬截断，并取消 `imageId` 模糊匹配；只有精确 ID 且 manifest 判定有用的图片才会放入页面
+- 前端上传模板文案改为“借用素材和文字样本，配色仍跟随所选通用模板”
+- `AGENTS.md` 同步记录：PPT 通用模板锁定配色、固定页数要压缩不要截断
+
+**验证**：
+- `cd backen && mvn -q test` 通过
+- `cd backen/scripts/pptx-generator && npm run smoke` 通过
+- `cd front && npm run build` 通过；仅有既有 Sass legacy API / `darken()` deprecation 和 chunk size 警告
+
+### feat: PPT 生成支持 PDF 页面图作为素材
+
+**目标**：PDF 论文输入不只提供纯文本，也能把页面中的图表、流程图和实验结果截图带入 PPT 生成链路。
+
+**改动**：
+- `PptInputExtractor` 在抽取 PDF 文本时同步用 PDFBox `PDFRenderer` 将前几页渲染为 96 DPI PNG
+- 渲染页数复用 `PPT_GENERATION_MAX_EXTRACTED_IMAGES` 上限，产物仍落到任务目录 `images/`，继续走现有 image manifest、视觉摘要和 PptxGenJS 图片引用流程
+- `PptGenerationService.runRenderTask()` 在每次重新生成 PPTX 前刷新论文图片素材、模板素材和 `image-manifest.json`，避免旧 taskId 只复用旧素材导致用户看不到变化
+- 对比 `AI生成PPT-128e19f2(2).pptx` 与人工参考稿 `李泽轩-毕业论文答辩-图文精简版.pptx` 后，确认质量差距不只是图片缺失：模板配色提取把 OOXML 坐标/尺寸误识别为颜色，导致蓝白模板跑偏成棕绿；大纲 section 输出 `1.1/2.3` 这类论文编号；runner 普通内容页自动轮播塞图，破坏答辩稿图文节奏
+- 修复 PPTX 模板色彩扫描，只读取真正的 `srgbClr val="xxxxxx"` / `color="xxxxxx"`，避免误把 6 位数字当色值
+- 收紧 deck JSON prompt：默认 16-20 页答辩节奏，section 使用 `BACKGROUND/ROUTE/DATA/RESULT/CONCLUSION` 等语义页眉，图片只在作为证据对象时使用
+- 调整 Node runner：普通内容页没有 `imageId/imageHint` 或图示版式时不再硬塞图片；数字 section 会降级为语义页眉，避免页面顶部出现 `1.1/2.3`
+- 视觉摘要 manifest 增加 `useful`、`importance`、`layoutHint`，让识图阶段筛掉空白、重复、装饰、不可读或低价值图片
+- deck JSON prompt 要求只有当页面标题/核心句与 manifest 的 `title/summary/bestUse` 直接对应时才引用 `imageId`，避免文不对图
+- Node runner 改为严格使用明确 `imageId`，不再自动轮播图片；放图使用等比 contain 居中计算，不拉伸、不裁切，并按 `layoutHint`、图片宽高比和版式自动选择左图、右图或大图页
+- 后端新增 LLM JSON 容错解析：生成大纲、对话修改和视觉摘要先正常解析 JSON；若 mimo 把 JSON 字符串边界误写成中文弯引号 `“...”`，会修复边界引号后重试，避免 `Unexpected character ('“')` 直接中断任务
+- `AGENTS.md` 补充 PDF 页图提取的资源边界，提醒后续不要随意提高 DPI 或页数上限
+
+**验证**：
+- `cd backen && mvn -q test` 通过
+- `cd backen/scripts/pptx-generator && npm run smoke` 通过
+- `node --check backen/scripts/pptx-generator/generate_deck.mjs` 通过
+- 用 `qlmanage` 对比封面缩略图，修复后蓝白配色已回到参考稿方向；临时验证文件为 `/Users/shimmer/Downloads/AI生成PPT-128e19f2-fixed-blue.pptx`
+
+### feat: `/contact` 替换为 PPT 生成工具页
+
+**目标**：保留 `/contact` 公网 URL，但把旧“联系我们”页面改成公开可用的“PPT 生成”工具；后端参考 `/Users/shimmer/Desktop/论文/pptx-toolkit` 的 PptxGenJS 方案，并纳入本项目发布包。
+
+**改动**：
+- 前端新增 `front/src/views/PptGenerate/index.vue`，`/contact` 路由改为 PPT 生成；导航按钮、首页 CTA、首页底部入口、页脚工具入口、业务/案例详情按钮都改为 PPT 生成语义
+- 前端支持必填提示词、可选 `.pptx` 模板、可选 `.pdf/.docx` 论文；展示提交、排队/生成中、结果下载、最近任务恢复
+- 后端新增 `ppt/` 模块：`PptGenerationController`、`PptGenerationService`、`PptGenerationSession`、`PptInputExtractor`
+- 新增接口：`POST /api/ppt-generate/tasks`、`GET /stream/{taskId}`、`GET /status/{taskId}`、`GET /recent`、`GET /download/{taskId}`
+- `LlmService` 新增通用 `complete(systemPrompt, userPrompt, maxTokens)`，PPT 生成复用现有 `LLM_*` mimo 配置，不影响论文翻译专用 prompt
+- 新增 `backen/scripts/pptx-generator/generate_deck.mjs`，用 PptxGenJS 把 deck JSON、模板风格和论文图片生成可编辑 PPTX
+- 新增 `ppt-generation.*` 配置、`.env.local.example` 示例、`project.sh` 本地 runner 依赖安装、部署安装脚本 runner `npm ci`、发布包剔除 runner `node_modules`
+
+**资源边界**：
+- 公开入口不加 `ADMIN_KEY`；默认提示词 8000 字，模板/论文各 30 MB，单 worker，队列容量 3，最近任务 5 条
+- 任务文件落盘到 `.run/ppt-generation-tasks/`，JVM 只保存轻量元数据
+- 后端重启后未完成 PPT 任务标记为 error，需要重新提交；完成结果按最近任务清理策略保留
+- 模板 v1 只做风格提取和素材借用，不承诺高保真母版复刻
+
+**验证**：
+- `cd backen && mvn -q test` 通过
+- `cd front && npm run build` 通过；仅有既有 Sass legacy API 和 chunk size 警告
+- `backen/scripts/pptx-generator/generate_deck.mjs` smoke 通过，生成 4 页、约 88 KB 的 `.pptx`
+
+### feat: PPT 生成增加模板、大纲确认、预览和修改闭环
+
+**目标**：PPT 不再“一键直接出成品”，而是先生成大纲供用户调整确认；生成后可继续预览、对话修改和人工编辑，再重新生成 PPTX。
+
+**改动**：
+- 新增 `/api/ppt-generate/templates`，提供学术蓝、极简黑白、数据绿、暖色答辩 4 个通用模板；用户上传自定义 PPTX 时仍优先提取上传模板风格
+- `/api/ppt-generate/tasks` 改为先生成 deck JSON 大纲，SSE 新增 `outline-ready`
+- 新增 `/deck/{taskId}` 读取/保存大纲，`/revise/{taskId}` 对话修改大纲，`/render/{taskId}` 根据确认后的大纲排队生成 PPTX
+- 前端 `PptGenerate/index.vue` 改为两阶段工作流：模板选择 + 上传/提示词 → 生成大纲 → 人工编辑/前端预览/对话修改 → 生成或重新生成 PPTX
+- 前端预览为 16:9 幻灯片卡片，人工编辑范围是 deck JSON 的页类型、标题、核心句、要点和讲稿备注；不是形状级 PowerPoint 编辑器
+
+**验证**：
+- `cd backen && mvn -q test` 通过
+- `cd front && npm run build` 通过；仅有既有 Sass legacy API 和 chunk size 警告
+
+### fix: PPT 重复渲染时模板素材已存在导致 70% 失败
+
+**问题**：任务 `254f552e`（论文文件 `李泽轩-毕业论文初稿.docx`，模板 `06.pptx`）在“生成 PPTX”阶段卡到 70% 后失败，错误信息只有 `.run/ppt-generation-tasks/254f552e/template-assets/template-asset-1.png`。日志确认根因是同一任务重新渲染时，`PptInputExtractor.scanTemplate()` 再次 `Files.copy()` 到已存在的 `template-asset-1.png`，触发 `FileAlreadyExistsException`。
+
+**改动**：
+- `PptInputExtractor` 在重新抽取 DOCX 图片和 PPTX 模板素材前清理旧抽取目录，并用 `StandardCopyOption.REPLACE_EXISTING` 兜底
+- `generate_deck.mjs` 启动时预读图片为 data URI；不可读取或格式异常的图片只记录 warning 并跳过，避免单张素材导致整份 PPTX 写出失败
+- 补齐 `backen/scripts/pptx-generator/fixtures/*`，让 `npm run smoke` 不再引用缺失文件
+
+**验证**：
+- `cd backen && mvn -q test` 通过
+- `cd backen/scripts/pptx-generator && npm run smoke` 通过
+- 重新调用 `POST /api/ppt-generate/render/254f552e`，任务从 `rendering 70%` 恢复到 `completed 100%`
+- `GET /api/ppt-generate/download/254f552e` 返回 200，生成 `.run/ppt-generation-tasks/254f552e/output.pptx`（约 1.6 MB）
+
 ## 2026-06-06
 
 ### ops: PDF 翻译服务器保护与部署包清理

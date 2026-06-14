@@ -157,10 +157,10 @@ export async function submitAppointment(data) {
   }
 }
 
-// ==================== 招商加盟 API ====================
+// ==================== OpenClaw / 旧入口兼容 API ====================
 
 /**
- * 提交加盟申请
+ * 提交旧入口表单
  * @param {object} data - 申请数据
  * @returns {Promise}
  */
@@ -175,7 +175,7 @@ export async function submitFranchise(data) {
 }
 
 /**
- * 获取加盟案例
+ * 获取旧入口归档
  * @returns {Promise}
  */
 export async function getFranchiseCases() {
@@ -413,11 +413,10 @@ export function downloadTranslatedPdf(taskId, mode = 'translated') {
 
 // ==================== PPT 生成 API ====================
 
-export async function createPptGenerationTask({ prompt, templateKey, templateMode, extractionPercent, templateFile, paperFile }) {
+export async function createPptGenerationTask({ prompt, templateKey, extractionPercent, templateFile, paperFile }) {
   const formData = new FormData()
   formData.append('prompt', prompt)
   if (templateKey) formData.append('templateKey', templateKey)
-  if (templateMode) formData.append('templateMode', templateMode)
   if (extractionPercent) formData.append('extractionPercent', String(extractionPercent))
   if (templateFile) formData.append('templateFile', templateFile)
   if (paperFile) formData.append('paperFile', paperFile)
@@ -445,41 +444,6 @@ export function getPptGenerationStatus(taskId, accessToken) {
   return requestWithOptions(`/ppt-generate/status/${taskId}`, {
     method: 'GET',
     headers: pptTaskHeaders(accessToken)
-  })
-}
-
-export function getPptDeck(taskId, accessToken) {
-  return requestWithOptions(`/ppt-generate/deck/${taskId}`, {
-    method: 'GET',
-    headers: pptTaskHeaders(accessToken)
-  })
-}
-
-export function savePptDeck(taskId, accessToken, deck) {
-  return requestWithOptions(`/ppt-generate/deck/${taskId}`, {
-    method: 'PUT',
-    headers: pptTaskHeaders(accessToken),
-    body: JSON.stringify(deck)
-  })
-}
-
-export function revisePptDeck(taskId, accessToken, instruction, deck) {
-  return requestWithOptions(`/ppt-generate/revise/${taskId}`, {
-    method: 'POST',
-    headers: pptTaskHeaders(accessToken),
-    body: JSON.stringify({ instruction, deck })
-  })
-}
-
-export function renderGeneratedPpt(taskId, accessToken, deck, options = {}) {
-  return requestWithOptions(`/ppt-generate/render/${taskId}`, {
-    method: 'POST',
-    headers: pptTaskHeaders(accessToken),
-    body: JSON.stringify({
-      deck,
-      templateMode: options.templateMode,
-      extractionPercent: options.extractionPercent
-    })
   })
 }
 

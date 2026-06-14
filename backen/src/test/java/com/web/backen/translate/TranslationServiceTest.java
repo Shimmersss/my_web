@@ -57,6 +57,9 @@ class TranslationServiceTest {
             TranslationSession completed = service.getSession(session.getTaskId());
             assertTrue(Files.isRegularFile(completed.getTranslatedPdfPath()));
             assertTrue(Files.isRegularFile(completed.getBilingualPdfPath()));
+            assertEquals("paper-翻译版.pdf", service.buildPdfDownloadFileName(session.getTaskId(), "translated"));
+            assertEquals("paper-双语对照版.pdf", service.buildPdfDownloadFileName(session.getTaskId(), "bilingual"));
+            assertEquals("paper-翻译结果.txt", service.buildTextDownloadFileName(session.getTaskId()));
             assertEquals(session.getTaskId(), service.getRecentSessions().get(0).getTaskId());
 
             service.createSessionPreview("not-submitted.pdf", new ByteArrayInputStream("pdf".getBytes()));
@@ -165,6 +168,48 @@ class TranslationServiceTest {
                     any(Path.class), any(Path.class), eq("paper.pdf"), eq(1), eq(3), eq("auto"), eq(4), any());
             verify(babelDocService).translatePdf(
                     any(Path.class), any(Path.class), eq("paper.pdf"), eq(1), eq(3), eq("auto"), eq(2), any());
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void keepsWarningButAllowsTranslationWhenPdfTextLayerLooksCorrupt() throws Exception {
+        PdfParseService pdfParseService = mock(PdfParseService.class);
+        BabelDocService babelDocService = mock(BabelDocService.class);
+        TranslationConfig config = new TranslationConfig();
+        config.setStorageDir(tempDir.toString());
+        config.setMaxHistory(5);
+        config.setQueueCapacity(2);
+        config.setMaxQps(4);
+
+        when(pdfParseService.getTotalPages(any(Path.class))).thenReturn(3);
+        when(pdfParseService.analyzeTextQuality(any(Path.class)))
+                .thenReturn(new PdfParseService.PdfTextQuality(true, "PDF 文本层疑似乱码"));
+        when(babelDocService.translatePdf(any(Path.class), any(Path.class), anyString(),
+                anyInt(), anyInt(), anyString(), anyInt(), any()))
+                .thenAnswer(invocation -> {
+                    Path resultDir = invocation.getArgument(1);
+                    Path translated = resultDir.resolve("translated.pdf");
+                    Path bilingual = resultDir.resolve("bilingual.pdf");
+                    Files.writeString(translated, "translated");
+                    Files.writeString(bilingual, "bilingual");
+                    return new BabelDocService.TranslationResult(translated, bilingual);
+                });
+
+        TranslationService service = new TranslationService(
+                pdfParseService, babelDocService, config, new ObjectMapper());
+        service.initialize();
+        try {
+            TranslationSession session = service.createSessionPreview(
+                    "bad.pdf", new ByteArrayInputStream("pdf".getBytes()));
+            assertTrue(session.isTextQualitySuspicious());
+            assertEquals("PDF 文本层疑似乱码", session.getTextQualityWarning());
+
+            service.startTranslation(session.getTaskId(), 1, 3, "auto", 4);
+            awaitStatus(service, session.getTaskId(), "completed");
+            verify(babelDocService).translatePdf(
+                    any(Path.class), any(Path.class), eq("bad.pdf"), eq(1), eq(3), eq("auto"), eq(4), any());
         } finally {
             service.shutdown();
         }

@@ -1,12 +1,12 @@
 <template>
-  <div class="app-footer">
+  <footer class="app-footer">
     <div class="container footer-content">
       <div class="footer-section">
         <div class="footer-logo">
           <n-icon size="36" color="#1890ff">
             <LogoIcon />
           </n-icon>
-          <span class="logo-text">COMPANY</span>
+          <span class="logo-text">Research Desk</span>
         </div>
         <p class="footer-desc">{{ $t('home.hero.subtitle') }}</p>
         <div class="social-links">
@@ -23,41 +23,41 @@
       </div>
 
       <div class="footer-section">
-        <h4 class="footer-title">快捷导航</h4>
+        <h4 class="footer-title">工作入口</h4>
         <ul class="footer-links">
-          <li @click="navigateTo('/')">{{ $t('common.home') }}</li>
-          <li @click="navigateTo('/about')">{{ $t('common.about') }}</li>
-          <li @click="navigateTo('/business')">{{ $t('common.business') }}</li>
-          <li @click="navigateTo('/cases')">{{ $t('common.cases') }}</li>
-          <li @click="navigateTo('/news')">{{ $t('common.news') }}</li>
+          <li><a href="/" @click.prevent="navigateTo('/')">{{ $t('common.home') }}</a></li>
+          <li><a href="/about" @click.prevent="navigateTo('/about')">{{ $t('common.about') }}</a></li>
+          <li><a href="/business" @click.prevent="navigateTo('/business')">{{ $t('common.business') }}</a></li>
+          <li><a href="/publications" @click.prevent="navigateTo('/publications')">文献</a></li>
+          <li><a href="/translate" @click.prevent="navigateTo('/translate')">翻译</a></li>
         </ul>
       </div>
 
       <div class="footer-section">
-        <h4 class="footer-title">工具入口</h4>
+        <h4 class="footer-title">当前工具</h4>
         <div class="contact-info">
-          <p @click="navigateTo('/contact')">
+          <a href="/contact" @click.prevent="navigateTo('/contact')">
             <n-icon><LocationIcon /></n-icon>
             PPT 生成
-          </p>
-          <p @click="navigateTo('/translate')">
+          </a>
+          <a href="/translate" @click.prevent="navigateTo('/translate')">
             <n-icon><PhoneIcon /></n-icon>
             论文翻译
-          </p>
-          <p @click="navigateTo('/openclaw')">
+          </a>
+          <a href="/openclaw" @click.prevent="navigateTo('/openclaw')">
             <n-icon><MailIcon /></n-icon>
             OpenClaw 对话
-          </p>
+          </a>
         </div>
       </div>
     </div>
 
     <div class="footer-bottom">
       <div class="container">
-        <p class="copyright">© 2024 Company. All rights reserved. 京ICP备XXXXXXXX号</p>
+        <p class="copyright">© 2026 Research Desk. Personal research tools.</p>
       </div>
     </div>
-  </div>
+  </footer>
 </template>
 
 <script setup>
@@ -74,7 +74,7 @@ import {
 
 const router = useRouter()
 
-const LogoIcon = () => '🏢'
+const LogoIcon = () => '▣'
 const WechatIcon = LogoWechat
 const WeiboIcon = ShareSocial
 const LinkedinIcon = LogoLinkedin
@@ -159,10 +159,11 @@ const navigateTo = (path) => {
     list-style: none;
     padding: 0;
 
-    li {
+    a {
+      display: inline-block;
       color: $text-color-secondary;
       margin-bottom: $spacing-sm;
-      cursor: pointer;
+      text-decoration: none;
       transition: all $transition-fast;
       font-size: $font-size-base;
 
@@ -174,7 +175,7 @@ const navigateTo = (path) => {
   }
 
   .contact-info {
-    p {
+    a {
       display: flex;
       align-items: center;
       gap: $spacing-sm;
@@ -182,6 +183,7 @@ const navigateTo = (path) => {
       margin-bottom: $spacing-sm;
       font-size: $font-size-base;
       line-height: $line-height;
+      text-decoration: none;
 
       .n-icon {
         flex-shrink: 0;

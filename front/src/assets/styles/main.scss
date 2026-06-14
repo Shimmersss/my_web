@@ -17,6 +17,24 @@ body {
   overflow-x: hidden;
 }
 
+html {
+  overflow-x: hidden;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
 // 响应式断点
 @each $breakpoint, $width in $breakpoints {
   @media (max-width: $width) {

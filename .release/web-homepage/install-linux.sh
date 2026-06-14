@@ -28,8 +28,19 @@ command -v java >/dev/null 2>&1 || {
   exit 1
 }
 
+command -v uv >/dev/null 2>&1 || {
+  echo "uv not found. Install uv first; runtime PPT/PDF features depend on uv run for python-pptx, Pillow, BabelDOC, Docling and MarkItDown."
+  echo "For example: curl -LsSf https://astral.sh/uv/install.sh | sh"
+  exit 1
+}
+
 if ! java -version 2>&1 | grep -Eq 'version "17|version "18|version "19|version "2[0-9]|openjdk version "17|openjdk version "18|openjdk version "19|openjdk version "2[0-9]'; then
   warn "Java exists, but it may be older than 17. Spring Boot 3 requires Java 17+."
+fi
+
+if systemctl list-unit-files "$SERVICE_NAME.service" >/dev/null 2>&1; then
+  info "Stopping existing backend service before replacing files ..."
+  systemctl stop "$SERVICE_NAME.service" || true
 fi
 
 info "Installing files to $INSTALL_DIR ..."
@@ -68,7 +79,7 @@ sed "s#__INSTALL_DIR__#$INSTALL_DIR#g; s#__ENV_FILE__#$ENV_FILE#g" \
 
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME.service" >/dev/null
-systemctl restart "$SERVICE_NAME.service"
+systemctl start "$SERVICE_NAME.service"
 
 if command -v nginx >/dev/null 2>&1; then
   info "Installing Nginx site ..."

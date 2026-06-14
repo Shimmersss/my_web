@@ -1,16 +1,18 @@
 <template>
-  <div class="translate-page">
+  <div class="translate-page tool-page">
     <div class="container">
+      <div class="tool-page__header">
+        <h1>论文翻译</h1>
+        <p>上传英文 PDF，配置页面范围后进入后台队列，并生成中文或双语 PDF。</p>
+      </div>
+
       <!-- 上传态 -->
       <div v-if="step === 'upload'" class="upload-section">
-        <div class="upload-header">
-          <h1>论文翻译</h1>
-          <p>上传英文 PDF 论文，任务将进入后台队列并自动翻译为中文</p>
-        </div>
-
-        <div
+        <button
+          type="button"
           class="drop-zone"
           :class="{ dragging: isDragging }"
+          aria-describedby="translate-upload-hint"
           @dragover.prevent="isDragging = true"
           @dragleave.prevent="isDragging = false"
           @drop.prevent="handleDrop"
@@ -22,15 +24,9 @@
             </n-icon>
           </div>
           <p class="drop-text">拖拽 PDF 到此处，或点击选择文件</p>
-          <p class="drop-hint">支持 .pdf 格式，最大 50MB</p>
-          <input
-            ref="fileInput"
-            type="file"
-            accept=".pdf"
-            style="display: none"
-            @change="handleFileSelect"
-          />
-        </div>
+          <p id="translate-upload-hint" class="drop-hint">支持 .pdf 格式，最大 50MB</p>
+        </button>
+        <input ref="fileInput" class="visually-hidden" type="file" accept=".pdf" aria-label="选择需要翻译的 PDF 文件" @change="handleFileSelect" />
 
         <n-alert v-if="errorMsg" type="error" :title="errorMsg" closable @close="errorMsg = ''" style="margin-top: 16px" />
       </div>
@@ -54,10 +50,20 @@
               文件正在上传到服务器并读取页数，完成后即可选择翻译范围。
             </n-alert>
 
+            <n-alert
+              v-if="textQualityWarning"
+              type="warning"
+              title="PDF 文本层可能不可用"
+              style="margin-bottom: 20px"
+            >
+              {{ textQualityWarning }}
+            </n-alert>
+
             <div class="range-label">翻译页面范围</div>
             <div class="range-row">
               <n-input-number
                 v-model:value="startPage"
+                aria-label="翻译起始页"
                 :min="1"
                 :max="endPage"
                 :disabled="isUploading || !taskId"
@@ -67,6 +73,7 @@
               <span class="range-sep">至</span>
               <n-input-number
                 v-model:value="endPage"
+                aria-label="翻译结束页"
                 :min="startPage"
                 :max="totalPages"
                 :disabled="isUploading || !taskId"
@@ -83,6 +90,7 @@
             <div class="range-label option-label">译文字体风格</div>
             <n-select
               v-model:value="fontFamily"
+              aria-label="译文字体风格"
               :options="fontFamilyOptions"
               :disabled="isUploading || !taskId"
               style="width: 100%"
@@ -129,7 +137,7 @@
           </div>
         </div>
 
-        <div class="progress-bar-wrap">
+        <div class="progress-bar-wrap" role="status" aria-live="polite">
           <n-progress
             type="line"
             :percentage="translationProgress"
@@ -292,6 +300,8 @@ const errorMsg = ref('')
 const fileInput = ref(null)
 const fileName = ref('')
 const taskId = ref('')
+const textQualitySuspicious = ref(false)
+const textQualityWarning = ref('')
 const totalPages = ref(0)
 const startPage = ref(1)
 const endPage = ref(1)
@@ -361,6 +371,8 @@ async function processFile(file) {
 
   fileName.value = file.name
   taskId.value = ''
+  textQualitySuspicious.value = false
+  textQualityWarning.value = ''
   totalPages.value = 0
   startPage.value = 1
   endPage.value = 1
@@ -374,6 +386,8 @@ async function processFile(file) {
     }
 
     taskId.value = res.data.taskId
+    textQualitySuspicious.value = Boolean(res.data.textQualitySuspicious)
+    textQualityWarning.value = res.data.textQualityWarning || ''
     totalPages.value = res.data.totalPages
     startPage.value = 1
     endPage.value = res.data.totalPages
@@ -384,6 +398,8 @@ async function processFile(file) {
     loadRecentTranslations()
   } catch (e) {
     errorMsg.value = e.message || '上传失败，请重试'
+    textQualitySuspicious.value = false
+    textQualityWarning.value = ''
   } finally {
     isUploading.value = false
   }
@@ -592,6 +608,8 @@ function resetToUpload() {
   pdfPreviewMode.value = 'translated'
   totalPages.value = 0
   taskId.value = ''
+  textQualitySuspicious.value = false
+  textQualityWarning.value = ''
   fileName.value = ''
   sessionStorage.removeItem('translateTaskId')
 }
@@ -652,6 +670,8 @@ async function restoreTask(savedTaskId, notify = false) {
   }
   taskId.value = savedTaskId
   fileName.value = data.fileName
+  textQualitySuspicious.value = Boolean(data.textQualitySuspicious)
+  textQualityWarning.value = data.textQualityWarning || ''
   totalPages.value = data.totalPages || 0
   startPage.value = data.startPage || 1
   endPage.value = data.endPage || data.totalPages || 1
@@ -715,9 +735,6 @@ onBeforeUnmount(() => {
 @use '@/assets/styles/variables' as *;
 
 .translate-page {
-  padding-top: 80px;
-  padding-bottom: 60px;
-  min-height: 100vh;
   background: #f6f8fb;
 }
 
@@ -725,6 +742,7 @@ onBeforeUnmount(() => {
   max-width: 960px;
   margin: 0 auto;
   padding: 0 $spacing-lg;
+  min-width: 0;
 }
 
 .recent-section {
@@ -817,25 +835,10 @@ onBeforeUnmount(() => {
   align-items: center;
 }
 
-.upload-header {
-  text-align: center;
-  margin-bottom: 32px;
-
-  h1 {
-    font-size: 32px;
-    font-weight: 700;
-    color: $text-color;
-    margin: 0 0 8px;
-  }
-
-  p {
-    font-size: 16px;
-    color: #888;
-    margin: 0;
-  }
-}
-
 .drop-zone {
+  appearance: none;
+  color: inherit;
+  font: inherit;
   width: 100%;
   max-width: 600px;
   padding: 60px 40px;
@@ -854,6 +857,11 @@ onBeforeUnmount(() => {
     box-shadow: 0 8px 24px rgba(24, 144, 255, 0.1);
   }
 
+  &:focus-visible {
+    outline: 3px solid rgba(24, 144, 255, 0.3);
+    outline-offset: 4px;
+  }
+
   .drop-icon {
     margin-bottom: 16px;
   }
@@ -870,6 +878,18 @@ onBeforeUnmount(() => {
     color: #aaa;
     margin: 0;
   }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* ===== 配置态 ===== */
@@ -929,6 +949,11 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.range-row :deep(.n-input-number) {
+  flex: 1 1 120px;
+  min-width: 0;
 }
 
 .range-sep {
@@ -1036,6 +1061,8 @@ onBeforeUnmount(() => {
   font-size: 16px;
   font-weight: 500;
   color: $text-color;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .result-actions {
@@ -1043,6 +1070,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .pdf-preview-panel {
@@ -1061,6 +1089,7 @@ onBeforeUnmount(() => {
   padding: 14px 16px;
   border-bottom: 1px solid #eef0f3;
   background: #fafbfc;
+  min-width: 0;
 
   h3 {
     margin: 0;
@@ -1142,15 +1171,37 @@ onBeforeUnmount(() => {
 
 /* ===== 响应式 ===== */
 @media (max-width: 768px) {
-  .translate-page {
-    padding-top: 72px;
+  .container {
+    padding: 0 16px;
+  }
+
+  .recent-section {
+    padding: 18px 16px;
+    border-radius: 12px;
+  }
+
+  .recent-header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .drop-zone {
-    padding: 40px 24px;
+    padding: 36px 18px;
   }
 
-  .config-card,
+  .config-header,
+  .progress-header {
+    align-items: flex-start;
+  }
+
+  .config-header {
+    padding: 20px 16px;
+  }
+
+  .config-body {
+    padding: 20px 16px;
+  }
+
   .progress-section,
   .result-section {
     padding: 20px 16px;
@@ -1165,9 +1216,39 @@ onBeforeUnmount(() => {
     flex-wrap: wrap;
   }
 
+  .range-sep {
+    flex: 0 0 auto;
+  }
+
+  .result-actions,
+  .result-actions :deep(.n-radio-group),
+  .result-actions :deep(.n-button) {
+    width: 100%;
+  }
+
+  .result-actions :deep(.n-radio-group) {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pdf-preview-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .pdf-preview-frame,
+  .pdf-preview-loading {
+    height: 62vh;
+    min-height: 360px;
+  }
+
   .recent-item {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .recent-copy strong {
+    white-space: normal;
   }
 }
 </style>

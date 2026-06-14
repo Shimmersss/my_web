@@ -1,38 +1,45 @@
 <template>
   <div class="customer-service">
     <!-- 悬浮按钮 -->
-    <div class="float-btn" @click="showChat = true">
+    <button class="float-btn" type="button" aria-label="邮件联系" @click="showMailForm = true">
       <n-icon size="28" color="#fff">
-        <ChatbubbleEllipsesOutline />
+        <MailOutline />
       </n-icon>
-    </div>
+    </button>
 
-    <!-- 对话框 -->
-    <n-modal v-model:show="showChat" preset="card" :style="{ width: '400px' }" title="在线客服">
-      <div class="chat-content">
-        <div class="chat-messages" ref="messagesRef">
-          <div v-for="msg in messages" :key="msg.id" :class="['message', msg.type]">
-            <div class="message-avatar">
-              <n-icon size="24">
-                <PersonOutline v-if="msg.type === 'customer'" />
-                <ChatbubbleEllipsesOutline v-else />
-              </n-icon>
-            </div>
-            <div class="message-content">{{ msg.content }}</div>
-          </div>
+    <!-- 邮件表单 -->
+    <n-modal v-model:show="showMailForm" preset="card" :style="{ width: 'min(92vw, 520px)' }" title="邮件联系">
+      <div class="mail-panel">
+        <p class="mail-hint">填写信息后会打开本机邮件应用，收件人已设为：</p>
+        <div class="mail-address">
+          <n-icon size="20"><MailOutline /></n-icon>
+          <span>{{ contactEmail }}</span>
+          <n-button text type="primary" size="small" @click="copyEmail">
+            复制
+          </n-button>
         </div>
-        <div class="chat-input">
+
+        <div class="mail-fields">
+          <n-input v-model:value="mailForm.name" aria-label="姓名或称呼" placeholder="姓名 / 称呼（选填）" />
+          <n-input v-model:value="mailForm.contact" aria-label="联系方式" placeholder="联系方式（邮箱、QQ、微信等，选填）" />
+          <n-input v-model:value="mailForm.subject" aria-label="邮件主题" placeholder="主题，例如：PPT 生成问题" />
           <n-input
-            v-model:value="inputMessage"
-            placeholder="请输入您的问题..."
-            @keyup.enter="sendMessage"
-          >
-            <template #suffix>
-              <n-button text @click="sendMessage">
-                <n-icon><SendOutline /></n-icon>
-              </n-button>
+            v-model:value="mailForm.message"
+            type="textarea"
+            aria-label="留言内容"
+            placeholder="请写下你想反馈的问题、需求或任务链接"
+            :autosize="{ minRows: 5, maxRows: 8 }"
+          />
+        </div>
+
+        <div class="mail-actions">
+          <n-button @click="showMailForm = false">取消</n-button>
+          <n-button type="primary" @click="sendMail">
+            <template #icon>
+              <n-icon><SendOutline /></n-icon>
             </template>
-          </n-input>
+            发送邮件
+          </n-button>
         </div>
       </div>
     </n-modal>
@@ -40,58 +47,53 @@
 </template>
 
 <script setup>
-import { ref, nextTick } from 'vue'
-import { NModal, NInput, NButton, NIcon } from 'naive-ui'
+import { reactive, ref } from 'vue'
+import { NModal, NInput, NButton, NIcon, useMessage } from 'naive-ui'
 import {
-  ChatbubbleEllipsesOutline,
-  PersonOutline,
+  MailOutline,
   SendOutline
 } from '@vicons/ionicons5'
 
-const showChat = ref(false)
-const inputMessage = ref('')
-const messagesRef = ref(null)
+const contactEmail = '1241420431@qq.com'
+const showMailForm = ref(false)
+const message = useMessage()
 
-const messages = ref([
-  { id: 1, type: 'service', content: '您好！我是智能客服，有什么可以帮您的？' }
-])
+const mailForm = reactive({
+  name: '',
+  contact: '',
+  subject: '',
+  message: ''
+})
 
-const sendMessage = () => {
-  if (!inputMessage.value.trim()) return
+const buildMailBody = () => [
+  `姓名/称呼：${mailForm.name || '未填写'}`,
+  `联系方式：${mailForm.contact || '未填写'}`,
+  '',
+  '留言内容：',
+  mailForm.message,
+  '',
+  `页面来源：${window.location.href}`
+].join('\n')
 
-  messages.value.push({
-    id: Date.now(),
-    type: 'customer',
-    content: inputMessage.value
-  })
+const sendMail = () => {
+  if (!mailForm.subject.trim() || !mailForm.message.trim()) {
+    message.warning('请至少填写主题和留言内容')
+    return
+  }
 
-  const customerMsg = inputMessage.value
-  inputMessage.value = ''
+  const subject = encodeURIComponent(`[Research Desk] ${mailForm.subject.trim()}`)
+  const body = encodeURIComponent(buildMailBody())
+  window.location.href = `mailto:${contactEmail}?subject=${subject}&body=${body}`
+  message.success('已打开邮件应用，请确认发送')
+}
 
-  nextTick(() => {
-    messagesRef.value?.scrollTo({ top: messagesRef.value.scrollHeight })
-  })
-
-  setTimeout(() => {
-    let reply = '感谢您的咨询，我们的客服人员会尽快联系您。'
-    if (customerMsg.includes('价格')) {
-      reply = '我们的产品价格根据具体需求而定，您可以留下联系方式，我们会为您详细报价。'
-    } else if (customerMsg.includes('合作')) {
-      reply = '非常感谢您的合作意向！请访问我们的招商加盟页面了解更多信息。'
-    } else if (customerMsg.includes('产品')) {
-      reply = '我们提供多种产品和服务，您可以在业务模块页面查看详细介绍。'
-    }
-
-    messages.value.push({
-      id: Date.now(),
-      type: 'service',
-      content: reply
-    })
-
-    nextTick(() => {
-      messagesRef.value?.scrollTo({ top: messagesRef.value.scrollHeight })
-    })
-  }, 1000)
+const copyEmail = async () => {
+  try {
+    await navigator.clipboard.writeText(contactEmail)
+    message.success('邮箱已复制')
+  } catch (error) {
+    message.info(contactEmail)
+  }
 }
 </script>
 
@@ -100,6 +102,9 @@ const sendMessage = () => {
 
 .customer-service {
   .float-btn {
+    appearance: none;
+    border: 0;
+    padding: 0;
     position: fixed;
     bottom: $spacing-xl;
     right: $spacing-xl;
@@ -119,55 +124,49 @@ const sendMessage = () => {
       transform: scale(1.1);
       box-shadow: 0 8px 40px rgba(24, 144, 255, 0.4);
     }
+
+    &:focus-visible {
+      outline: 3px solid rgba(24, 144, 255, 0.35);
+      outline-offset: 4px;
+    }
   }
 
-  .chat-content {
-    .chat-messages {
-      height: 400px;
-      overflow-y: auto;
-      padding: $spacing-md;
+  .mail-panel {
+    display: grid;
+    gap: $spacing-md;
+
+    .mail-hint {
+      margin: 0;
+      color: $text-color-secondary;
+      line-height: $line-height;
+    }
+
+    .mail-address {
+      display: flex;
+      align-items: center;
+      gap: $spacing-sm;
+      padding: $spacing-sm $spacing-md;
       background: $bg-color-secondary;
       border-radius: $border-radius-base;
-      margin-bottom: $spacing-md;
+      color: $text-color;
+      font-weight: 600;
 
-      .message {
-        display: flex;
-        gap: $spacing-sm;
-        margin-bottom: $spacing-md;
-
-        &.customer {
-          flex-direction: row-reverse;
-
-          .message-content {
-            background: $primary-color;
-            color: #fff;
-          }
-        }
-
-        &.service {
-          .message-content {
-            background: #fff;
-          }
-        }
-
-        .message-avatar {
-          flex-shrink: 0;
-          width: 32px;
-          height: 32px;
-          border-radius: 50%;
-          background: #e0e0e0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-        }
-
-        .message-content {
-          max-width: 70%;
-          padding: $spacing-sm $spacing-md;
-          border-radius: $border-radius-base;
-          line-height: $line-height;
-        }
+      span {
+        flex: 1;
+        min-width: 0;
+        word-break: break-all;
       }
+    }
+
+    .mail-fields {
+      display: grid;
+      gap: $spacing-sm;
+    }
+
+    .mail-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: $spacing-sm;
     }
   }
 }

@@ -1,10 +1,10 @@
 <template>
   <transition name="fade">
-    <div v-if="show" class="scroll-to-top" @click="handleClick">
+    <button v-if="show" class="scroll-to-top" type="button" aria-label="返回页面顶部" @click="handleClick">
       <n-icon size="24" color="#fff">
         <ChevronUpOutline />
       </n-icon>
-    </div>
+    </button>
   </transition>
 </template>
 
@@ -23,6 +23,9 @@ const handleClick = scrollToTop
 @use '@/assets/styles/variables' as *;
 
 .scroll-to-top {
+  appearance: none;
+  border: 0;
+  padding: 0;
   position: fixed;
   bottom: $spacing-xl;
   right: $spacing-xl;
@@ -41,6 +44,11 @@ const handleClick = scrollToTop
   &:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 40px rgba(24, 144, 255, 0.5);
+  }
+
+  &:focus-visible {
+    outline: 3px solid rgba(24, 144, 255, 0.35);
+    outline-offset: 4px;
   }
 }
 

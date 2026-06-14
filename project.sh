@@ -100,23 +100,13 @@ start_backend() {
 
   cd "$BACKEND_DIR"
 
-  if [[ -f scripts/pptx-generator/package.json ]]; then
-    if [[ ! -d scripts/pptx-generator/node_modules ]]; then
-      info "安装 PPT 生成器依赖 ..."
-      npm install --omit=dev --prefix scripts/pptx-generator --cache /tmp/web-homepage-npm-cache || {
-        err "PPT 生成器依赖安装失败"
-        cd - >/dev/null
-        return 1
-      }
-    fi
-  fi
-
   # 只在源码有更新时才重新打包（跳过 tests）
   local need_build=true
   if [[ -f "$BACKEND_JAR" ]]; then
-    # 找到 src 目录下最近修改的文件时间
+    # 找到 src/scripts 目录下最近修改的文件时间。scripts 也会被打进 jar，
+    # 例如 PPT renderer / template-fill 脚本变更必须触发重打包。
     local newest_src
-    newest_src=$(find src -type f \( -name '*.java' -o -name '*.xml' -o -name '*.properties' -o -name '*.yml' \) -exec stat -f '%m' {} \; 2>/dev/null | sort -rn | head -1)
+    newest_src=$(find src scripts -type f \( -name '*.java' -o -name '*.xml' -o -name '*.properties' -o -name '*.yml' -o -name '*.py' -o -name '*.json' \) -exec stat -f '%m' {} \; 2>/dev/null | sort -rn | head -1)
     local jar_time
     jar_time=$(stat -f '%m' "$BACKEND_JAR" 2>/dev/null)
     if [[ -n "$newest_src" && -n "$jar_time" ]] && [[ "$jar_time" -ge "$newest_src" ]]; then
@@ -138,9 +128,43 @@ start_backend() {
 
   # 启动 Spring Boot
   info "启动 Java 进程 ..."
-  nohup "$JAVA_HOME/bin/java" -jar "$BACKEND_JAR" >"$BACKEND_LOG" 2>&1 &
-  echo $! >"$BACKEND_PID"
-  disown "$!" 2>/dev/null || true
+  local java_cmd=("$JAVA_HOME/bin/java" -jar "$BACKEND_JAR")
+  local spawned_pid=""
+  if command -v setsid &>/dev/null; then
+    nohup setsid "${java_cmd[@]}" >"$BACKEND_LOG" 2>&1 < /dev/null &
+    spawned_pid="$!"
+    echo "$spawned_pid" >"$BACKEND_PID"
+  elif command -v python3 &>/dev/null; then
+    JAVA_BIN="${java_cmd[0]}" BACKEND_JAR="$BACKEND_JAR" BACKEND_LOG="$BACKEND_LOG" BACKEND_PID="$BACKEND_PID" python3 - <<'PY'
+import os
+import sys
+
+java_bin = os.environ["JAVA_BIN"]
+jar_path = os.environ["BACKEND_JAR"]
+log_path = os.environ["BACKEND_LOG"]
+pid_path = os.environ["BACKEND_PID"]
+
+pid = os.fork()
+if pid:
+    with open(pid_path, "w", encoding="utf-8") as handle:
+        handle.write(str(pid))
+    sys.exit(0)
+
+os.setsid()
+with open(os.devnull, "rb", buffering=0) as stdin, open(log_path, "wb", buffering=0) as log:
+    os.dup2(stdin.fileno(), 0)
+    os.dup2(log.fileno(), 1)
+    os.dup2(log.fileno(), 2)
+os.execv(java_bin, [java_bin, "-jar", jar_path])
+PY
+  else
+    nohup "${java_cmd[@]}" >"$BACKEND_LOG" 2>&1 < /dev/null &
+    spawned_pid="$!"
+    echo "$spawned_pid" >"$BACKEND_PID"
+  fi
+  if [[ -n "$spawned_pid" ]]; then
+    disown "$spawned_pid" 2>/dev/null || true
+  fi
   cd - >/dev/null
 
   info "等待后端就绪 (超时: ${BACKEND_TIMEOUT}s) ..."

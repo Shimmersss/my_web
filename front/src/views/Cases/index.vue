@@ -68,6 +68,8 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { NButton, NGrid, NGridItem, NTag, NPagination, NIcon } from 'naive-ui'
 import { CalendarOutline, PersonOutline } from '@vicons/ionicons5'
+import heroImage from '@/assets/images/research-workbench-hero.jpg'
+import pipelineImage from '@/assets/images/research-pipeline-panel.jpg'
 
 const router = useRouter()
 const page = ref(1)
@@ -76,81 +78,81 @@ const selectedType = ref('all')
 
 const industries = ref([
   { id: 'all', name: '全部' },
-  { id: 'finance', name: '金融' },
-  { id: 'retail', name: '零售' },
-  { id: 'manufacturing', name: '制造' },
-  { id: 'technology', name: '科技' },
-  { id: 'education', name: '教育' }
+  { id: 'library', name: '文献' },
+  { id: 'translate', name: '翻译' },
+  { id: 'ppt', name: 'PPT' },
+  { id: 'chat', name: '对话' },
+  { id: 'ops', name: '运维' }
 ])
 
 const types = ref([
   { id: 'all', name: '全部' },
-  { id: 'transformation', name: '数字化转型' },
-  { id: 'ai', name: '人工智能' },
-  { id: 'cloud', name: '云计算' },
-  { id: 'data', name: '数据分析' }
+  { id: 'frontend', name: '前端体验' },
+  { id: 'backend', name: '后端链路' },
+  { id: 'asset', name: '产物生成' },
+  { id: 'deploy', name: '部署验证' }
 ])
 
 const cases = ref([
   {
     id: 1,
-    title: '某大型银行数字化转型',
-    summary: '帮助客户实现全渠道数字化升级，提升客户体验',
-    industry: '金融',
-    type: '数字化转型',
-    date: '2024-01-15',
-    client: '某大型银行',
-    image: 'https://picsum.photos/400/300'
+    title: 'Zotero 文献检索样例',
+    summary: '通过缓存接口查看条目、附件和引用导出',
+    industry: '文献',
+    type: '前端体验',
+    date: '2026-06-11',
+    client: '研究资料',
+    image: pipelineImage
   },
   {
     id: 2,
-    title: '电商平台智能推荐系统',
-    summary: 'AI驱动的个性化推荐，提升转化率30%',
-    industry: '零售',
-    type: '人工智能',
-    date: '2024-01-10',
-    client: '某电商平台',
-    image: 'https://picsum.photos/400/300'
+    title: '论文翻译预览样例',
+    summary: '选择页码范围并检查纯中文 / 双语 PDF',
+    industry: '翻译',
+    type: '产物生成',
+    date: '2026-06-11',
+    client: 'PDF 论文',
+    image: heroImage
   },
   {
     id: 3,
-    title: '智能制造平台搭建',
-    summary: '实现生产流程数字化，效率提升50%',
-    industry: '制造',
-    type: '数字化转型',
-    date: '2024-01-05',
-    client: '某制造企业',
-    image: 'https://picsum.photos/400/300'
+    title: '答辩 PPT 生成样例',
+    summary: '上传论文和可选模板，生成可编辑 PPTX',
+    industry: 'PPT',
+    type: '产物生成',
+    date: '2026-06-11',
+    client: '答辩材料',
+    image: pipelineImage
   },
   {
     id: 4,
-    title: '企业云迁移项目',
-    summary: '平稳迁移至云端，成本降低40%',
-    industry: '科技',
-    type: '云计算',
-    date: '2023-12-20',
-    client: '某科技公司',
-    image: 'https://picsum.photos/400/300'
+    title: 'OpenClaw 会话样例',
+    summary: '读取模型、历史和产物下载入口',
+    industry: '对话',
+    type: '后端链路',
+    date: '2026-06-11',
+    client: '本机会话',
+    image: heroImage
   },
   {
     id: 5,
-    title: '在线教育平台开发',
-    summary: '打造一站式在线学习平台',
-    industry: '教育',
-    type: '数字化转型',
-    date: '2023-12-15',
-    client: '某教育机构',
-    image: 'https://picsum.photos/400/300'
+    title: 'GitHub README 代理样例',
+    summary: '由后端获取仓库信息和 README',
+    industry: '运维',
+    type: '后端链路',
+    date: '2026-06-11',
+    client: '开源项目',
+    image: pipelineImage
   },
   {
     id: 6,
-    title: '大数据分析平台',
-    summary: '构建企业级数据分析平台，辅助决策',
-    industry: '金融',
-    type: '数据分析',
-    date: '2023-12-10',
-    client: '某金融机构',
-    image: 'https://picsum.photos/400/300'
+    title: '低资源部署样例',
+    summary: '按 2 核 4GB 基线限制队列、内存和任务保留',
+    industry: '运维',
+    type: '部署验证',
+    date: '2026-06-11',
+    client: '生产基线',
+    image: heroImage
   }
 ])
 

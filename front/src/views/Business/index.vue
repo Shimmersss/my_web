@@ -1,6 +1,6 @@
 <template>
   <div class="business-page">
-    <!-- 业务分类导航 -->
+    <!-- 工具分类导航 -->
     <section class="section">
       <div class="container">
         <div class="category-nav">
@@ -40,7 +40,7 @@
       </div>
     </section>
 
-    <!-- 解决方案 -->
+    <!-- 工作流组合 -->
     <section class="section" style="background: #f5f5f5">
       <div class="container">
         <h2 class="section__title">{{ $t('business.solution') }}</h2>
@@ -68,7 +68,7 @@
       </div>
     </section>
 
-    <!-- 服务流程 -->
+    <!-- 使用流程 -->
     <section class="section">
       <div class="container">
         <h2 class="section__title">{{ $t('business.process') }}</h2>
@@ -108,125 +108,127 @@ import {
   CheckmarkCircleOutline,
   ArrowForwardOutline
 } from '@vicons/ionicons5'
+import heroImage from '@/assets/images/research-workbench-hero.jpg'
+import pipelineImage from '@/assets/images/research-pipeline-panel.jpg'
 
 const router = useRouter()
 const selectedCategory = ref('all')
 
 const categories = ref([
   { id: 'all', name: '全部' },
-  { id: 'cloud', name: '云计算' },
-  { id: 'data', name: '数据分析' },
-  { id: 'consult', name: '技术咨询' },
-  { id: 'ai', name: '人工智能' },
-  { id: 'mobile', name: '移动开发' },
-  { id: 'security', name: '安全服务' }
+  { id: 'library', name: '文献' },
+  { id: 'translate', name: '翻译' },
+  { id: 'ppt', name: 'PPT' },
+  { id: 'chat', name: '对话' },
+  { id: 'open-source', name: '开源' },
+  { id: 'ops', name: '运维' }
 ])
 
 const services = ref([
   {
     id: 1,
-    category: 'cloud',
-    title: '云计算服务',
-    description: '提供稳定可靠的云计算解决方案，帮助企业实现云转型',
+    category: 'library',
+    title: 'Zotero 文献库',
+    description: '展示私有 Zotero 库、附件代理和引用导出',
     icon: CloudOutline,
     color: '#1890ff',
-    image: 'https://picsum.photos/400/300'
+    image: pipelineImage
   },
   {
     id: 2,
-    category: 'data',
-    title: '数据分析',
-    description: '专业的数据分析与商业智能服务，洞察数据价值',
+    category: 'translate',
+    title: 'PDF 论文翻译',
+    description: '按页面范围生成保留版式的中文或双语 PDF',
     icon: AnalyticsOutline,
     color: '#52c41a',
-    image: 'https://picsum.photos/400/300'
+    image: heroImage
   },
   {
     id: 3,
-    category: 'consult',
-    title: '技术咨询',
-    description: '全方位的技术咨询与架构设计，赋能企业发展',
+    category: 'ppt',
+    title: 'PPT 生成',
+    description: '论文、提示词和 PPTX 模板生成可编辑演示稿',
     icon: BuildOutline,
     color: '#faad14',
-    image: 'https://picsum.photos/400/300'
+    image: pipelineImage
   },
   {
     id: 4,
-    category: 'ai',
-    title: '人工智能',
-    description: 'AI驱动的智能化解决方案，引领行业创新',
+    category: 'chat',
+    title: 'OpenClaw 对话',
+    description: '站内管理 OpenClaw 会话、模型、历史和产物',
     icon: RocketOutline,
     color: '#722ed1',
-    image: 'https://picsum.photos/400/300'
+    image: heroImage
   },
   {
     id: 5,
-    category: 'mobile',
-    title: '移动开发',
-    description: '跨平台移动应用开发服务，覆盖iOS和Android',
+    category: 'open-source',
+    title: 'GitHub 项目展示',
+    description: '后端代理仓库元数据和 README，避免前端直连 GitHub',
     icon: CloudOutline,
     color: '#eb2f96',
-    image: 'https://picsum.photos/400/300'
+    image: pipelineImage
   },
   {
     id: 6,
-    category: 'security',
-    title: '安全服务',
-    description: '企业级安全防护体系，保障业务安全',
+    category: 'ops',
+    title: '部署与资源保护',
+    description: '围绕 2 核 4GB 服务器限制控制队列、内存和文件保留',
     icon: CheckmarkCircleOutline,
     color: '#fa541c',
-    image: 'https://picsum.photos/400/300'
+    image: heroImage
   }
 ])
 
 const solutions = ref([
   {
     id: 1,
-    title: '企业数字化转型',
-    description: '提供从战略规划到落地实施的全流程数字化转型服务，帮助企业提升竞争力',
+    title: '论文到答辩工作流',
+    description: '从 Zotero 和论文文件开始，完成阅读、翻译、素材抽取、PPT 生成和结果复查',
     icon: RocketOutline,
     color: '#1890ff',
-    features: ['战略规划', '流程优化', '技术实施', '持续优化']
+    features: ['文献检索', 'PDF 翻译', '图片抽取', 'PPTX 输出']
   },
   {
     id: 2,
-    title: '智能制造解决方案',
-    description: '结合IoT、AI等技术，打造智能化生产体系，提升生产效率和产品质量',
+    title: '本机 AI 工具链',
+    description: '把 OpenClaw、mimo、BabelDOC 和 GitHub/Zotero API 统一收束到站内入口',
     icon: BuildOutline,
     color: '#52c41a',
-    features: ['设备联网', '数据分析', '预测维护', '质量监控']
+    features: ['后端代理', '任务排队', '结果落盘', '低资源保护']
   }
 ])
 
 const process = ref([
   {
     id: 1,
-    title: '需求分析',
-    description: '深入了解客户需求，制定详细的解决方案',
+    title: '选择入口',
+    description: '从文献、翻译、PPT 或 OpenClaw 进入对应任务',
     icon: ChatbubbleEllipsesOutline
   },
   {
     id: 2,
-    title: '方案设计',
-    description: '设计专业的技术方案和实施计划',
+    title: '上传资料',
+    description: '提交 PDF、DOCX、PPTX 模板或直接输入提示词',
     icon: DocumentTextOutline
   },
   {
     id: 3,
-    title: '开发实施',
-    description: '按照方案进行开发，确保项目质量',
+    title: '后台处理',
+    description: '后端按有界队列执行解析、翻译、视觉筛选和渲染',
     icon: BuildOutline
   },
   {
     id: 4,
-    title: '测试验收',
-    description: '进行全面的测试，确保系统稳定可靠',
+    title: '预览下载',
+    description: '在页面检查 PDF、PPTX 或聊天产物后下载结果',
     icon: CheckmarkCircleOutline
   },
   {
     id: 5,
-    title: '上线运维',
-    description: '系统上线并提供持续的技术支持',
+    title: '复查记录',
+    description: '通过任务目录、日志和 manifest 定位质量或资源问题',
     icon: RocketOutline
   }
 ])

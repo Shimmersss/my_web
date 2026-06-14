@@ -1,6 +1,6 @@
 <template>
   <div class="case-detail">
-    <!-- 案例详情 -->
+    <!-- 任务样例详情 -->
     <section class="section">
       <div class="container">
         <div class="case-hero">
@@ -54,7 +54,7 @@
                 </div>
                 <div class="stat-card">
                   <div class="stat-value">{{ caseData.stats.satisfaction }}%</div>
-                  <div class="stat-label">客户满意度</div>
+                  <div class="stat-label">复查完整度</div>
                 </div>
               </div>
             </div>
@@ -63,7 +63,7 @@
 
         <div class="case-actions">
           <n-button type="primary" size="large" @click="navigateTo('/contact')">
-            生成类似案例 PPT
+            生成类似 PPT
           </n-button>
           <n-button size="large" @click="downloadCase">
             <template #icon>
@@ -75,10 +75,10 @@
       </div>
     </section>
 
-    <!-- 相关案例 -->
+    <!-- 相关样例 -->
     <section class="section" style="background: #f5f5f5">
       <div class="container">
-        <h2 class="section__title">相关案例</h2>
+        <h2 class="section__title">相关样例</h2>
         <n-grid :x-gap="24" :y-gap="24" :cols="3">
           <n-grid-item v-for="item in relatedCases" :key="item.id">
             <div class="related-card" @click="navigateTo(`/cases/${item.id}`)">
@@ -106,6 +106,8 @@ import {
   PricetagsOutline,
   DownloadOutline
 } from '@vicons/ionicons5'
+import heroImage from '@/assets/images/research-workbench-hero.jpg'
+import pipelineImage from '@/assets/images/research-pipeline-panel.jpg'
 
 const router = useRouter()
 const route = useRoute()
@@ -113,16 +115,16 @@ const message = useMessage()
 
 const caseData = ref({
   id: 1,
-  title: '某大型银行数字化转型',
-  client: '某大型银行',
-  industry: '金融',
-  type: '数字化转型',
-  date: '2024-01-15',
-  image: 'https://picsum.photos/1200/600',
-  summary: '帮助客户实现全渠道数字化升级，提升客户体验',
-  background: '该银行作为国内领先的金融机构，拥有庞大的客户群体和复杂的业务体系。随着数字化浪潮的到来，传统银行业务模式面临巨大挑战。客户期望更便捷、更个性化的服务体验，同时市场竞争日益激烈。银行需要通过数字化转型来提升运营效率、降低成本、增强核心竞争力。',
-  solution: '我们为该银行提供了一站式数字化转型解决方案：1. 构建全渠道数字化服务平台，整合线上线下资源；2. 实施大数据分析平台，深入挖掘客户需求；3. 引入人工智能技术，实现智能客服和智能风控；4. 建立敏捷开发体系，快速响应业务变化。整个项目历时18个月，涉及300+系统改造，服务覆盖5000万+客户。',
-  result: '项目实施后，该银行数字化转型取得显著成效：1. 客户满意度从75%提升到95%；2. 线上业务占比从30%提升到65%；3. 运营成本降低40%；4. 新产品上线周期从6个月缩短到2个月；5. 风险识别准确率提升30%。该项目成为行业标杆，获得多项创新奖项。',
+  title: '论文到答辩 PPT 工作流',
+  client: '研究资料',
+  industry: 'PPT',
+  type: '产物生成',
+  date: '2026-06-11',
+  image: heroImage,
+  summary: '上传论文和可选模板，生成可编辑答辩 PPTX',
+  background: '旧样例页已从主入口折叠，但直接访问时仍不应展示无关样板内容。因此这里改为研究工具台的任务样例，说明如何把论文材料转为答辩产物。',
+  solution: '用户在 PPT 生成页提交提示词、论文 PDF/DOCX 和可选 PPTX 模板。后端保存任务目录，抽取文本、图片和模板槽位，调用 mimo 规划结构，再用自由 renderer 或模板原生填充链路输出 PPTX。',
+  result: '产物以可下载 PPTX 形式返回，并保留 deck JSON、image-manifest、fill-plan、日志和输出文件，方便复查页面质量、图片使用和资源问题。',
   stats: {
     efficiency: 60,
     cost: 40,
@@ -133,21 +135,21 @@ const caseData = ref({
 const relatedCases = computed(() => [
   {
     id: 2,
-    title: '电商平台智能推荐系统',
-    summary: 'AI驱动的个性化推荐，提升转化率30%',
-    image: 'https://picsum.photos/400/300?random=1'
+    title: 'PDF 翻译预览',
+    summary: '生成纯中文或双语 PDF',
+    image: pipelineImage
   },
   {
     id: 3,
-    title: '智能制造平台搭建',
-    summary: '实现生产流程数字化，效率提升50%',
-    image: 'https://picsum.photos/400/300?random=2'
+    title: 'Zotero 文献代理',
+    summary: '展示条目、分组和附件',
+    image: heroImage
   },
   {
     id: 4,
-    title: '企业云迁移项目',
-    summary: '平稳迁移至云端，成本降低40%',
-    image: 'https://picsum.photos/400/300?random=3'
+    title: 'OpenClaw 对话',
+    summary: '站内访问本机会话',
+    image: pipelineImage
   }
 ])
 
@@ -161,7 +163,7 @@ const navigateTo = (path) => {
 }
 
 const downloadCase = () => {
-  message.info('案例下载功能开发中...')
+  message.info('样例归档下载暂未开放，请使用对应工具页面生成产物。')
 }
 </script>
 

@@ -11,31 +11,31 @@ const routes = [
     path: '/about',
     name: 'About',
     component: () => import('@/views/About/index.vue'),
-    meta: { title: '关于我们' }
+    meta: { title: '项目说明' }
   },
   {
     path: '/business',
     name: 'Business',
     component: () => import('@/views/Business/index.vue'),
-    meta: { title: '业务模块' }
+    meta: { title: '工具模块' }
   },
   {
     path: '/business/:id',
     name: 'BusinessDetail',
     component: () => import('@/views/Business/detail.vue'),
-    meta: { title: '业务详情' }
+    meta: { title: '工具详情' }
   },
   {
     path: '/cases',
     name: 'Cases',
     component: () => import('@/views/Cases/index.vue'),
-    meta: { title: '案例模块' }
+    meta: { title: '任务样例' }
   },
   {
     path: '/cases/:id',
     name: 'CaseDetail',
     component: () => import('@/views/Cases/detail.vue'),
-    meta: { title: '案例详情' }
+    meta: { title: '样例详情' }
   },
   {
     path: '/news',
@@ -79,7 +79,7 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  document.title = `${to.meta.title} - 高端企业官网`
+  document.title = `${to.meta.title} - 研究工具台`
   next()
 })
 

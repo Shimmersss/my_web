@@ -617,6 +617,7 @@ onMounted(async () => {
   display: flex;
   gap: $spacing-sm;
   margin-top: auto;
+  flex-wrap: wrap;
 }
 
 .empty {
@@ -787,12 +788,21 @@ onMounted(async () => {
 }
 
 @media (max-width: 768px) {
+  .open-source-page {
+    overflow-x: hidden;
+  }
+
   .page-head {
     display: block;
 
     .page-actions {
       margin-top: $spacing-md;
       justify-content: flex-start;
+      flex-wrap: wrap;
+    }
+
+    h2 {
+      font-size: 28px;
     }
   }
 
@@ -806,6 +816,32 @@ onMounted(async () => {
 
   .project-grid {
     grid-template-columns: 1fr;
+  }
+
+  .project-card {
+    padding: $spacing-md;
+  }
+
+  .card-top {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .repo-title {
+    flex: 1 1 180px;
+  }
+
+  .metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .card-actions :deep(.n-button) {
+    flex: 1 1 120px;
+  }
+
+  .readme-render {
+    padding: $spacing-md;
+    font-size: 14px;
   }
 
   .login-panel,

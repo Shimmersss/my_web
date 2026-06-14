@@ -1,6 +1,6 @@
 <template>
   <div class="news-detail">
-    <!-- 新闻详情 -->
+    <!-- 项目记录详情 -->
     <section class="section">
       <div class="container">
         <div class="news-hero">
@@ -12,7 +12,7 @@
           <div class="article-content" v-html="newsData.content"></div>
 
           <div class="article-share">
-            <span>分享到：</span>
+            <span>记录入口：</span>
             <n-button circle size="large" class="share-btn">
               <n-icon size="20"><LogoWechat /></n-icon>
             </n-button>
@@ -25,9 +25,9 @@
           </div>
         </article>
 
-        <!-- 相关新闻 -->
+        <!-- 相关记录 -->
         <div class="related-news">
-          <h2>相关新闻</h2>
+          <h2>相关记录</h2>
           <div class="related-list">
             <div v-for="item in relatedNews" :key="item.id" class="related-item" @click="navigateTo(`/news/${item.id}`)">
               <img :src="item.image" :alt="item.title">
@@ -56,6 +56,8 @@ import {
   ShareSocial,
   LogoLinkedin
 } from '@vicons/ionicons5'
+import heroImage from '@/assets/images/research-workbench-hero.jpg'
+import pipelineImage from '@/assets/images/research-pipeline-panel.jpg'
 
 const router = useRouter()
 const route = useRoute()
@@ -64,48 +66,48 @@ const LogoWeibo = ShareSocial
 
 const newsData = ref({
   id: 1,
-  title: '公司荣获2024年度最佳服务商',
-  category: '公司动态',
-  date: '2024-01-15',
-  author: '市场部',
+  title: '研究工具台入口整理',
+  category: '项目记录',
+  date: '2026-06-11',
+  author: 'Research Desk',
   views: 1234,
-  image: 'https://picsum.photos/1200/600',
-  summary: '凭借优质服务和创新技术，公司在2024年度行业评选中荣获最佳服务商奖项',
+  image: heroImage,
+  summary: '把旧模板内容替换为文献、翻译、PPT 和 OpenClaw 工作流入口',
   content: `
-    <p>近日，在2024年度行业评选中，我司凭借卓越的服务质量和持续的技术创新，荣获"最佳服务商"奖项。这是对公司多年来深耕企业服务领域的高度认可。</p>
+    <p>这个页面保留为项目记录详情示例，不再展示无关新闻、获奖或外联内容。</p>
     
-    <h3>评选标准</h3>
-    <p>本次评选从多个维度对参评企业进行综合评估，包括：服务质量、技术创新能力、客户满意度、市场影响力等。我司在各项指标中均表现突出，最终脱颖而出。</p>
+    <h3>当前入口</h3>
+    <p>站点核心入口包括 Zotero 文献库、BabelDOC 论文翻译、PPT 生成和 OpenClaw 对话。浏览器通过站内 API 访问后端，由后端处理外部服务、密钥和任务队列。</p>
     
-    <h3>获奖感言</h3>
-    <p>公司CEO表示："这一荣誉离不开全体员工的辛勤付出和客户的大力支持。我们将以此为新的起点，继续提升服务质量，为客户创造更大的价值。"</p>
+    <h3>视觉资产</h3>
+    <p>首页和关于页使用本地生成的研究工作台图片，替换随机占位图和办公素材。</p>
     
-    <h3>未来发展</h3>
-    <p>获得这一奖项将进一步坚定公司的发展信心。未来，我们将持续加大研发投入，推出更多创新产品和服务，助力企业数字化转型。同时，我们也将积极参与行业交流，为行业发展贡献力量。</p>
+    <h3>维护原则</h3>
+    <p>后续新增功能继续按低资源服务器基线、服务端代理和可复查产物来组织，不恢复通用模板话术。</p>
   `
 })
 
 const relatedNews = computed(() => [
   {
     id: 2,
-    title: '发布新产品2.0版本',
-    summary: '经过半年的研发，公司推出新产品2.0版本',
-    date: '2024-01-10',
-    image: 'https://picsum.photos/200/150'
+    title: 'PPT 生成链路',
+    summary: '论文、提示词和可选模板生成 PPTX',
+    date: '2026-06-11',
+    image: pipelineImage
   },
   {
     id: 3,
-    title: '参加行业峰会并发表主题演讲',
-    summary: '公司CEO受邀参加年度行业峰会',
-    date: '2024-01-05',
-    image: 'https://picsum.photos/200/150'
+    title: 'PDF 翻译链路',
+    summary: 'BabelDOC 输出纯中文或双语 PDF',
+    date: '2026-06-11',
+    image: heroImage
   },
   {
     id: 4,
-    title: '与知名企业达成战略合作',
-    summary: '公司与某世界500强企业签署战略合作协议',
-    date: '2023-12-28',
-    image: 'https://picsum.photos/200/150'
+    title: 'OpenClaw 对话',
+    summary: '站内访问本机会话、模型和产物',
+    date: '2026-06-11',
+    image: pipelineImage
   }
 ])
 

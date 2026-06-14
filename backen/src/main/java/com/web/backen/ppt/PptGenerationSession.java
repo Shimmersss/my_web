@@ -1,9 +1,11 @@
 package com.web.backen.ppt;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.nio.file.Path;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class PptGenerationSession {
 
     private String taskId;
@@ -11,7 +13,6 @@ public class PptGenerationSession {
     private String prompt;
     private String templateKey = "academic-blue";
     private String templateFileName;
-    private String templateMode = "framework";
     private int extractionPercent = 50;
     private String paperFileName;
     private String outputFileName;
@@ -45,8 +46,6 @@ public class PptGenerationSession {
     public void setTemplateKey(String templateKey) { this.templateKey = templateKey; touch(); }
     public String getTemplateFileName() { return templateFileName; }
     public void setTemplateFileName(String templateFileName) { this.templateFileName = templateFileName; touch(); }
-    public String getTemplateMode() { return templateMode; }
-    public void setTemplateMode(String templateMode) { this.templateMode = templateMode; touch(); }
     public int getExtractionPercent() { return extractionPercent; }
     public void setExtractionPercent(int extractionPercent) { this.extractionPercent = extractionPercent; touch(); }
     public String getPaperFileName() { return paperFileName; }
@@ -86,8 +85,6 @@ public class PptGenerationSession {
     public Path getStyleJsonPath() { return taskDir.resolve("style.json"); }
     @JsonIgnore
     public Path getImageManifestPath() { return taskDir.resolve("image-manifest.json"); }
-    @JsonIgnore
-    public Path getAssetCachePath() { return taskDir.resolve("asset-cache.json"); }
     @JsonIgnore
     public Path getImagesDir() { return taskDir.resolve("images"); }
     @JsonIgnore

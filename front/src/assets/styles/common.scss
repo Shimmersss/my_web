@@ -1,12 +1,27 @@
 @use './variables' as *;
 @use './mixins' as *;
 
-// 通用容器 - 企业标准
+// 通用容器 - 研究工具台
 .container {
   max-width: $container-max;
-  min-width: $container-min;
+  width: 100%;
+  min-width: 0;
   margin: 0 auto;
   padding: 0 $spacing-lg;
+}
+
+@media (max-width: 768px) {
+  .container {
+    padding: 0 $spacing-md;
+  }
+
+  .section {
+    padding: 28px 0;
+  }
+
+  .section__title {
+    font-size: 28px;
+  }
 }
 
 // 章节通用样式
@@ -28,6 +43,58 @@
     text-align: center;
     margin-bottom: $spacing-xl;
     line-height: $line-height;
+  }
+}
+
+// 核心工具页共享首屏结构
+.tool-page {
+  min-height: calc(100vh - 72px);
+  padding: 32px 0 56px;
+  background: #f5f7fa;
+}
+
+.tool-page__header {
+  margin-bottom: 24px;
+
+  h1 {
+    margin: 0 0 8px;
+    color: $text-color;
+    font-size: 32px;
+    line-height: 1.25;
+  }
+
+  p {
+    margin: 0;
+    color: $text-color-secondary;
+    line-height: $line-height;
+  }
+}
+
+.tool-page__surface {
+  border: 1px solid $border-color;
+  border-radius: $border-radius-lg;
+  background: #fff;
+  box-shadow: $shadow-sm;
+}
+
+@media (max-width: 992px) {
+  .tool-page {
+    min-height: calc(100vh - 64px);
+    padding-top: 24px;
+  }
+}
+
+@media (max-width: 768px) {
+  .tool-page {
+    padding: 20px 0 40px;
+  }
+
+  .tool-page__header {
+    margin-bottom: 18px;
+
+    h1 {
+      font-size: 28px;
+    }
   }
 }
 

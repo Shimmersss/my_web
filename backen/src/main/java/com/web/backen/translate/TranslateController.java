@@ -55,7 +55,9 @@ public class TranslateController {
                     "data", Map.of(
                             "taskId", session.getTaskId(),
                             "fileName", session.getFileName(),
-                            "totalPages", session.getTotalPages()
+                            "totalPages", session.getTotalPages(),
+                            "textQualitySuspicious", session.isTextQualitySuspicious(),
+                            "textQualityWarning", session.getTextQualityWarning() != null ? session.getTextQualityWarning() : ""
                     )
             ));
         } catch (IllegalArgumentException e) {
@@ -136,6 +138,8 @@ public class TranslateController {
         data.put("taskId", session.getTaskId());
         data.put("fileName", session.getFileName());
         data.put("status", session.getStatus());
+        data.put("textQualitySuspicious", session.isTextQualitySuspicious());
+        data.put("textQualityWarning", session.getTextQualityWarning() != null ? session.getTextQualityWarning() : "");
         data.put("totalPages", session.getTotalPages());
         data.put("startPage", session.getStartPage());
         data.put("endPage", session.getEndPage());
@@ -174,7 +178,9 @@ public class TranslateController {
     public ResponseEntity<?> download(@PathVariable String taskId) {
         try {
             String content = translationService.buildDownloadContent(taskId);
-            String encodedFileName = URLEncoder.encode("翻译结果.txt", StandardCharsets.UTF_8).replace("+", "%20");
+            String encodedFileName = URLEncoder.encode(
+                    translationService.buildTextDownloadFileName(taskId),
+                    StandardCharsets.UTF_8).replace("+", "%20");
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFileName)
@@ -195,8 +201,9 @@ public class TranslateController {
                                          @RequestParam(defaultValue = "translated") String mode) {
         try {
             Path pdf = translationService.getTranslatedPdf(taskId, mode);
-            String fileName = "bilingual".equals(mode) ? "双语对照版.pdf" : "翻译版.pdf";
-            String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");
+            String encodedFileName = URLEncoder.encode(
+                    translationService.buildPdfDownloadFileName(taskId, mode),
+                    StandardCharsets.UTF_8).replace("+", "%20");
 
             return ResponseEntity.ok()
                     .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFileName)
@@ -217,6 +224,8 @@ public class TranslateController {
         data.put("taskId", session.getTaskId());
         data.put("fileName", session.getFileName());
         data.put("status", session.getStatus());
+        data.put("textQualitySuspicious", session.isTextQualitySuspicious());
+        data.put("textQualityWarning", session.getTextQualityWarning() != null ? session.getTextQualityWarning() : "");
         data.put("totalPages", session.getTotalPages());
         data.put("startPage", session.getStartPage());
         data.put("endPage", session.getEndPage());

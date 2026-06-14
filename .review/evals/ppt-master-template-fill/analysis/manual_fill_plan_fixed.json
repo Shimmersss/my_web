@@ -1,0 +1,95 @@
+{
+  "schema": "template_fill_pptx_plan.v1",
+  "source_pptx": "/Users/shimmer/Desktop/Web/.review/evals/ppt-master-template-fill/sources/template.pptx",
+  "slides": [
+    {
+      "source_slide": 1,
+      "purpose": "cover",
+      "notes": "本页用于呈现答辩主题和作者信息。",
+      "replacements": [
+        {
+          "slot_id": "s01_sh5",
+          "text": "化合物活性预测研究"
+        },
+        {
+          "slot_id": "s01_sh6",
+          "text": "计算机科学 李泽轩"
+        },
+        {
+          "slot_id": "s01_sh7",
+          "text": "指导老师：XXX"
+        },
+        {
+          "slot_id": "s01_sh16",
+          "text": "—— 论文答辩 ——"
+        }
+      ]
+    },
+    {
+      "source_slide": 2,
+      "purpose": "toc",
+      "replacements": [
+        {
+          "slot_id": "s02_sh7",
+          "text": "CONTENTS"
+        },
+        {
+          "slot_id": "s02_sh9",
+          "text": "研究背景"
+        },
+        {
+          "slot_id": "s02_sh25",
+          "text": "方法设计"
+        },
+        {
+          "slot_id": "s02_sh30",
+          "text": "实验结果"
+        },
+        {
+          "slot_id": "s02_sh35",
+          "text": "总结展望"
+        },
+        {
+          "slot_id": "s02_sh48",
+          "text": "致谢"
+        }
+      ]
+    },
+    {
+      "source_slide": 3,
+      "purpose": "chapter",
+      "replacements": [
+        {
+          "slot_id": "s03_sh9",
+          "text": "1.  研究背景"
+        }
+      ]
+    },
+    {
+      "source_slide": 4,
+      "purpose": "content",
+      "replacements": [
+        {
+          "slot_id": "s04_sh16",
+          "text": "1.1  研究背景"
+        },
+        {
+          "slot_id": "s04_sh6",
+          "text": "问题"
+        },
+        {
+          "slot_id": "s04_sh10",
+          "text": "方法"
+        },
+        {
+          "slot_id": "s04_sh12",
+          "text": "药物发现周期长、成本高，虚拟筛选可降低早期试错成本。"
+        },
+        {
+          "slot_id": "s04_sh13",
+          "text": "机器学习可从分子描述符中学习结构与活性之间的关系。"
+        }
+      ]
+    }
+  ]
+}

@@ -1,8 +1,10 @@
 package com.web.backen.ppt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.web.backen.config.PptGenerationConfig;
 import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.rendering.ImageType;
 import org.apache.pdfbox.rendering.PDFRenderer;
 import org.apache.pdfbox.text.PDFTextStripper;
@@ -17,11 +19,14 @@ import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
@@ -41,6 +46,12 @@ public class PptInputExtractor {
     private static final Pattern XLSX_VALUE = Pattern.compile("<v[^>]*>([\\s\\S]*?)</v>");
     private static final Pattern XLSX_INLINE_STRING = Pattern.compile("<is[\\s\\S]*?</is>");
     private static final Pattern PPT_TEXT = Pattern.compile("<a:t>([\\s\\S]*?)</a:t>");
+    private static final Pattern PPT_PIC = Pattern.compile("<p:pic[\\s\\S]*?</p:pic>");
+    private static final Pattern PPT_PH = Pattern.compile("<p:ph\\b([^>]*)/?>");
+    private static final Pattern PPT_BLIP = Pattern.compile("r:embed=\"(rId\\d+)\"");
+    private static final Pattern PPT_OFF = Pattern.compile("<a:off\\b[^>]*x=\"(\\d+)\"[^>]*y=\"(\\d+)\"[^>]*/?>");
+    private static final Pattern PPT_EXT = Pattern.compile("<a:ext\\b[^>]*cx=\"(\\d+)\"[^>]*cy=\"(\\d+)\"[^>]*/?>");
+    private static final Pattern PPT_CNV_PR = Pattern.compile("<p:cNvPr\\b([^>]*)/?>");
     private static final Pattern PPT_COLOR = Pattern.compile("\\b(?:srgbClr\\s+val|color)=\"([0-9A-Fa-f]{6})\"");
     private static final Pattern PPT_SLIDE_NAME = Pattern.compile("ppt/slides/slide(\\d+)\\.xml");
 
@@ -57,16 +68,33 @@ public class PptInputExtractor {
     }
 
     public String extractPaperText(Path paper, String fileName, Path imagesDir, int extractionPercent) throws IOException {
+        return extractPaperText(paper, fileName, imagesDir, extractionPercent, config.getMaxExtractedImages());
+    }
+
+    public String extractPaperText(Path paper, String fileName, Path imagesDir,
+                                   int extractionPercent, int imageBudget) throws IOException {
+        return extractPaperText(paper, fileName, imagesDir, extractionPercent, imageBudget, 0);
+    }
+
+    public String extractPaperText(Path paper, String fileName, Path imagesDir,
+                                   int extractionPercent, int imageBudget, int minCandidateImages) throws IOException {
         if (paper == null || fileName == null || !Files.isRegularFile(paper)) return "";
         String lower = fileName.toLowerCase(Locale.ROOT);
+        int effectiveBudget = effectiveImageLimit(imageBudget, extractionPercent, minCandidateImages);
         String text;
         if (lower.endsWith(".pdf")) {
+            text = extractViaDocumentParser(paper, imagesDir, effectiveBudget);
             try (var document = Loader.loadPDF(paper.toFile())) {
-                text = new PDFTextStripper().getText(document);
-                extractPdfPageImages(document, imagesDir, extractionPercent);
+                extractPdfPageImages(document, imagesDir, effectiveBudget);
+                if (text == null || text.isBlank()) {
+                    text = new PDFTextStripper().getText(document);
+                }
             }
         } else if (lower.endsWith(".docx")) {
-            text = extractDocxTextAndImages(paper, imagesDir, extractionPercent);
+            text = extractViaDocumentParser(paper, imagesDir, effectiveBudget);
+            if (text == null || text.isBlank()) {
+                text = extractDocxTextAndImages(paper, imagesDir, effectiveBudget);
+            }
         } else {
             throw new IllegalArgumentException("论文文件仅支持 PDF 或 DOCX");
         }
@@ -84,6 +112,9 @@ public class PptInputExtractor {
         style.put("assetsDir", "");
         style.put("frameworkMode", false);
         style.put("templateFramework", List.of());
+        style.put("templateAnalysis", List.of());
+        style.put("templateFit", "weak");
+        style.put("templateRoute", "framework");
 
         if (template != null && Files.isRegularFile(template)) {
             Path assetsDir = Files.createDirectories(taskDir.resolve("template-assets"));
@@ -93,17 +124,20 @@ public class PptInputExtractor {
             style.put("textSamples", scan.textSamples());
             style.put("frameworkMode", true);
             style.put("templateFramework", scan.framework());
+            style.put("templateAnalysis", scan.analysis());
+            style.put("templateFit", scan.fit());
+            style.put("templateFitReason", scan.fitReason());
+            style.put("templateRoute", "weak".equals(scan.fit()) ? "framework" : "template-fill");
             if (scan.assetsCopied() > 0) style.put("assetsDir", assetsDir.toAbsolutePath().toString());
         }
 
         objectMapper.writerWithDefaultPrettyPrinter().writeValue(taskDir.resolve("style.json").toFile(), style);
     }
 
-    private String extractDocxTextAndImages(Path docx, Path imagesDir, int extractionPercent) throws IOException {
+    private String extractDocxTextAndImages(Path docx, Path imagesDir, int imageLimit) throws IOException {
         Files.createDirectories(imagesDir);
         clearDirectory(imagesDir);
         StringBuilder text = new StringBuilder();
-        int imageLimit = scaledLimit(config.getMaxExtractedImages(), extractionPercent);
         List<TableCandidate> tableCandidates = new ArrayList<>();
         int mediaCandidates = 0;
         try (ZipInputStream zip = new ZipInputStream(Files.newInputStream(docx))) {
@@ -157,6 +191,90 @@ public class PptInputExtractor {
         return text.toString();
     }
 
+    private String extractViaDocumentParser(Path paper, Path imagesDir, int imageLimit) throws IOException {
+        Path taskDir = imagesDir == null ? null : imagesDir.getParent();
+        if (taskDir == null) return "";
+        Path parserOutputDir = Files.createDirectories(taskDir.resolve("paper-parser"));
+        clearDirectory(parserOutputDir);
+        Path parserResult = parserOutputDir.resolve("parse-result.json");
+        try {
+            runDocumentParser(paper, parserOutputDir);
+            if (!Files.isRegularFile(parserResult)) return "";
+            JsonNode root = objectMapper.readTree(parserResult.toFile());
+            String markdown = root.path("markdown").asText("");
+            copyParserImages(parserOutputDir.resolve("images"), imagesDir, imageLimit);
+            return markdown;
+        } catch (Exception e) {
+            return "";
+        }
+    }
+
+    private void copyParserImages(Path sourceDir, Path targetDir, int limit) throws IOException {
+        if (sourceDir == null || targetDir == null || !Files.isDirectory(sourceDir)) return;
+        Files.createDirectories(targetDir);
+        try (Stream<Path> files = Files.list(sourceDir)) {
+            List<Path> selected = files
+                    .filter(Files::isRegularFile)
+                    .filter(this::isSupportedImage)
+                    .sorted(Comparator
+                            .comparingInt(this::parserImagePriority)
+                            .thenComparing(path -> path.getFileName().toString()))
+                    .limit(Math.max(0, limit))
+                    .toList();
+            for (Path source : selected) {
+                if (!Files.isRegularFile(source)) continue;
+                Files.copy(source, targetDir.resolve(source.getFileName().toString()), StandardCopyOption.REPLACE_EXISTING);
+            }
+        }
+    }
+
+    private void runDocumentParser(Path paper, Path outputDir) throws IOException, InterruptedException {
+        List<String> command = new ArrayList<>(splitCommand(config.getPaperParserCommand()));
+        command.add(Path.of(config.getPaperParserScript()).toAbsolutePath().normalize().toString());
+        command.add("--input");
+        command.add(paper.toAbsolutePath().toString());
+        command.add("--output");
+        command.add(outputDir.toAbsolutePath().toString());
+
+        ProcessBuilder builder = new ProcessBuilder(command);
+        builder.redirectErrorStream(true);
+        Process process = builder.start();
+        CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> readProcessOutput(process));
+        if (!process.waitFor(documentParserTimeoutSeconds(), TimeUnit.SECONDS)) {
+            process.destroyForcibly();
+            outputFuture.cancel(true);
+            throw new IllegalStateException("文档解析超时");
+        }
+        String output = outputFuture.join();
+        if (process.exitValue() != 0) {
+            throw new IllegalStateException("文档解析失败: " + tail(output, 1200));
+        }
+    }
+
+    private long documentParserTimeoutSeconds() {
+        return Math.min(45, Math.max(1, config.getTimeoutSeconds()));
+    }
+
+    private String readProcessOutput(Process process) {
+        try (InputStream input = process.getInputStream()) {
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            return e.getMessage() == null ? "" : e.getMessage();
+        }
+    }
+
+    private String tail(String text, int maxLength) {
+        if (text == null || text.isBlank()) return "(没有命令输出)";
+        return text.length() <= maxLength ? text : text.substring(text.length() - maxLength);
+    }
+
+    private List<String> splitCommand(String command) {
+        if (command == null || command.isBlank()) {
+            throw new IllegalStateException("PPT 论文解析命令未配置");
+        }
+        return Stream.of(command.trim().split("\\s+")).toList();
+    }
+
     private int extractDocxMedia(Path docx, Path imagesDir, int limit) throws IOException {
         if (limit <= 0) return 0;
         int count = 0;
@@ -175,18 +293,66 @@ public class PptInputExtractor {
         return count;
     }
 
-    private void extractPdfPageImages(org.apache.pdfbox.pdmodel.PDDocument document, Path imagesDir, int extractionPercent) throws IOException {
+    private void extractPdfPageImages(PDDocument document, Path imagesDir, int imageBudget) throws IOException {
         Files.createDirectories(imagesDir);
         clearDirectory(imagesDir);
         PDFRenderer renderer = new PDFRenderer(document);
-        int percentLimit = (int) Math.ceil(document.getNumberOfPages() * (clampPercent(extractionPercent) / 100.0));
-        int count = Math.min(document.getNumberOfPages(), Math.max(1, Math.min(config.getMaxExtractedImages(), percentLimit)));
-        for (int pageIndex : sampledPageIndexes(document.getNumberOfPages(), count)) {
+        int count = Math.min(document.getNumberOfPages(), Math.max(1, imageBudget));
+        for (int pageIndex : prioritizedPdfPageIndexes(document, count)) {
             BufferedImage image = renderer.renderImageWithDPI(pageIndex, 96, ImageType.RGB);
             Path target = imagesDir.resolve("paper-page-" + (pageIndex + 1) + ".png");
             ImageIO.write(image, "png", target.toFile());
             image.flush();
         }
+    }
+
+    private List<Integer> prioritizedPdfPageIndexes(PDDocument document, int count) throws IOException {
+        int totalPages = document.getNumberOfPages();
+        if (totalPages <= 0 || count <= 0) return List.of();
+        LinkedHashSet<Integer> indexes = new LinkedHashSet<>();
+        List<PageEvidence> evidencePages = new ArrayList<>();
+        PDFTextStripper stripper = new PDFTextStripper();
+        for (int pageIndex = 0; pageIndex < totalPages; pageIndex++) {
+            stripper.setStartPage(pageIndex + 1);
+            stripper.setEndPage(pageIndex + 1);
+            String text = cleanText(stripper.getText(document));
+            int score = pageEvidenceScore(text);
+            if (score > 0) {
+                evidencePages.add(new PageEvidence(pageIndex, score));
+            }
+        }
+        evidencePages.stream()
+                .sorted(Comparator.comparingInt(PageEvidence::score).reversed()
+                        .thenComparingInt(PageEvidence::pageIndex))
+                .limit(count)
+                .forEach(item -> indexes.add(item.pageIndex()));
+        for (int index : sampledPageIndexes(totalPages, count)) {
+            if (indexes.size() >= count) break;
+            indexes.add(index);
+        }
+        int fallback = 0;
+        while (indexes.size() < count && fallback < totalPages) {
+            indexes.add(fallback++);
+        }
+        return new ArrayList<>(indexes);
+    }
+
+    private int pageEvidenceScore(String text) {
+        if (text == null || text.isBlank()) return 0;
+        String lower = text.toLowerCase(Locale.ROOT);
+        int score = 0;
+        score += countMatches(lower, "\\bfig(?:ure)?\\.?\\s*\\d+") * 8;
+        score += countMatches(text, "图\\s*\\d+") * 8;
+        score += countMatches(lower, "\\btable\\s*\\d+") * 5;
+        score += countMatches(text, "表\\s*\\d+") * 5;
+        if (containsAny(lower, "caption", "workflow", "pipeline", "architecture", "framework", "network",
+                "experiment", "result", "comparison", "visualization", "流程", "架构", "结构", "网络", "实验", "结果", "对比", "可视化")) {
+            score += 3;
+        }
+        if (lower.length() > 1800 && score <= 3) {
+            score -= 2;
+        }
+        return Math.max(0, score);
     }
 
     private List<Integer> sampledPageIndexes(int totalPages, int count) {
@@ -212,6 +378,7 @@ public class PptInputExtractor {
         LinkedHashSet<String> colors = new LinkedHashSet<>();
         List<String> samples = new ArrayList<>();
         List<Map<String, Object>> framework = new ArrayList<>();
+        List<Map<String, Object>> analysis = new ArrayList<>();
         int assets = 0;
         int frameworkLimit = scaledLimit(16, extractionPercent);
         int assetLimit = scaledLimit(24, extractionPercent);
@@ -226,26 +393,43 @@ public class PptInputExtractor {
                         String color = colorMatcher.group(1).toUpperCase(Locale.ROOT);
                         if (!Set.of("FFFFFF", "000000").contains(color)) colors.add(color);
                     }
-                    if (samples.size() < 12 && name.startsWith("ppt/slides/slide")) {
+                    if (name.startsWith("ppt/slides/slide")) {
                         Matcher textMatcher = PPT_TEXT.matcher(xml);
                         List<String> slideSamples = new ArrayList<>();
-                        while (textMatcher.find() && samples.size() < 12) {
+                        while (textMatcher.find()) {
                             String sample = cleanText(unescapeXml(textMatcher.group(1)));
                             if (sample.length() >= 2 && sample.length() <= 80) {
-                                samples.add(sample);
+                                if (samples.size() < 12) samples.add(sample);
                                 slideSamples.add(sample);
                             }
                         }
                         Matcher slideMatcher = PPT_SLIDE_NAME.matcher(name);
-                        if (slideMatcher.matches() && framework.size() < frameworkLimit) {
-                            framework.add(Map.of(
-                                    "index", Integer.parseInt(slideMatcher.group(1)),
-                                    "role", inferTemplateRole(xml, slideSamples),
+                        if (slideMatcher.matches()) {
+                            List<Map<String, Object>> pictureFrames = extractPictureFrames(xml);
+                            List<Map<String, Object>> textFrames = extractTextFrames(xml);
+                            String role = inferTemplateRole(xml, slideSamples);
+                            int slideIndex = Integer.parseInt(slideMatcher.group(1));
+                            Map<String, Object> analysisItem = Map.of(
+                                    "index", slideIndex,
+                                    "role", role,
                                     "textBlocks", countMatches(xml, "<p:sp\\b"),
+                                    "textSlots", textFrames,
+                                    "imageSlots", pictureFrames,
                                     "images", countMatches(xml, "<a:blip\\b"),
                                     "tables", countMatches(xml, "<a:tbl\\b"),
                                     "samples", slideSamples.stream().limit(4).toList()
-                            ));
+                            );
+                            analysis.add(analysisItem);
+                            if (framework.size() < frameworkLimit) {
+                                framework.add(Map.of(
+                                        "index", slideIndex,
+                                        "role", role,
+                                        "textBlocks", countMatches(xml, "<p:sp\\b"),
+                                        "images", countMatches(xml, "<a:blip\\b"),
+                                        "tables", countMatches(xml, "<a:tbl\\b"),
+                                        "samples", slideSamples.stream().limit(4).toList()
+                                ));
+                            }
                         }
                     }
                 } else if (name.startsWith("ppt/media/") && assets < assetLimit) {
@@ -259,7 +443,166 @@ public class PptInputExtractor {
             }
         }
         framework.sort(Comparator.comparingInt(item -> (Integer) item.get("index")));
-        return new TemplateScan(new ArrayList<>(colors), samples, assets, framework);
+        analysis.sort(Comparator.comparingInt(item -> (Integer) item.get("index")));
+        String fit = assessTemplateFit(framework, analysis);
+        String fitReason = assessTemplateFitReason(framework, analysis, fit);
+        return new TemplateScan(new ArrayList<>(colors), samples, assets, framework, analysis, fit, fitReason);
+    }
+
+    private String assessTemplateFit(List<Map<String, Object>> framework, List<Map<String, Object>> analysis) {
+        if (analysis == null || analysis.isEmpty()) return "weak";
+        long usefulSlides = analysis.stream()
+                .filter(item -> {
+                    int textBlocks = ((Number) item.getOrDefault("textBlocks", 0)).intValue();
+                    int images = ((Number) item.getOrDefault("images", 0)).intValue();
+                    int tables = ((Number) item.getOrDefault("tables", 0)).intValue();
+                    return textBlocks >= 3 || images > 0 || tables > 0;
+                })
+                .count();
+        long roles = analysis.stream()
+                .map(item -> String.valueOf(item.getOrDefault("role", "")))
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .count();
+        long imageSlots = analysis.stream()
+                .mapToLong(item -> countUsableImageSlots(item.get("imageSlots")))
+                .sum();
+        long frameworkSlides = framework == null ? 0 : framework.size();
+        if (analysis.size() >= 6 && usefulSlides >= 5 && roles >= 4 && imageSlots >= 3 && frameworkSlides >= 4) {
+            return "strong";
+        }
+        if (analysis.size() >= 4 && usefulSlides >= 3 && imageSlots >= 1 && frameworkSlides >= 2) {
+            return "medium";
+        }
+        return "weak";
+    }
+
+    private String assessTemplateFitReason(List<Map<String, Object>> framework, List<Map<String, Object>> analysis, String fit) {
+        long usefulSlides = analysis == null ? 0 : analysis.stream()
+                .filter(item -> {
+                    int textBlocks = ((Number) item.getOrDefault("textBlocks", 0)).intValue();
+                    int images = ((Number) item.getOrDefault("images", 0)).intValue();
+                    int tables = ((Number) item.getOrDefault("tables", 0)).intValue();
+                    return textBlocks >= 3 || images > 0 || tables > 0;
+                })
+                .count();
+        long roles = analysis == null ? 0 : analysis.stream()
+                .map(item -> String.valueOf(item.getOrDefault("role", "")))
+                .filter(value -> !value.isBlank())
+                .distinct()
+                .count();
+        long imageSlots = analysis == null ? 0 : analysis.stream()
+                .mapToLong(item -> countUsableImageSlots(item.get("imageSlots")))
+                .sum();
+        long frameworkSlides = framework == null ? 0 : framework.size();
+        return "fit=" + fit
+                + ", slides=" + (analysis == null ? 0 : analysis.size())
+                + ", usefulSlides=" + usefulSlides
+                + ", roles=" + roles
+                + ", imageSlots=" + imageSlots
+                + ", frameworkSlides=" + frameworkSlides;
+    }
+
+    private long countUsableImageSlots(Object slotsObject) {
+        if (!(slotsObject instanceof List<?> slots)) return 0L;
+        return slots.stream()
+                .filter(slot -> slot instanceof Map<?, ?> map
+                        && !"decorative".equalsIgnoreCase(String.valueOf(map.get("roleHint"))))
+                .count();
+    }
+
+    private List<Map<String, Object>> extractTextFrames(String xml) {
+        List<Map<String, Object>> frames = new ArrayList<>();
+        Matcher matcher = Pattern.compile("<p:sp[\\s\\S]*?</p:sp>").matcher(xml);
+        while (matcher.find() && frames.size() < 16) {
+            String shape = matcher.group();
+            String placeholder = placeholderType(shape);
+            int textLength = extractXmlText(shape).length();
+            frames.add(Map.of(
+                    "kind", "text",
+                    "placeholder", placeholder,
+                    "length", textLength
+            ));
+        }
+        return frames;
+    }
+
+    private List<Map<String, Object>> extractPictureFrames(String xml) {
+        List<Map<String, Object>> frames = new ArrayList<>();
+        Matcher matcher = PPT_PIC.matcher(xml);
+        while (matcher.find() && frames.size() < 12) {
+            String pic = matcher.group();
+            Matcher embedMatcher = PPT_BLIP.matcher(pic);
+            Matcher offMatcher = PPT_OFF.matcher(pic);
+            Matcher extMatcher = PPT_EXT.matcher(pic);
+            Matcher cNvPrMatcher = PPT_CNV_PR.matcher(pic);
+            String relId = embedMatcher.find() ? embedMatcher.group(1) : "";
+            long x = 0L;
+            long y = 0L;
+            if (offMatcher.find()) {
+                x = parseLong(offMatcher.group(1));
+                y = parseLong(offMatcher.group(2));
+            }
+            long cx = 0L;
+            long cy = 0L;
+            if (extMatcher.find()) {
+                cx = parseLong(extMatcher.group(1));
+                cy = parseLong(extMatcher.group(2));
+            }
+            String name = "";
+            String descr = "";
+            if (cNvPrMatcher.find()) {
+                String attrs = cNvPrMatcher.group(1);
+                name = attribute(attrs, "name");
+                descr = attribute(attrs, "descr");
+            }
+            frames.add(Map.of(
+                    "kind", "image",
+                    "relId", relId,
+                    "name", name,
+                    "descr", descr,
+                    "x", x,
+                    "y", y,
+                    "w", cx,
+                    "h", cy,
+                    "area", String.valueOf(cx * cy),
+                    "roleHint", pictureRoleHint(x, y, cx, cy)
+            ));
+        }
+        return frames;
+    }
+
+    private String pictureRoleHint(long x, long y, long w, long h) {
+        if (w <= 0 || h <= 0) return "decorative";
+        long area = w * h;
+        long slideArea = 12192000L * 6858000L;
+        double ratio = area / (double) Math.max(1L, slideArea);
+        if (ratio >= 0.28) return "full-image";
+        if (ratio >= 0.12) return x < 2500000L ? "image-left" : "image-right";
+        return "decorative";
+    }
+
+    private String placeholderType(String shapeXml) {
+        Matcher matcher = PPT_PH.matcher(shapeXml);
+        if (!matcher.find()) return "";
+        String attrs = matcher.group(1);
+        String type = attribute(attrs, "type");
+        if (!type.isBlank()) return type;
+        String idx = attribute(attrs, "idx");
+        return idx.isBlank() ? "body" : "body-" + idx;
+    }
+
+    private String attribute(String attrs, String key) {
+        Matcher matcher = Pattern.compile("\\b" + key + "=\"([^\"]*)\"").matcher(attrs == null ? "" : attrs);
+        return matcher.find() ? matcher.group(1) : "";
+    }
+
+    private long parseLong(String value) {
+        try {
+            return Long.parseLong(value);
+        } catch (Exception ignored) {
+            return 0L;
+        }
     }
 
     private String inferTemplateRole(String xml, List<String> samples) {
@@ -477,6 +820,13 @@ public class PptInputExtractor {
         return Math.max(1, (int) Math.ceil(max * (clampPercent(extractionPercent) / 100.0)));
     }
 
+    private int effectiveImageLimit(int imageBudget, int extractionPercent, int minCandidateImages) {
+        int configured = Math.max(1, imageBudget);
+        int scaled = scaledLimit(configured, extractionPercent);
+        int floor = minCandidateImages <= 0 ? 0 : Math.min(configured, minCandidateImages);
+        return Math.min(configured, Math.max(scaled, floor));
+    }
+
     private int clampPercent(int value) {
         return Math.max(10, Math.min(100, value));
     }
@@ -485,10 +835,47 @@ public class PptInputExtractor {
         if (imagesDir == null || !Files.isDirectory(imagesDir)) return List.of();
         try (Stream<Path> paths = Files.list(imagesDir)) {
             return paths.filter(Files::isRegularFile)
-                    .sorted()
+                    .sorted(Comparator
+                            .comparingInt(this::imageEvidencePriority)
+                            .thenComparing(path -> path.getFileName().toString()))
                     .map(path -> path.toAbsolutePath().toString())
                     .toList();
         }
+    }
+
+    private int imageEvidencePriority(Path path) {
+        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        int score = 50;
+        if (containsAny(name, "figure", "fig", "caption", "图", "chart", "plot", "result", "compare", "architecture",
+                "framework", "workflow", "network", "model", "table", "paper-table", "paper-excel", "实验", "结果", "对比", "架构", "流程")) {
+            score -= 30;
+        }
+        if (containsAny(name, "logo", "icon", "blank", "cover", "watermark", "公式", "formula")) {
+            score += 20;
+        }
+        if (name.startsWith("paper-table-") || name.startsWith("paper-excel-")) score -= 25;
+        if (name.startsWith("paper-page-")) score -= 5;
+        return score;
+    }
+
+    private int parserImagePriority(Path path) {
+        String name = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        int score = imageEvidencePriority(path);
+        if (name.contains("word") || name.contains("media") || name.matches(".*image\\d+\\.(png|jpe?g)$")) score -= 20;
+        if (name.contains("table") || name.contains("excel")) score += 10;
+        return score;
+    }
+
+    private boolean isSupportedImage(Path path) {
+        String lower = path.getFileName().toString().toLowerCase(Locale.ROOT);
+        return lower.endsWith(".png") || lower.endsWith(".jpg") || lower.endsWith(".jpeg");
+    }
+
+    private boolean containsAny(String text, String... values) {
+        for (String value : values) {
+            if (text.contains(value)) return true;
+        }
+        return false;
     }
 
     private void clearDirectory(Path dir) throws IOException {
@@ -523,6 +910,10 @@ public class PptInputExtractor {
     }
 
     private record TemplateScan(List<String> colors, List<String> textSamples, int assetsCopied,
-                                List<Map<String, Object>> framework) {}
+                                List<Map<String, Object>> framework,
+                                List<Map<String, Object>> analysis,
+                                String fit,
+                                String fitReason) {}
     private record TableCandidate(List<List<String>> rows, int index, boolean excel) {}
+    private record PageEvidence(int pageIndex, int score) {}
 }

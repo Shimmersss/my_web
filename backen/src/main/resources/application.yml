@@ -80,14 +80,18 @@ ppt-generation:
   max-paper-bytes: ${PPT_GENERATION_MAX_PAPER_BYTES:31457280}
   max-template-bytes: ${PPT_GENERATION_MAX_TEMPLATE_BYTES:31457280}
   max-paper-text-chars: ${PPT_GENERATION_MAX_PAPER_TEXT_CHARS:28000}
-  max-extracted-images: ${PPT_GENERATION_MAX_EXTRACTED_IMAGES:8}
-  max-vision-images: ${PPT_GENERATION_MAX_VISION_IMAGES:8}
+  max-extracted-images: ${PPT_GENERATION_MAX_EXTRACTED_IMAGES:24}
+  max-vision-images: ${PPT_GENERATION_MAX_VISION_IMAGES:24}
   llm-max-tokens: ${PPT_GENERATION_LLM_MAX_TOKENS:16384}
   vision-max-tokens: ${PPT_GENERATION_VISION_MAX_TOKENS:4096}
   vision-model: ${PPT_GENERATION_VISION_MODEL:mimo-v2.5}
   timeout-seconds: ${PPT_GENERATION_TIMEOUT_SECONDS:900}
-  node-command: ${PPT_GENERATION_NODE_COMMAND:node}
-  runner-script: ${PPT_GENERATION_RUNNER_SCRIPT:./scripts/pptx-generator/generate_deck.mjs}
+  renderer-command: ${PPT_GENERATION_RENDERER_COMMAND:uv run --with python-pptx --with pillow python}
+  renderer-script: ${PPT_GENERATION_RENDERER_SCRIPT:./scripts/ppt_renderer.py}
+  template-fill-command: ${PPT_GENERATION_TEMPLATE_FILL_COMMAND:uv run --with python-pptx python}
+  template-fill-script: ${PPT_GENERATION_TEMPLATE_FILL_SCRIPT:./scripts/ppt-template-fill/template_fill_pptx.py}
+  paper-parser-command: ${PPT_GENERATION_PAPER_PARSER_COMMAND:uv run --with docling --with markitdown python}
+  paper-parser-script: ${PPT_GENERATION_PAPER_PARSER_SCRIPT:./scripts/ppt_document_parser.py}
 
 openclaw:
   # 后端通过本机 CLI 访问 Gateway，凭证不会暴露给浏览器

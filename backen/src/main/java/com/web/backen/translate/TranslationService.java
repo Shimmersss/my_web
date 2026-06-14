@@ -79,6 +79,11 @@ public class TranslationService {
             TranslationSession session = new TranslationSession(taskId, fileName, taskDir);
             session.setTotalPages(totalPages);
             session.setPageRange(1, totalPages);
+            PdfParseService.PdfTextQuality textQuality = pdfParseService.analyzeTextQuality(inputPdf);
+            if (textQuality != null && textQuality.suspicious()) {
+                session.setTextQualitySuspicious(true);
+                session.setTextQualityWarning(textQuality.warning());
+            }
             sessions.put(taskId, session);
             saveMetadata(session);
             cleanupHistory();
@@ -97,7 +102,6 @@ public class TranslationService {
             if (Set.of("queued", "translating", "completed").contains(session.getStatus())) {
                 return session;
             }
-
             int effectiveStart = Math.max(1, startPage);
             int effectiveEnd = Math.min(endPage, session.getTotalPages());
             if (effectiveStart > effectiveEnd) {
@@ -191,6 +195,17 @@ public class TranslationService {
         return pdf;
     }
 
+    public String buildTextDownloadFileName(String taskId) {
+        TranslationSession session = requireCompletedSession(taskId);
+        return safeBaseName(session.getFileName()) + "-翻译结果.txt";
+    }
+
+    public String buildPdfDownloadFileName(String taskId, String mode) {
+        TranslationSession session = requireCompletedSession(taskId);
+        String suffix = "bilingual".equals(mode) ? "-双语对照版.pdf" : "-翻译版.pdf";
+        return safeBaseName(session.getFileName()) + suffix;
+    }
+
     private void runTranslation(TranslationSession session) {
         session.setStatus("translating");
         session.setProgressStage("starting");
@@ -267,6 +282,19 @@ public class TranslationService {
         emit(session, "task-error", Map.of(
                 "message", e.getMessage() != null ? e.getMessage() : "翻译过程中发生未知错误"));
         completeEmitters(session.getTaskId());
+    }
+
+    private String safeBaseName(String fileName) {
+        String name = fileName == null ? "" : fileName;
+        name = name.replaceAll("[\\\\/\\r\\n\\t\\p{Cntrl}\"]", "_").trim();
+        if (name.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
+            name = name.substring(0, name.length() - 4).trim();
+        }
+        name = name.replaceAll("^[. ]+|[. ]+$", "");
+        if (name.isBlank()) {
+            name = "翻译结果";
+        }
+        return name.length() > 120 ? name.substring(0, 120).trim() : name;
     }
 
     private void sendProgress(TranslationSession session, BabelDocService.ProgressUpdate progress) {

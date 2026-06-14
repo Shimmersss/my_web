@@ -6,8 +6,8 @@
         <n-grid :x-gap="48" :y-gap="24" :cols="2">
           <n-grid-item>
             <div class="contact-info">
-              <h2>联系方式</h2>
-              <p>如果您有任何疑问或需求，欢迎随时联系我们</p>
+              <h2>工具入口说明</h2>
+              <p>该旧组件已不再作为 `/contact` 路由入口；当前 `/contact` 指向 PPT 生成工具。</p>
 
               <div class="contact-items">
                 <div class="contact-item">
@@ -16,7 +16,7 @@
                   </div>
                   <div class="contact-content">
                     <span>{{ $t('contact.address') }}</span>
-                    <p>北京市朝阳区XX路XX号XX大厦XX层</p>
+                    <p>/Users/shimmer/Desktop/Web</p>
                   </div>
                 </div>
                 <div class="contact-item">
@@ -24,8 +24,8 @@
                     <n-icon size="32"><CallOutline /></n-icon>
                   </div>
                   <div class="contact-content">
-                    <span>{{ $t('contact.phone') }}</span>
-                    <p>400-XXX-XXXX</p>
+                    <span>核心入口</span>
+                    <p>文献 / 翻译 / PPT / OpenClaw</p>
                   </div>
                 </div>
                 <div class="contact-item">
@@ -34,7 +34,7 @@
                   </div>
                   <div class="contact-content">
                     <span>{{ $t('contact.email') }}</span>
-                    <p>contact@company.com</p>
+                    <p>本地开发与部署记录见 WORKLOG.md</p>
                   </div>
                 </div>
                 <div class="contact-item">
@@ -42,8 +42,8 @@
                     <n-icon size="32"><TimeOutline /></n-icon>
                   </div>
                   <div class="contact-content">
-                    <span>工作时间</span>
-                    <p>周一至周五 9:00-18:00</p>
+                    <span>运行约束</span>
+                    <p>生产基线按 2 核 CPU / 4 GB 内存设计</p>
                   </div>
                 </div>
               </div>
@@ -51,12 +51,12 @@
               <div class="contact-map">
                 <div class="map-placeholder">
                   <n-icon size="80" color="#1890ff"><MapOutline /></n-icon>
-                  <p>地图位置</p>
+                  <p>本地项目工作区</p>
                 </div>
               </div>
 
               <div class="social-links">
-                <span>关注我们：</span>
+                <span>相关入口：</span>
                 <n-button circle size="large" class="social-btn">
                   <n-icon size="20"><LogoWechat /></n-icon>
                 </n-button>
@@ -74,7 +74,7 @@
             <div class="contact-form-wrapper">
               <div class="contact-tabs">
                 <n-tabs v-model:value="activeTab" type="segment">
-                  <n-tab-pane name="message" tab="在线留言">
+                  <n-tab-pane name="message" tab="任务备注">
                     <n-form ref="formRef" :model="formData" :rules="rules" label-placement="left">
                       <n-form-item label="姓名" path="name">
                         <n-input v-model:value="formData.name" placeholder="请输入您的姓名" size="large" />
@@ -85,8 +85,8 @@
                       <n-form-item label="邮箱" path="email">
                         <n-input v-model:value="formData.email" placeholder="请输入您的邮箱" size="large" />
                       </n-form-item>
-                      <n-form-item label="公司" path="company">
-                        <n-input v-model:value="formData.company" placeholder="请输入您的公司名称（选填）" size="large" />
+                      <n-form-item label="资料来源" path="company">
+                        <n-input v-model:value="formData.company" placeholder="例如论文、模板或任务目录（选填）" size="large" />
                       </n-form-item>
                       <n-form-item label="需求" path="type">
                         <n-select
@@ -112,7 +112,7 @@
                       </n-form-item>
                     </n-form>
                   </n-tab-pane>
-                  <n-tab-pane name="appointment" tab="预约咨询">
+                  <n-tab-pane name="appointment" tab="后续计划">
                     <n-form ref="appointmentRef" :model="appointmentData" :rules="appointmentRules" label-placement="left">
                       <n-form-item label="姓名" path="name">
                         <n-input v-model:value="appointmentData.name" placeholder="请输入您的姓名" size="large" />
@@ -206,18 +206,18 @@ const appointmentData = reactive({
 })
 
 const typeOptions = [
-  { label: '业务咨询', value: 'consult' },
-  { label: '技术支持', value: 'support' },
-  { label: '商务合作', value: 'business' },
-  { label: '人才招聘', value: 'hr' },
+  { label: '文献库', value: 'library' },
+  { label: '论文翻译', value: 'translate' },
+  { label: 'PPT 生成', value: 'ppt' },
+  { label: 'OpenClaw', value: 'openclaw' },
   { label: '其他', value: 'other' }
 ]
 
 const topicOptions = [
-  { label: '业务咨询', value: 'consult' },
-  { label: '产品演示', value: 'demo' },
-  { label: '方案讨论', value: 'solution' },
-  { label: '技术交流', value: 'tech' }
+  { label: '前端体验', value: 'frontend' },
+  { label: '后端链路', value: 'backend' },
+  { label: '产物质量', value: 'artifact' },
+  { label: '部署验证', value: 'deploy' }
 ]
 
 const rules = {
@@ -240,7 +240,7 @@ const handleSubmit = () => {
     if (!errors) {
       submitting.value = true
       setTimeout(() => {
-        message.success('提交成功！我们会尽快联系您。')
+        message.success('备注已记录在当前页面状态中。')
         submitting.value = false
         Object.assign(formData, { name: '', phone: '', email: '', company: '', type: null, message: '' })
       }, 1000)
@@ -253,7 +253,7 @@ const handleAppointment = () => {
     if (!errors) {
       submitting.value = true
       setTimeout(() => {
-        message.success('预约成功！我们会按时联系您。')
+        message.success('计划已记录在当前页面状态中。')
         submitting.value = false
         Object.assign(appointmentData, { name: '', phone: '', date: null, topic: null, note: '' })
       }, 1000)

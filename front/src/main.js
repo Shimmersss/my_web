@@ -4,17 +4,15 @@ import App from './App.vue'
 import router from './router'
 import { createI18n } from 'vue-i18n'
 import zhCN from './i18n/zh-CN'
-import enUS from './i18n/en-US'
 
 import './assets/styles/main.scss'
 
 const i18n = createI18n({
   legacy: false,
   locale: 'zh-CN',
-  fallbackLocale: 'en-US',
+  fallbackLocale: 'zh-CN',
   messages: {
-    'zh-CN': zhCN,
-    'en-US': enUS
+    'zh-CN': zhCN
   }
 })
 

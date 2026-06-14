@@ -34,10 +34,13 @@ sudo systemctl status nginx web-backen.service
 sudo journalctl -u web-backen -f
 sudo nginx -t
 sudo systemctl restart web-backen.service nginx.service
-curl -I http://127.0.0.1/
+curl -I -H 'Host: shimmer.help' http://127.0.0.1/
 curl -I http://127.0.0.1/api/
+curl -I https://shimmer.help/
 ss -lntup
 ```
+
+服务器本机检查首页时必须带 `Host: shimmer.help`。裸 `curl -I http://127.0.0.1/` 可能被 Nginx 匹配到其它默认站点或带访问限制的 server block，返回 403；这不代表公网 `https://shimmer.help/` 异常。后端健康接口仍可直接检查 `http://127.0.0.1:8080/api/health`。
 
 更新前建议备份当前部署目录、环境变量和 Nginx 配置：
 

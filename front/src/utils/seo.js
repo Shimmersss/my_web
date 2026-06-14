@@ -7,7 +7,7 @@
  * @param {string} title - 标题
  */
 export function setPageTitle(title) {
-  document.title = `${title} - 高端企业官网`
+  document.title = `${title} - 研究工具台`
 }
 
 /**

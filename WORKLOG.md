@@ -6,6 +6,412 @@
 
 ---
 
+## 2026-06-14
+
+### fix: 修复前端可访问性基础并统一核心工具页首屏结构
+
+**目标**：落实 Product Design 只读审查的第一阶段，先解决键盘/辅助技术访问基础问题，并让文献库、论文翻译、PPT 生成使用同一套工具页首屏结构。
+
+**改动**：
+- 新增公共 `.tool-page` / `.tool-page__header` 样式，统一三个核心工具页的标题基线、顶部间距、说明文案和浅色工作区背景
+- 文献库移除大面积首屏留白，首屏可同时看到分组、筛选和完整文献卡片；顶级标题改为稳定 `h1`
+- PPT 生成页把标题移到共享页壳，并增加“描述需求 → 可选上传资料 → 生成 PPTX”三步说明
+- `App.vue` 增加“跳到主要内容”链接和页面级 `main`；公共头部、导航、页脚补齐 `header/nav/footer` landmarks
+- Logo、首页工具卡、页脚入口、文献分组、摘要展开、翻译上传区、邮件联系、返回顶部等交互改用原生按钮/链接
+- 主题切换、筛选、文件上传、页码范围、字体、素材比例、提示词和邮件表单补充可访问名称；动态翻译/PPT 进度增加 polite live status
+- 翻译页所有状态保留同一个 `h1`，文献与 PPT 功能区移除嵌套 `main`
+- 浏览器验证截图保存到 `.review/accessibility-tool-shell-2026-06-14/`
+
+**验证**：
+- `npm run build` 通过；仍有既有 Sass legacy API / `darken()` deprecation 和 chunk size 警告
+- `git diff --check -- front/src` 通过
+- Chrome 检查 `/publications`、`/translate`、`/contact`：每页均为 1 个 `h1`、1 个 `main`、1 个 `header/nav/footer`，无无名称按钮，无页面级横向溢出，工具页标题顶部位置均为 89px
+- 键盘验证：首次 Tab 聚焦“跳到主要内容”，继续 Tab 聚焦带名称的“返回首页”按钮
+
+## 2026-06-12
+
+### chore: 首页工具卡补独立生图并改右下角邮件联系
+
+**目标**：首页核心工具区还在用模板化圆形图标，滚动下来视觉素材不足；右下角悬浮层也不应再是提示聊天，而应能让访问者填写信息并联系到指定邮箱。
+
+**改动**：
+- 为首页 6 个工具卡补齐独立 JPG 图片：文献库、PDF 翻译、PPT 生成、OpenClaw、开源项目、后台队列
+- 首页核心工具卡从圆形图标改为 4:3 图片卡，保留标题、说明和详情入口
+- 移除单图 hero 的旧轮播淡出动画，避免只有一张背景时周期性变暗或空白
+- 右下角悬浮按钮改为邮件联系表单，字段包括姓名/称呼、联系方式、主题和留言内容
+- 邮件收件人固定为 `1241420431@qq.com`，点击发送时通过 `mailto:` 打开本机邮件客户端，并提供复制邮箱按钮作为兜底
+- `AGENTS.md` 补充首页生图资产和邮件联系入口维护规则
+
+**验证**：
+- `npm run build` 通过；仍有既有 Sass legacy API / `darken()` deprecation 和 chunk size 警告
+- in-app Browser 检查首页：6 张工具卡 JPG 均加载完成，旧 `.service-icon` 圆形图标数量为 0
+- in-app Browser 检查邮件弹窗：显示 `1241420431@qq.com`，包含四个输入项、复制、取消和发送邮件按钮
+- in-app Browser 设置 375x812 手机视口检查首页和邮件弹窗：`scrollWidth=375`，无页面级横向滚动
+
+## 2026-06-11
+
+### chore: 前端去公司模板化并改成研究工具台
+
+**目标**：当前前端仍残留通用公司官网、客户案例、商务外联、在线客服和随机办公图素材，与站点实际的文献、翻译、PPT、OpenClaw 工作流不一致；先统一改造成个人研究工具台语义。
+
+**改动**：
+- 使用 imagegen 生成两张项目相关图片，压缩为 JPG 后保存到 `front/src/assets/images/research-workbench-hero.jpg`、`front/src/assets/images/research-pipeline-panel.jpg`
+- 首页首屏、核心工具、工作方式和 PPT 入口改为 Zotero 文献、PDF 翻译、PPT 生成、OpenClaw、GitHub 项目、低资源后台队列等内容
+- 关于页改为项目说明、系统结构、核心模块、维护重点和工作原则；模块卡改成图标头像，避免重复加载大图
+- 业务页和详情页改为工具模块和工具详情；旧案例页、新闻详情、旧 Contact 组件做轻量改写，直接访问时也不再出现无关模板话术
+- 头部、页脚、路由标题、SEO title、i18n 和悬浮提示组件统一改成 `Research Desk / 研究工具台`
+- `AGENTS.md` 补充前端叙事和本地生成图片资产维护规则
+
+**验证**：
+- `rg` 扫描 `front/src`，确认无 `公司/企业/招商/加盟/客户/商务/合作/服务商/高端企业官网/COMPANY/在线客服/报价/联系我们/解决方案` 残留
+- `npm run build` 通过；仍有既有 Sass legacy API / `darken()` deprecation 和 chunk size 警告
+- in-app Browser 检查 `/`、`/about`、`/business`、`/business/3`、`/cases`、`/cases/1`：桌面无旧关键词，首页本地 hero 背景加载，相关本地图片可加载
+- in-app Browser 设置 375x812 手机视口检查上述页面：`scrollWidth=375`，无页面级横向滚动
+
+### fix: PDF 翻译文本层乱码修复与下载命名
+
+**问题**：用户上传的 `cm.pdf` 肉眼看是正常英文论文，但 PDF 可复制文本层已损坏，抽取标题变成 `AnlahmWshnm ne Cdmrhsx...` 这类乱码。BabelDOC 读取文本层翻译，导致输出中文明显偏题并夹杂大量未翻译乱码。另外下载文件名固定为“翻译版/双语对照版/翻译结果”，无法对应原上传文件。
+
+**改动**：
+- `PdfParseService.analyzeTextQuality()` 在上传预览阶段抽取前几页文本，按英文元音比例和常见词比例识别疑似字体映射/ToUnicode 乱码
+- `TranslationSession` 持久化 `textQualitySuspicious/textQualityWarning`，上传、状态、最近任务接口返回该诊断；前端显示 warning，提示用户重点检查预览
+- `babeldoc_runner.py` 新增 `RepairingOpenAITranslator`，在送模型前按段落尝试恢复 `sgd -> the`、`qZchbZk -> radical` 这类 ACS 字体偏移文本；只有修复后英文评分明显提高才替换输入，正常 PDF 不受影响
+- 下载命名改为以原上传文件名开头：`原名-翻译版.pdf`、`原名-双语对照版.pdf`、`原名-翻译结果.txt`
+- `AGENTS.md` 同步记录文本层质量诊断、自动修复和下载命名规则
+
+**验证**：
+- `uv run --with pymupdf` 抽取 `cm.pdf` 与 `翻译版-1.pdf` 文本，确认原文文本层本身就是乱码，译文 PDF 是基于乱码源文本生成
+- `uv run --with babeldoc python` 验证修复函数可将样本文本 `Sgd bnlodshshnm...` 恢复为 `The competition...`，正常英文不被改写
+- `mvn -q -Dtest=TranslationServiceTest test` 通过
+
+## 2026-06-08
+
+### fix: PPT 任务卡在 8% 的服务端解析超时与部署换包问题
+
+**问题**：服务器 `/contact` 提交 PPT 后长期停在 8%。线上排查发现 8% 对应 `extracting` 阶段，任务 `734db6ab` 卡在 `uv run --with docling --with markitdown python ...ppt_document_parser.py --input ...paper.docx`；Java 端先 `readAllBytes()` 再 `waitFor(timeout)`，导致解析子进程不退出时超时保护不会触发。排查过程中还发现部署安装脚本会在服务运行中覆盖 `backen.jar`，Spring Boot 懒加载嵌套 class 时可能抛 `NoClassDefFoundError`。
+
+**改动**：
+- `PptInputExtractor.runDocumentParser()` 改为并发读取子进程输出，同时先 `waitFor(timeout)`；解析超时会杀掉子进程并回退到内置 DOCX/PDF 提取
+- 文档解析单次最长限制为 45 秒，避免 2 核 / 4 GB 服务器被 Docling/MarkItDown 长时间占住；超过后尽快回退到 Java 内置 DOCX/PDF 提取，避免前端长期停在 8%
+- 新增单测覆盖 parser 超时后能快速 fallback 到内置 DOCX 文本提取
+- `deploy/install-linux.sh` 改为替换 `backen.jar` 前先停止 `web-backen.service`，再复制新文件并启动服务，避免运行中 jar 被覆盖造成 `NoClassDefFoundError`
+- 服务器上手动清理了卡住的 `ppt_document_parser` 子进程；旧任务 `734db6ab` 已在重启后标记为 `error`
+- `AGENTS.md` 补充部署换包前必须先停后端服务的规则
+
+**验证**：
+- `mvn -q -f backen/pom.xml -Dtest=PptInputExtractorTest test` 通过
+- `./deploy/deploy-server-improved.sh` 完成部署，后端健康接口和公网 `https://shimmer.help/` 检查通过
+
+### fix: PPT 自由生成页数差一页时本地兜底补齐
+
+**问题**：`/contact` 上显式要求 25 页时，mimo 首次生成和页数 repair 后仍可能只返回 24 页，后端因此报错 `mimo 返回的 PPT 页数不符合要求: required=25, actual=24`。
+
+**改动**：
+- 自由生成 deck 在 LLM 页数 repair 后仍不匹配时，增加确定性本地兜底：少页就在致谢页前插入 `localSlideCountFallback` 补充页，多页则优先从中间内容页裁剪，保留封面和致谢
+- 兜底结果写入 `slideCountAdjustedLocally=true`，方便后续诊断和前端/产物追踪
+- 模板上传 fill plan 仍保持页数硬校验，不盲目补页，避免破坏模板槽位与 `source_slide` 约束
+- 修复本机无 `setsid` 时 `project.sh start backend` 从一次性 shell 后台启动 Java 不稳定的问题，改用 Python `os.setsid()` 分支写入真实后端 pid
+- `AGENTS.md` 同步记录自由生成页数兜底规则
+
+**验证**：
+- `mvn -q -f backen/pom.xml -Dtest=PptGenerationServiceTest test` 通过
+- `./project.sh restart backend` 后 `/api/ppt-generate/templates` 返回 200
+- 服务器反馈确认 `web-backen.service`、`nginx.service` 均为 `active (running)`，`https://shimmer.help/` 返回 200 OK；裸 `http://127.0.0.1/` 返回 403 是未带 `Host: shimmer.help` 命中其它 Nginx 站点，不代表公网异常
+- `MAINTENANCE.md` 和 `AGENTS.md` 已补充服务器本机首页检查必须带 Host 的规则
+
+### chore: 折叠前端案例与开源项目入口并移除英文切换
+
+**目标**：案例展示和 GitHub 开源项目两个暂时无用板块先从前端可见入口收起，站点不再提供 EN/中文切换。
+
+**改动**：
+- 头部导航移除案例展示、开源项目和语言切换按钮，移动端抽屉同步移除语言切换
+- 首页删除客户案例轮播和 GitHub 项目开源区块，同时移除首页对 `/api/github-projects` 的请求
+- 页脚快捷导航移除案例展示和开源项目入口，改为保留文献、翻译等当前可用入口
+- 前端 i18n 固定中文 fallback，Naive UI locale 固定中文，并删除 `front/src/i18n/en-US.js`
+- `AGENTS.md` 补充当前前端入口折叠和固定中文维护规则
+
+**验证**：
+- `rg` 检查头部、首页、页脚、入口文件无残留 EN 切换、首页 GitHub 请求、案例/开源入口引用
+- `npm run build` 通过；仍有既有 Sass deprecation 和 chunk size 警告
+
+### fix: 答辩 PPT 生成审查修复收口
+
+**问题**：并发 review 子代理指出答辩 PPT 改造仍有几个高风险缺口：默认 50% 提取比例会让 20-30 页答辩候选图不足，vision/fallback 会把普通整页截图默认放过，非答辩请求被 22 页答辩策略误牵引，模板 repair report 会把旧正文 `old_text` 重新暴露给 LLM，`Online result screenshot` 会因为包含 `line` 被误判为装饰图。
+
+**改动**：
+- 非答辩、无论文、无显式页数任务不再套用 22 页答辩默认；答辩/论文任务才默认约 22 页，显式页数 repair 后仍不匹配会失败
+- 20-30 页答辩任务增加动态候选图下限，默认 50% 提取比例下仍尽量保留 15-25 张候选图；DOCX parser 成功路径复制图片也受 Java 端预算裁剪
+- vision 分批失败改为局部 fallback，保留成功批次，manifest 可标记 `partial`；vision 缺项和 fallback 普通 `paper-page-*` 不再默认 `useful=true / importance=3`
+- generated visual 单张渲染失败时跳过该页视觉兜底，不拖垮整个任务；只有生成视觉图时 manifest source 改为 `generated`
+- template-fill `check-plan` report 移除 `old_text`，只保留长度/容量/槽位信息；新增 `image_edits` 区域校验，拒绝不可填、缺失或带 `rejectReason` 的 region
+- strip 模式装饰图识别改为 token 级匹配，修复 `Online` 被 `line` 子串误判；同时清理 layout/master 中明显非装饰的文本、图片、表格和图表，保留 logo/background 等视觉骨架
+- 模板 `check-plan` repair 后重新执行页数硬约束，避免容量修复时把 22/25 页计划改成其它页数后静默通过
+- 后端模板任务单测新增可解包 PPTX 产物检查，断言旧正文/内容图/图表不再出现且 logo 仍保留；模板 `generated_visual` 也新增断言，确认 PNG、manifest 和 `image_edits` 都能进入模板链路
+- `.env.local.example` 补充 `PPT_GENERATION_MAX_EXTRACTED_IMAGES=24` 和 `PPT_GENERATION_MAX_VISION_IMAGES=24`
+- `AGENTS.md` 同步记录 partial/generated manifest、保守 fallback、parser 图片预算裁剪、repair 不暴露模板原文等维护规则
+
+**验证**：
+- `mvn -q -f backen/pom.xml -Dtest=PptGenerationServiceTest,PptInputExtractorTest test` 通过
+- `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=/Users/shimmer/Desktop/Web/backen/scripts/ppt-template-fill python3 -m unittest /Users/shimmer/Desktop/Web/backen/scripts/ppt-template-fill/tests/test_strip_source_content.py` 通过
+- `python3 -m py_compile backen/scripts/ppt_renderer.py backen/scripts/ppt_document_parser.py backen/scripts/ppt-template-fill/template_fill_pptx.py backen/scripts/ppt-template-fill/template_fill_pptx/*.py backen/scripts/ppt-template-fill/tests/test_strip_source_content.py` 通过
+
+### feat: 前端手机端适配收口
+
+**目标**：让前端在手机宽度下可正常导航和使用核心工具页，避免桌面最小宽度、双列卡片、PDF/README 预览和按钮组造成页面级横向滚动。
+
+**改动**：
+- 公共头部新增手机菜单按钮和 Naive UI 抽屉导航；桌面横向菜单在小屏隐藏时仍可进入所有主要路由
+- review 后去掉抽屉内重复的 PPT 生成菜单项，保留底部主按钮；同时让业务/案例详情页选中父级导航
+- 全局 `.container` 移除 1200px 桌面最小宽度，补充媒体、表单控件和移动端 section/container 基础规则
+- `Publications` 手机端改为单列筛选、单列按钮、侧栏全宽折叠，并限制 PDF/Markdown 预览高度和表格横向滚动在组件内部
+- `Translate` 手机端收紧配置卡、最近任务、结果按钮组和 PDF 预览高度
+- `PptGenerate` 手机端收紧模板/上传卡、进度步骤、最近任务和操作按钮
+- review 后修复 PPT 最近任务切换时未关闭旧 SSE/polling 的状态覆盖风险
+- `News` 开源项目页手机端收紧卡片头部、指标、README 弹窗和后台管理表单
+- `AGENTS.md` 补充移动端正式支持和 375px 无页面级横向滚动要求
+
+**验证**：
+- `npm run build` 通过；仅有既有 Sass deprecation 和 chunk size 警告
+- in-app Browser 设置 375x812 手机视口，检查 `/`、`/news`、`/publications`、`/translate`、`/contact`、`/franchise`：`scrollWidth=375`，无页面级横向滚动
+- 手机头部菜单按钮可打开抽屉，抽屉内包含首页、关于、业务、案例、开源项目、文献、翻译、OpenClaw 和底部 PPT 生成入口
+- 本轮浏览器验证覆盖布局、导航和横向滚动；未完整覆盖上传文件、SSE、下载、登录、README 弹窗和 PDF 预览等业务交互链路
+
+### feat: 答辩 PPT 生成改为视觉风格继承与动态配图
+
+**目标**：答辩 PPT 要像人工认真制作的学术汇报：模板只继承视觉风格，正文完全重写；正文页尽量图文结合；20-30 页任务不能只拿少量图片。
+
+**改动**：
+- 答辩/论文任务默认按约 22 页规划，提示词要求目录、章节过渡、致谢、学术化表达和 3-6 个要点
+- 默认图片提取/视觉候选上限从 8 提到 24，20-30 页答辩任务按 15-25 张候选图做预算
+- PDF 页面图采样优先选择包含 `Figure/Fig./图/表/caption`、流程、架构、实验结果、对比、可视化等线索的页面，再用均匀采样补足预算
+- 视觉初筛改为每批最多 8 张图片，批量合并 `image-manifest.json`
+- fallback manifest 不再把非表格图片全部降成低价值，会按文件名和证据关键词给出保守可用评分
+- `visualSpec` / `generated_visual` 支持用 Java2D 生成流程图、结构框图、矩阵/对比图 PNG，论文图片不足时也能补充学术配图
+- 上传模板填充默认启用 `--strip-source-content`：清空未替换旧文字，移除模板原正文图片、表格和图表，保留母版、背景、logo、装饰和布局风格
+- `--strip-source-content` 会同步删除被移除内容图/旧图表对应的 slide relationships，让旧 media/chart 不再作为可达资源进入输出 PPTX；logo/背景等装饰关系保留
+- `compactSlideLibrary()` 不再把模板原文案暴露给 mimo，避免模型复用示例占位内容
+- `AGENTS.md` 同步模板只继承视觉风格、动态提图预算、vision 分批和生成视觉兜底规则
+
+**验证**：
+- `mvn -q -f backen/pom.xml -Dtest=PptGenerationServiceTest,PptInputExtractorTest test` 通过
+- `python3 -m py_compile backen/scripts/ppt_renderer.py backen/scripts/ppt_document_parser.py backen/scripts/ppt-template-fill/template_fill_pptx.py backen/scripts/ppt-template-fill/template_fill_pptx/*.py` 通过
+- `mvn -q -f backen/pom.xml test` 通过
+- `PYTHONPATH=backen/scripts/ppt-template-fill python3 -m unittest backen/scripts/ppt-template-fill/tests/test_strip_source_content.py` 通过：旧正文图片 `rIdContent`、旧图表 `rIdChart` 被移除且 `ppt/media/content.png`、`ppt/charts/chart1.xml` 不再打包；logo 关系和 `ppt/media/logo.png` 保留
+
+### chore: 部署 uv 检查与 PPT 模板填图文档收口
+
+**问题**：端到端 review 继续指出三个收口点：生产部署脚本去掉 Node/npm 检查后没有补 `uv` 运行态检查，可能健康检查通过但 PPT/BabelDOC 首次运行失败；AGENTS 对“模板也要填论文图片”的说法过于绝对，容易误解为所有 `image_regions` 都可填；此前 smoke 记录写成旧任务目录可复核结果，但实际依赖临时 analyze 输出。
+
+**改动**：
+- `deploy/install-linux.sh` 在复制文件和重启服务前增加 `command -v uv` 早失败检查，明确说明 PPT/PDF 的 python-pptx、Pillow、BabelDOC、Docling、MarkItDown 默认都依赖 `uv run`
+- `AGENTS.md` 改成“上传模板时应尽量使用论文图片/表格素材”，但只允许填经过 analyzer 和 Java 双重过滤的可填内容区域 `region_id`
+- `AGENTS.md` 明确背景、logo、装饰、小图以及 cover/toc/chapter/ending 页图片区域不可填；模板没有可填区域时只替换文字并记录/说明原因
+- `AGENTS.md` 补充大页数模板任务分批规划会更慢，SSE/progress 应显示当前批次和总批次
+
+**待主代理或 Java/Python worker 补充验证**：
+- 短词装饰匹配、`small_content_image` 与 cover 主视觉保护、Java 二次过滤的最终实现结果和单测命令
+- 真实 overlay 测试或短真实链路验证；如引用 smoke，请记录可复核命令和 `/tmp/...` 输出路径，不要只写旧任务目录里的 `slide-library.json` 已更新
+
+### fix: 收紧 PPT 模板图片区域填充风险
+
+**问题**：review 指出模板图片填充还有风险：`template_fill_pptx analyze` 会把所有 `p:pic` 当成可填图片区域，可能把封面背景、目录装饰、校徽/logo、小图标当成论文图片占位；后端兜底补图也可能把论文图塞进这些装饰区域。
+
+**改动**：
+- `analyzer.py` 给每个 `image_regions` 增加 `fillable`、`role`、`rejectReason`
+- 背景、logo/icon/decor 名称、小图、低面积占比图片会标记为不可填
+- cover/toc/chapter/ending 页的图片区域统一标记 `page_type_not_fillable`
+- Java 后端二次过滤 image region：必须 `fillable=true`、非装饰/背景/Logo、尺寸足够大，且页面类型允许填图
+- `compactSlideLibrary()` 只把可填图片区域暴露给 mimo，减少模型误选
+- 视觉 `layoutHint` 白名单补齐 `image-top/evidence-strip`，避免自由生成布局提示被窄白名单吞掉
+- 单测改成模型误选 logo 区域时，后端会清理并改用真正内容图框
+- `AGENTS.md` 补充模板图片区域保守筛选规则
+
+**验证**：
+- `mvn -q -f backen/pom.xml -Dtest=PptGenerationServiceTest test` 通过
+- `python3 -m py_compile backen/scripts/ppt-template-fill/template_fill_pptx.py backen/scripts/ppt-template-fill/template_fill_pptx/*.py` 通过
+- 真实模板 analyze smoke 曾用临时输出观察到 24 页、28 个图片区域中仅 1 个 `fillable=true`，封面/目录/结尾页大图均标记 `page_type_not_fillable`；该记录缺少可复核 `/tmp/...` 输出路径，后续真实链路验证需要补具体命令和产物路径
+
+### fix: PPT 上传模板任务确认走原生填充并分批规划
+
+**问题**：用户下载的 `AI生成PPT-d0a868f4.pptx` 上传了模板但几乎没有模板样式。排查任务目录发现有 `template.pptx / style.json / output.pptx`，但没有 `slide-library.json / fill-plan.json / fill-check-report.json`，说明当时运行的是旧 jar/free renderer 路径，根本没进入新 template-fill 链路。用新 jar 复现后又发现 mimo 一次性输出 25 页 fill plan 时容易长时间卡住或返回坏 JSON。
+
+**改动**：
+- `project.sh` 后端新鲜度检查从只看 `backen/src` 扩展到同时看 `backen/scripts` 下 Java/XML/YAML/Python/JSON，避免 template-fill 或 renderer 脚本更新后跳过重打包继续跑旧 jar
+- 后端上传模板分支增加明确日志：有模板时打印“PPT 生成使用上传模板原生填充链路”，无模板时打印自由 renderer 链路
+- 模板 fill plan 解析失败时自动落盘原始坏响应，并用紧凑 JSON prompt 重试，覆盖 `Unexpected character`、冒号/逗号缺失、截断等常见 mimo JSON 问题
+- 模板规划输入做瘦身：论文文本压缩到关键片段，slide library 只给主要文本槽和大图片区域，减少 prompt 和输出体积
+- 目标页数超过 8 页时，fill plan 改为约 6 页一批请求 mimo，再合并成最终 `fill-plan.json`，让 25 页任务不再赌一次超长 JSON
+- `AGENTS.md` 补充上传模板分批规划、坏 JSON 重试和脚本更新必须重打包的维护规则
+
+**验证**：
+- 使用同一模板 `.run/ppt-generation-tasks/d0a868f4/template.pptx` 和论文 `.run/ppt-generation-tasks/d0a868f4/paper.docx` 重新生成 `6d45ef9a`
+- 后端日志确认进入上传模板原生填充链路
+- 任务目录生成 `slide-library.json`、`fill-plan.json`、`fill-check-report.json`、`output.pptx`
+- `fill-check-report.json` 汇总 `error=0`
+- 输出 `.run/ppt-generation-tasks/6d45ef9a/output.pptx` 为 25 页，PPTX 包含 4 个 slide master、32 个 slide layout 和 18 个 media
+
+### feat: PPT 模板填充支持论文图片，自由版式增加节奏
+
+**问题**：上传模板路径已经能原生替换文字，但还没有把论文图片/表格填进模板；无模板自由生成的图文页也过于固定，容易连续出现同一种右图/满图排布。
+
+**改动**：
+- `template_fill_pptx analyze` 新增 `image_regions`，把模板 PPTX 原有图片区域及 geometry 写入 `slide-library.json`
+- mimo fill plan schema 增加 `image_edits`，可引用 `imageManifest` 中的真实 `image_id` 和模板里的 `region_id`
+- 后端新增模板图片分配与校验：只允许 `useful=true && importance>=3` 的素材进入模板；模型漏分配时，按结果/方法/数据页优先做受控补图
+- template-fill 生成 PPTX 后，后端复用 `PPT_GENERATION_RENDERER_COMMAND` 的 `python-pptx + pillow` 环境，把图片等比 contain 到模板图片区域
+- 自由生成 prompt 增加版式节奏约束，支持 `image-top / evidence-strip / metric-hero / comparison / matrix / timeline`
+- `ppt_renderer.py` 新增上述布局，并把图片放置改为等比 contain，避免拉伸变形
+- `AGENTS.md` 补充“上传模板也要填论文图片”和“自由版式要有节奏”的维护规则
+
+**验证**：
+- `python3 -m py_compile backen/scripts/ppt_renderer.py backen/scripts/ppt-template-fill/template_fill_pptx.py backen/scripts/ppt-template-fill/template_fill_pptx/*.py backen/scripts/ppt-template-fill/svg_to_pptx/pptx_notes.py` 通过
+- `mvn -q -f backen/pom.xml -Dtest=PptGenerationServiceTest test` 通过
+- 真实模板 analyze smoke 识别 24 页、28 个 `image_regions`
+- 真实模板 overlay smoke 生成 `/tmp/web-template-overlay-final.pptx`，PPTX media 数量增加到 9
+- 自由 renderer layout smoke 生成 `/tmp/web-ppt-renderer-layout-smoke.pptx`
+
+### feat: PPT 上传模板改走原生 template-fill 链路
+
+**目标**：上传 PPTX 模板后真正复用模板页、槽位和 OOXML 元素，不再只把模板当弱配色/背景参考，也不恢复前端大纲确认流程。
+
+**改动**：
+- 后端上传模板分支改为 `analyze -> mimo fill plan -> check-plan -> apply`：先生成 `slide-library.json`，再让 mimo 输出 `template_fill_pptx_plan.v1`，检查槽位/容量后原生填充模板 PPTX
+- 无上传模板时继续走 `backen/scripts/ppt_renderer.py` 的 `python-pptx` 自由生成 fallback
+- 新增 `backen/scripts/ppt-template-fill/`，最小化引入 PPT Master 的 `template_fill_pptx` 脚本能力
+- `PptGenerationConfig` / `application.yml` / `.env.local.example` 增加 `PPT_GENERATION_TEMPLATE_FILL_COMMAND` 和 `PPT_GENERATION_TEMPLATE_FILL_SCRIPT`
+- 新增单测覆盖上传模板必须走原生 template-fill，且不能误走普通 renderer
+- `AGENTS.md` 同步上传模板原生填充、无模板自由生成和部署依赖规则
+
+**验证**：
+- `python3 -m py_compile backen/scripts/ppt-template-fill/template_fill_pptx.py backen/scripts/ppt-template-fill/template_fill_pptx/*.py backen/scripts/ppt-template-fill/svg_to_pptx/pptx_notes.py` 通过
+- `mvn -q -f backen/pom.xml -Dtest=PptGenerationServiceTest test` 通过
+- `mvn -q -f backen/pom.xml test` 通过
+- `PYTHONPATH=backen/scripts/ppt-template-fill uv run --with python-pptx python backen/scripts/ppt-template-fill/template_fill_pptx.py apply ... --transition keep` 通过，生成 `/private/tmp/web-template-fill-smoke_20260608_032855.pptx`
+
+### research: PPT 上传模板路径评估 ppt-master / presenton
+
+**目标**：用户反馈上传模板生成效果差、几乎没用上模板，且 PPT 规划提示词一般；需要找 GitHub 上更成熟的开源方案，验证是否能改善“模板复用”和“规划质量”。
+
+**结论**：
+- `hugohe3/ppt-master` 更适合作为当前项目的模板路径底座：它的 `template_fill_pptx` 能把 PPTX 分析成 slide library（页类型、文本槽、geometry、font metrics、表格和图表），再用 fill plan clone 原 slide 并替换 OOXML 文本
+- `presenton/presenton` 更适合作为完整自托管 AI PPT 产品/API 参考；它支持 custom LLM 和 API，但自定义模板偏 HTML/Tailwind layout，不是直接原生复用上传 PPTX 母版
+
+**验证**：
+- 用本地 `2fc988b2/template.pptx` 跑 `ppt-master` analyze，成功识别 24 页模板和文本槽
+- `check-plan` 成功拦截错误 slot id 和超容量文本
+- 修正后生成 `.review/evals/ppt-master-template-fill/exports/manual-smoke_20260608_031554.pptx`
+- 解压 XML 确认替换文本 `化合物活性预测研究`、`计算机科学 李泽轩` 已写入 PPTX
+
+**下一步建议**：
+- 上传 PPTX 模板时优先走 `template_fill_pptx` 式原生填充链路：analyze → mimo fill plan → check-plan → apply
+- 无模板时保留当前 `python-pptx` renderer 作为 free-design fallback
+- 把当前 deck JSON prompt 替换成 layout-first strategist prompt，让 mimo 选择模板页、slot 替换、图片证据和讲稿，而不是直接规划自由版式
+
+### fix: PPT 图片初筛记录模型来源并阻断低质图绕过
+
+**问题**：图片初筛实际默认走 `mimo-v2.5`，但 `image-manifest.json` 没有明确记录本次是视觉模型成功还是 fallback 兜底；同时内部 PPT 结构如果直接填了低价值 `imageId`，渲染前只会给未分配图片补位，不会硬清理这个坏引用。
+
+**改动**：
+- `image-manifest.json` 顶层新增 `source`、`model`、`fallbackReason`，可直接判断 `source=vision` 是否代表 mimo 视觉初筛生效
+- 视觉调用成功时写入当前 `PPT_GENERATION_VISION_MODEL`，默认 `mimo-v2.5`；无图片写 `source=none`，调用失败写 `source=fallback`
+- `ensureImageAssignments()` 渲染前清理不在 `useful=true && importance>=3` 候选集里的 `imageId`，避免低质图、无效 ID 或 fallback 低分素材绕过初筛进入 PPTX
+- `AGENTS.md` 补充 PPT 图片初筛来源字段和渲染前硬过滤维护规则
+
+**验证**：
+- `mvn -q -f backen/pom.xml test` 通过
+
+### fix: 清理旧版 PPT 大纲待确认状态
+
+**问题**：PPT 生成已经改成一段式直出，但历史任务 `2fc988b2` 仍落盘为旧版 `outline_ready/progressStage=outline_ready`，后端恢复任务时只处理 `queued/generating/rendering`，导致前端最近任务仍可能卡在“大纲待确认”。
+
+**改动**：
+- `PptGenerationService.loadRecentSessions()` 改为历史恢复时只把 `completed/error` 当作终态，其余所有非终态都标记为 `error`
+- `AGENTS.md` 补充旧版 `outline_ready/outlining/revising` 状态不得继续进入前端流程
+
+**验证**：
+- `mvn -q -f backen/pom.xml test` 通过
+
+## 2026-06-07
+
+### feat: PPT 生成放弃 PptxGenJS，改为 python-pptx 直出
+
+**目标**：完全去掉 PptxGenJS 和“先大纲、再确认、再渲染”的两段式流程，用户提交后后台直接生成 PPTX。
+
+**改动**：
+- 新增 `backen/scripts/ppt_renderer.py`，使用 `python-pptx` 直接写出 `.pptx`
+- 删除 `backen/scripts/pptx-generator/` 旧 Node/PptxGenJS runner 和 npm 依赖链
+- `PptGenerationService` 改为单 worker 一段式：抽取资料 → mimo 生成内部 PPT 结构 → 图片分配 → Python renderer 直出 PPTX → `done`
+- 删除后端 `/deck/{taskId}`、`/revise/{taskId}`、`/render/{taskId}` 接口；SSE 不再发送 `outline-ready`
+- 前端 `PptGenerate/index.vue` 删除大纲编辑器、对话修改、预览和二次渲染，只保留提交、进度、完成下载和最近任务
+- 配置改为 `PPT_GENERATION_RENDERER_COMMAND` / `PPT_GENERATION_RENDERER_SCRIPT`，启动和部署脚本不再安装 Node runner 依赖
+- `AGENTS.md` 同步为当前一段式直出架构
+
+**验证**：
+- `python3 -m py_compile backen/scripts/ppt_renderer.py backen/scripts/ppt_document_parser.py` 通过
+- `uv run --with python-pptx --with pillow python backen/scripts/ppt_renderer.py ...` smoke 生成 3 页 PPTX 通过
+- `mvn -q -f backen/pom.xml test` 通过
+- `cd front && npm run build` 通过（仍有既有 Sass deprecation / chunk size 警告）
+
+### chore: 清理 PPT 论文解析脚本无用代码
+
+**改动**：
+- 删除 `ppt_document_parser.py` 中未使用的 `work_dir` 参数、`tempfile` import 和未被 Java 消费的 `output` 空字段
+- 删除 parser 结果里未被消费的图片清单、base64 图片数据和对应 helper，只保留 DOCX 原图复制
+- `AGENTS.md` 补充解析脚本输出字段必须有消费方的维护约束
+
+**验证**：
+- `python3 -m py_compile backen/scripts/ppt_document_parser.py` 通过
+- `mvn -q -f backen/pom.xml test` 通过
+
+### feat: PPT 输入层切换为 Docling / MarkItDown 解析底座
+
+**目标**：把 PPT 生成的文档理解层从自研零散抽取，切到更强的外部解析底座，优先用 Docling，失败回退 MarkItDown，再回到旧 PDFBox / ZIP 逻辑，保留现有 PptxGenJS 渲染链和 mimo 决策层。
+
+**改动**：
+- 新增 `backen/scripts/ppt_document_parser.py`，作为论文解析中间层，输出结构化 Markdown/JSON 和图片清单
+- `PptInputExtractor` 现在优先调用新的解析脚本，再回退旧 PDFBox / DOCX 抽取逻辑
+- `PptGenerationConfig` / `application.yml` / `.env.local.example` 增加 `PPT_GENERATION_PAPER_PARSER_COMMAND` 和 `PPT_GENERATION_PAPER_PARSER_SCRIPT`
+- `AGENTS.md` 补充新的输入层职责边界，明确解析和渲染分离
+
+**说明**：
+- 这里没有把成品生成器换掉，仍然保留现有 PptxGenJS 渲染链；这次主要是把“论文怎么读懂”换成更强的底座
+- 图片审查仍留在后端，优先启发式过滤，再让 mimo 复核，不把高成本视觉判断全部压给 LLM
+
+**验证**：
+- 本轮先完成接线和文档更新，后续需要跑 `mvn test` 和前端构建确认无回归
+### fix: PPT 模板扫描被文字样本上限截断，强保真模板误判
+
+**问题**：复查任务 `173c7f74` 的模板产物后发现，`style.json` 里的 `templateAnalysis` 只有前 2 页，`templateFramework` 也只记录了 2 页骨架。根因不是模板本身太弱，而是 `PptInputExtractor.scanTemplate()` 先用 `samples.size() < 12` 截断了整段 slide 扫描，导致后续 22 页完全没进入模板分析；结果 `template-fill` 仍能跑，但实质上是在拿一个“只看了前两页”的模板做强保真判断。
+
+**改动**：
+- `PptInputExtractor.scanTemplate()` 改为遍历全部 slide，文字样本只限制保存数量，不再限制是否继续分析后续页
+- `style.json` 新增 `templateFit` / `templateRoute` / `templateFitReason`，模板分析完成后自动判断强保真、弱模板或回退框架
+- `PptGenerationService` 读取 `templateRoute` 后决定最终渲染模式，避免弱模板继续伪装成 `template-fill`
+- 前端 `PptGenerate/index.vue` 增加模板健康度提示，直接显示“强保真可用”或“已回退框架复用”
+- 新增 `PptInputExtractorTest.scansAllTemplateSlidesAndInfersFitBeyondTheFirstTwoPages()`，专门防止模板扫描再次被前几页截断
+
+**验证**：
+- `cd backen/scripts/pptx-generator && npm run smoke:template-fill` 通过
+- `cd front && npm run build` 通过
+- `mvn -q -f backen/pom.xml test` 本轮因测试编译问题中断，已修复缺失 `JsonNode` import，待重新跑完整回归
+### feat: PPT 模板理解层和母版图片直填
+
+**目标**：用户上传 PPTX 模板后，不只是“像模板”，而是要真正读懂模板骨架，并能从论文里自动抽图、抽表格，按模板槽位把证据填回去。
+
+**改动**：
+- `PptInputExtractor` 扫描模板时新增 `templateAnalysis`，记录文本槽、图片槽、页角色和文字样本，和 `templateFramework` 一起写入 `style.json`
+- `PptGenerationService` 在大纲、修订、读取和渲染结果里补齐 `templateAnalysis`、`templateFramework`、`evidenceCandidates` 和 `slotAssignments`
+- 前端 `PptGenerate/index.vue` 增加模板理解、证据命中、槽位分配三个预览面板，方便直接看模板是否被解析对了
+- `generate_deck.mjs` 的 `template-fill` 逻辑升级为按模板分析和槽位分配优先替换图片关系，而不是只替换文本；对缺失图片、异常图片和关系顺序差异增加了容错
+- 重新补回 `backen/scripts/pptx-generator/template_fill_smoke.mjs`，用最小可重复样本验证 base 生成、template-fill、图片关系替换、克隆页关系清理和媒体字节一致性
+- `AGENTS.md` 增加模板理解层、证据层和母版图片替换的长期规则
+
+**验证**：
+- `cd backen/scripts/pptx-generator && npm run smoke:template-fill` 通过
+- `node --check backen/scripts/pptx-generator/generate_deck.mjs` 通过
+- `mvn -q -f backen/pom.xml test` 通过
+- `cd front && npm run build` 通过
+
 ## 2026-06-07
 
 ### fix: DOCX 论文原图被表格配额挤占，成品无论文素材

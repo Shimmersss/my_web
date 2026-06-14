@@ -1,35 +1,29 @@
 <template>
-  <div class="app-header">
+  <header class="app-header">
     <div class="header-content">
-      <div class="logo" @click="navigateTo('/')">
-        <n-icon size="36" :color="theme === 'light' ? '#1890ff' : '#4096ff'">
+      <button class="logo" type="button" aria-label="返回首页" @click="navigateTo('/')">
+        <n-icon size="36" :color="isDark ? '#4096ff' : '#1890ff'">
           <LogoIcon />
         </n-icon>
-        <span class="logo-text">COMPANY</span>
-      </div>
+        <span class="logo-text">Research Desk</span>
+      </button>
 
       <div class="header-right">
-        <div class="nav-menu">
+        <nav class="nav-menu" aria-label="主要导航">
           <n-menu
-            v-model:value="activeKey"
+            :value="activeKey"
             mode="horizontal"
             :options="menuOptions"
           />
-        </div>
+        </nav>
 
         <div class="header-actions">
           <n-button
             text
-            @click="toggleLanguage"
-            class="lang-btn"
-          >
-            {{ currentLang === 'zh-CN' ? 'EN' : '中文' }}
-          </n-button>
-
-          <n-button
-            text
             @click="toggleTheme"
             class="theme-btn"
+            :aria-label="isDark ? '切换到浅色模式' : '切换到深色模式'"
+            :aria-pressed="isDark"
           >
             <n-icon size="20">
               <MoonIcon v-if="!isDark" />
@@ -44,18 +38,44 @@
           >
             PPT 生成
           </n-button>
+
+          <n-button
+            text
+            circle
+            class="mobile-menu-btn"
+            aria-label="打开导航菜单"
+            @click="mobileMenuOpen = true"
+          >
+            <n-icon size="24">
+              <MenuIcon />
+            </n-icon>
+          </n-button>
         </div>
       </div>
     </div>
-  </div>
+
+    <n-drawer v-model:show="mobileMenuOpen" placement="right" width="min(84vw, 320px)">
+      <n-drawer-content title="导航" closable>
+        <n-menu
+          :value="activeKey"
+          :options="mobileMenuOptions"
+          class="mobile-nav-menu"
+        />
+        <div class="mobile-drawer-actions">
+          <n-button block type="primary" @click="navigateTo('/contact')">PPT 生成</n-button>
+        </div>
+      </n-drawer-content>
+    </n-drawer>
+  </header>
 </template>
 
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { NMenu, NButton, NIcon } from 'naive-ui'
+import { NDrawer, NDrawerContent, NMenu, NButton, NIcon } from 'naive-ui'
 import {
+  MenuOutline,
   MoonOutline,
   SunnyOutline
 } from '@vicons/ionicons5'
@@ -63,14 +83,21 @@ import { useThemeStore } from '@/stores/theme'
 
 const router = useRouter()
 const route = useRoute()
-const { locale, t } = useI18n()
+const { t } = useI18n()
 const themeStore = useThemeStore()
+const mobileMenuOpen = ref(false)
 
 const isDark = computed(() => themeStore.isDark)
-const currentLang = computed(() => locale.value)
-const activeKey = computed(() => route.name)
+const activeKey = computed(() => {
+  const activeMap = {
+    BusinessDetail: 'Business',
+    CaseDetail: 'Cases'
+  }
+  return activeMap[route.name] || route.name
+})
 
-const LogoIcon = () => '🏢'
+const LogoIcon = () => '▣'
+const MenuIcon = MenuOutline
 const MoonIcon = MoonOutline
 const SunIcon = SunnyOutline
 
@@ -89,16 +116,6 @@ const menuOptions = computed(() => [
     label: () => t('common.business'),
     key: 'Business',
     onClick: () => navigateTo('/business')
-  },
-  {
-    label: () => t('common.cases'),
-    key: 'Cases',
-    onClick: () => navigateTo('/cases')
-  },
-  {
-    label: () => t('common.news'),
-    key: 'News',
-    onClick: () => navigateTo('/news')
   },
   {
     label: '文献',
@@ -122,12 +139,11 @@ const menuOptions = computed(() => [
   }
 ])
 
-const navigateTo = (path) => {
-  router.push(path)
-}
+const mobileMenuOptions = computed(() => menuOptions.value.filter(option => option.key !== 'Contact'))
 
-const toggleLanguage = () => {
-  locale.value = locale.value === 'zh-CN' ? 'en-US' : 'zh-CN'
+const navigateTo = (path) => {
+  mobileMenuOpen.value = false
+  router.push(path)
 }
 
 const toggleTheme = () => {
@@ -169,6 +185,11 @@ const toggleTheme = () => {
 }
 
 .logo {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font: inherit;
   display: flex;
   align-items: center;
   gap: $spacing-sm;
@@ -178,6 +199,11 @@ const toggleTheme = () => {
 
   &:hover {
     transform: scale(1.02);
+  }
+
+  &:focus-visible {
+    outline: 3px solid rgba(24, 144, 255, 0.35);
+    outline-offset: 4px;
   }
 
   &-text {
@@ -235,12 +261,6 @@ const toggleTheme = () => {
   gap: 8px;
   flex-shrink: 0;
 
-  .lang-btn {
-    font-size: 16px;
-    padding: 6px 10px;
-    font-weight: 500;
-  }
-
   .theme-btn {
     padding: 6px;
   }
@@ -249,6 +269,23 @@ const toggleTheme = () => {
     padding: 10px 18px;
     font-size: 16px;
     font-weight: 500;
+  }
+}
+
+.mobile-menu-btn {
+  display: none;
+}
+
+.mobile-drawer-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.mobile-nav-menu {
+  :deep(.n-menu-item-content) {
+    min-height: 44px;
+    font-size: 16px;
   }
 }
 
@@ -271,10 +308,37 @@ const toggleTheme = () => {
 
   .header-content {
     height: 64px;
+    padding: 0 16px;
   }
 
   .logo-text {
     font-size: 22px;
+  }
+
+  .contact-btn {
+    display: none;
+  }
+
+  .mobile-menu-btn {
+    display: inline-flex;
+  }
+}
+
+@media (max-width: 420px) {
+  .header-content {
+    padding: 0 12px;
+  }
+
+  .logo {
+    gap: 6px;
+  }
+
+  .logo-text {
+    font-size: 18px;
+  }
+
+  .header-actions {
+    gap: 4px;
   }
 }
 </style>

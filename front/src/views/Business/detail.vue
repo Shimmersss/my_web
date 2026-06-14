@@ -1,6 +1,6 @@
 <template>
   <div class="business-detail">
-    <!-- 业务详情 -->
+    <!-- 工具详情 -->
     <section class="section">
       <div class="container">
         <div class="detail-content">
@@ -8,10 +8,10 @@
             <img :src="businessData.image" :alt="businessData.title">
           </div>
           <div class="detail-info">
-            <h2>业务介绍</h2>
+            <h2>工具介绍</h2>
             <p>{{ businessData.introduction }}</p>
 
-            <h3>核心功能</h3>
+            <h3>核心能力</h3>
             <ul class="feature-list">
               <li v-for="feature in businessData.features" :key="feature">
                 <n-icon><CheckmarkCircleOutline /></n-icon>
@@ -19,7 +19,7 @@
               </li>
             </ul>
 
-            <h3>应用场景</h3>
+            <h3>使用场景</h3>
             <div class="scenarios">
               <n-tag v-for="scenario in businessData.scenarios" :key="scenario" type="info" size="large">
                 {{ scenario }}
@@ -28,7 +28,7 @@
 
             <div class="detail-actions">
               <n-button type="primary" size="large" @click="navigateTo('/contact')">
-                生成方案 PPT
+                打开 PPT 生成
               </n-button>
               <n-button size="large" @click="navigateTo('/contact')">
                 PPT 生成
@@ -39,10 +39,10 @@
       </div>
     </section>
 
-    <!-- 相关业务 -->
+    <!-- 相关工具 -->
     <section class="section" style="background: #f5f5f5">
       <div class="container">
-        <h2 class="section__title">相关业务</h2>
+        <h2 class="section__title">相关工具</h2>
         <n-grid :x-gap="24" :y-gap="24" :cols="3">
           <n-grid-item v-for="item in relatedBusiness" :key="item.id">
             <div class="related-card" @click="navigateTo(`/business/${item.id}`)">
@@ -59,56 +59,86 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { NButton, NGrid, NGridItem, NTag, NIcon } from 'naive-ui'
 import { CheckmarkCircleOutline } from '@vicons/ionicons5'
+import heroImage from '@/assets/images/research-workbench-hero.jpg'
+import pipelineImage from '@/assets/images/research-pipeline-panel.jpg'
 
 const router = useRouter()
 const route = useRoute()
 
-const businessData = ref({
-  id: 1,
-  title: '云计算服务',
-  description: '提供稳定可靠的云计算解决方案',
-  introduction: '我们的云计算服务提供稳定、安全、可扩展的云基础设施，帮助企业快速部署应用，降低IT成本，提升业务灵活性。我们拥有经验丰富的技术团队，为您提供7x24小时的技术支持。',
-  features: [
-    '弹性计算，按需扩容',
-    '高可用架构，保障业务稳定',
-    '安全防护，多重安全保障',
-    '全球加速，快速响应',
-    '自动化运维，降低人工成本'
-  ],
-  scenarios: ['企业上云', '应用部署', '数据备份', '负载均衡', '容灾恢复'],
-  image: 'https://picsum.photos/800/600'
-})
-
-const relatedBusiness = computed(() => [
+const toolModules = [
+  {
+    id: 1,
+    title: 'Zotero 文献库',
+    description: '展示私有 Zotero 库、附件代理和引用导出',
+    introduction: '文献库页面由后端缓存 Zotero Web API 数据，浏览器只请求站内接口。附件代理会处理 Zotero 的 S3 跳转、ZIP 打包和真实 content-type 推断，适合直接查看 PDF、Markdown 和网页快照。',
+    features: ['启动预热与定时刷新', '母条目和孤立附件统一渲染', 'PDF / Markdown 附件代理', 'BibTeX / RIS / APA 引用导出'],
+    scenarios: ['论文检索', '附件预览', '引用整理', '研究资料归档'],
+    image: pipelineImage
+  },
   {
     id: 2,
-    title: '数据分析',
-    description: '专业的数据分析与商业智能服务',
-    image: 'https://picsum.photos/400/300?random=4'
+    title: 'PDF 论文翻译',
+    description: '按页面范围生成保留版式的中文或双语 PDF',
+    introduction: '翻译页面以 BabelDOC 为主链路，先上传 PDF 读取页数，再选择页面范围、字体族和速度模式。翻译结果落盘保存，可预览纯中文或双语 PDF，也可下载从最终 PDF 提取的中文 TXT。',
+    features: ['页面范围选择', '纯中文 / 双语 PDF 缓存', 'SSE 实时进度', '加速模式资源保护与稳定模式降级'],
+    scenarios: ['论文精读', '英文资料翻译', '版式复查', '中文文本提取'],
+    image: heroImage
   },
   {
     id: 3,
-    title: '技术咨询',
-    description: '全方位的技术咨询与架构设计',
-    image: 'https://picsum.photos/400/300?random=5'
+    title: 'PPT 生成',
+    description: '论文、提示词和 PPTX 模板生成可编辑演示稿',
+    introduction: 'PPT 生成页保留 /contact URL，支持仅提示词、提示词加论文、提示词加论文加模板。后端抽取论文文本和图片，调用 mimo 规划结构，再通过自由 renderer 或原生模板填充链路输出 PPTX。',
+    features: ['PDF / DOCX 论文解析', 'PPTX 模板风格继承', '论文图片和表格受控分配', '任务令牌保护下载'],
+    scenarios: ['毕业答辩', '论文分享', '项目汇报', '模板化演示稿'],
+    image: pipelineImage
   },
   {
     id: 4,
-    title: '人工智能',
-    description: 'AI驱动的智能化解决方案',
-    image: 'https://picsum.photos/400/300?random=6'
+    title: 'OpenClaw 对话',
+    description: '站内管理 OpenClaw 会话、模型、历史和产物',
+    introduction: 'OpenClaw 页面通过后端调用本机 Gateway CLI。前端不接触 Gateway token，也不 iframe 官方 UI，而是使用原生聊天界面读取模型、会话、历史和可下载产物。',
+    features: ['ADMIN_KEY 登录保护', '模型和会话读取', '历史消息恢复', '产物安全下载'],
+    scenarios: ['本机 AI 对话', '任务讨论', '产物下载', '模型切换'],
+    image: heroImage
+  },
+  {
+    id: 5,
+    title: 'GitHub 项目展示',
+    description: '后端代理仓库元数据和 README',
+    introduction: '开源项目页面当前入口折叠保留，适合后续重新展示精选仓库。数据由后端读取本地展示配置，并代理 GitHub API 和 raw README，避免浏览器直连外部接口。',
+    features: ['仓库配置落盘', 'README 代理', 'stars / forks / language 补全', '管理员保存配置'],
+    scenarios: ['项目作品集', 'README 展示', '开源记录', '后续入口恢复'],
+    image: pipelineImage
+  },
+  {
+    id: 6,
+    title: '部署与资源保护',
+    description: '围绕 2 核 4GB 服务器限制控制队列、内存和文件保留',
+    introduction: '生产环境按 2 核 CPU / 4 GB 内存设计。翻译和 PPT 都使用单 worker 与有界队列，大文件落盘到 .run 目录，部署脚本覆盖 jar 前先停止服务并检查 uv 等运行依赖。',
+    features: ['单 worker 有界队列', '任务结果落盘', '部署前依赖检查', '内存与 swap 阈值保护'],
+    scenarios: ['公网部署', '低资源运行', '任务排障', '热修回流'],
+    image: heroImage
   }
+]
+
+const businessData = ref(toolModules[0])
+
+const relatedBusiness = computed(() => [
+  ...toolModules.filter(item => item.id !== Number(route.params.id || 1)).slice(0, 3)
 ])
 
-onMounted(() => {
-  const id = route.params.id
-  // 实际项目中这里应该从API获取数据
-  console.log('Loading business detail:', id)
-})
+const syncBusinessData = () => {
+  const id = Number(route.params.id || 1)
+  businessData.value = toolModules.find(item => item.id === id) || toolModules[0]
+}
+
+onMounted(syncBusinessData)
+watch(() => route.params.id, syncBusinessData)
 
 const navigateTo = (path) => {
   router.push(path)

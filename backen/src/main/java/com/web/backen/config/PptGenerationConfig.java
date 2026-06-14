@@ -14,14 +14,18 @@ public class PptGenerationConfig {
     private long maxPaperBytes = 30L * 1024 * 1024;
     private long maxTemplateBytes = 30L * 1024 * 1024;
     private int maxPaperTextChars = 28000;
-    private int maxExtractedImages = 8;
-    private int maxVisionImages = 8;
+    private int maxExtractedImages = 24;
+    private int maxVisionImages = 24;
     private int llmMaxTokens = 16384;
     private int visionMaxTokens = 4096;
     private String visionModel = "mimo-v2.5";
     private int timeoutSeconds = 900;
-    private String nodeCommand = "node";
-    private String runnerScript = "./scripts/pptx-generator/generate_deck.mjs";
+    private String rendererCommand = "uv run --with python-pptx --with pillow python";
+    private String rendererScript = "./scripts/ppt_renderer.py";
+    private String templateFillCommand = "uv run --with python-pptx python";
+    private String templateFillScript = "./scripts/ppt-template-fill/template_fill_pptx.py";
+    private String paperParserCommand = "uv run --with docling --with markitdown python";
+    private String paperParserScript = "./scripts/ppt_document_parser.py";
 
     public String getStorageDir() { return storageDir; }
     public void setStorageDir(String storageDir) { this.storageDir = storageDir; }
@@ -49,8 +53,16 @@ public class PptGenerationConfig {
     public void setVisionModel(String visionModel) { this.visionModel = visionModel; }
     public int getTimeoutSeconds() { return timeoutSeconds; }
     public void setTimeoutSeconds(int timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; }
-    public String getNodeCommand() { return nodeCommand; }
-    public void setNodeCommand(String nodeCommand) { this.nodeCommand = nodeCommand; }
-    public String getRunnerScript() { return runnerScript; }
-    public void setRunnerScript(String runnerScript) { this.runnerScript = runnerScript; }
+    public String getRendererCommand() { return rendererCommand; }
+    public void setRendererCommand(String rendererCommand) { this.rendererCommand = rendererCommand; }
+    public String getRendererScript() { return rendererScript; }
+    public void setRendererScript(String rendererScript) { this.rendererScript = rendererScript; }
+    public String getTemplateFillCommand() { return templateFillCommand; }
+    public void setTemplateFillCommand(String templateFillCommand) { this.templateFillCommand = templateFillCommand; }
+    public String getTemplateFillScript() { return templateFillScript; }
+    public void setTemplateFillScript(String templateFillScript) { this.templateFillScript = templateFillScript; }
+    public String getPaperParserCommand() { return paperParserCommand; }
+    public void setPaperParserCommand(String paperParserCommand) { this.paperParserCommand = paperParserCommand; }
+    public String getPaperParserScript() { return paperParserScript; }
+    public void setPaperParserScript(String paperParserScript) { this.paperParserScript = paperParserScript; }
 }

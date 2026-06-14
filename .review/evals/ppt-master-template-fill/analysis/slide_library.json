@@ -1,0 +1,5056 @@
+{
+  "schema": "template_fill_pptx_library.v1",
+  "source_pptx": "/Users/shimmer/Desktop/Web/.review/evals/ppt-master-template-fill/sources/template.pptx",
+  "slide_count": 24,
+  "canvas_px": {
+    "width": 1280,
+    "height": 720
+  },
+  "slides": [
+    {
+      "slide_index": 1,
+      "page_type": "cover_candidate",
+      "text_summary": "山东科技大学答辩PPT模板\n您的学院—专业—姓名\n指导老师  ：山科球知道\n—— 惟真求新 ——",
+      "slots": [
+        {
+          "slot_id": "s01_sh4",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 242,
+            "width": 1280,
+            "height": 346
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s01_sh5",
+          "role": "label_candidate",
+          "text": "山东科技大学答辩PPT模板",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 121,
+            "y": 295,
+            "width": 1038,
+            "height": 116
+          },
+          "text_metrics": {
+            "font_size_px": 88.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s01_sh6",
+          "role": "body_candidate",
+          "text": "您的学院—专业—姓名",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 507,
+            "y": 500,
+            "width": 321,
+            "height": 39
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s01_sh7",
+          "role": "label_candidate",
+          "text": "指导老师  ：山科球知道",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 501,
+            "y": 450,
+            "width": 317,
+            "height": 39
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s01_sh16",
+          "role": "label_candidate",
+          "text": "—— 惟真求新 ——",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 463,
+            "y": 620,
+            "width": 354,
+            "height": 63
+          },
+          "text_metrics": {
+            "font_size_px": 37.33,
+            "paragraph_count": 1
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 2,
+      "page_type": "toc_candidate",
+      "text_summary": "CONTENTS\n01\n研究背景与现状\n02\n研究方法与思路\n03\n关键技术与难点\n04\n研究成果与应用\n05\n论文总结",
+      "slots": [
+        {
+          "slot_id": "s02_sh2",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": -2,
+            "y": 0,
+            "width": 491,
+            "height": 720
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s02_sh7",
+          "role": "title_candidate",
+          "text": "CONTENTS",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 660,
+            "y": 76,
+            "width": 321,
+            "height": 68
+          },
+          "text_metrics": {
+            "font_size_px": 48.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s02_sh8",
+          "role": "label_candidate",
+          "text": "01",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 692,
+            "y": 234,
+            "width": 107,
+            "height": 61
+          },
+          "text_metrics": {
+            "font_size_px": 42.67,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s02_sh9",
+          "role": "label_candidate",
+          "text": "研究背景与现状",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 784,
+            "y": 239,
+            "width": 246,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s02_sh24",
+          "role": "label_candidate",
+          "text": "02",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 692,
+            "y": 234,
+            "width": 107,
+            "height": 61
+          },
+          "text_metrics": {
+            "font_size_px": 42.67,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s02_sh25",
+          "role": "label_candidate",
+          "text": "研究方法与思路",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 784,
+            "y": 239,
+            "width": 246,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s02_sh29",
+          "role": "label_candidate",
+          "text": "03",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 692,
+            "y": 234,
+            "width": 107,
+            "height": 61
+          },
+          "text_metrics": {
+            "font_size_px": 42.67,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s02_sh30",
+          "role": "label_candidate",
+          "text": "关键技术与难点",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 784,
+            "y": 239,
+            "width": 246,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s02_sh34",
+          "role": "label_candidate",
+          "text": "04",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 692,
+            "y": 234,
+            "width": 107,
+            "height": 68
+          },
+          "text_metrics": {
+            "font_size_px": 48.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s02_sh35",
+          "role": "label_candidate",
+          "text": "研究成果与应用",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 784,
+            "y": 239,
+            "width": 246,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s02_sh47",
+          "role": "label_candidate",
+          "text": "05",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 692,
+            "y": 234,
+            "width": 107,
+            "height": 68
+          },
+          "text_metrics": {
+            "font_size_px": 48.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s02_sh48",
+          "role": "label_candidate",
+          "text": "论文总结",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 784,
+            "y": 239,
+            "width": 149,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 3,
+      "page_type": "chapter_candidate",
+      "text_summary": "1.  研究背景与现状",
+      "slots": [
+        {
+          "slot_id": "s03_sh13",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 311,
+            "y": 307,
+            "width": 657,
+            "height": 142
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s03_sh9",
+          "role": "body_candidate",
+          "text": "1.  研究背景与现状",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 437,
+            "y": 343,
+            "width": 431,
+            "height": 68
+          },
+          "text_metrics": {
+            "font_size_px": 48.0,
+            "paragraph_count": 1
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 4,
+      "page_type": "content_candidate",
+      "text_summary": "研究背景\n研究背景\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n1.1  研究背景",
+      "slots": [
+        {
+          "slot_id": "s04_sh2",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 44,
+            "y": 53,
+            "width": 441,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s04_sh3",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 156,
+            "y": 208,
+            "width": 278,
+            "height": 173
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s04_sh6",
+          "role": "label_candidate",
+          "text": "研究背景",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 237,
+            "y": 321,
+            "width": 132,
+            "height": 42
+          },
+          "text_metrics": {
+            "font_size_px": 26.67,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s04_sh7",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 434,
+            "y": 208,
+            "width": 662,
+            "height": 173
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s04_sh8",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 156,
+            "y": 430,
+            "width": 278,
+            "height": 173
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s04_sh10",
+          "role": "label_candidate",
+          "text": "研究背景",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 237,
+            "y": 543,
+            "width": 132,
+            "height": 42
+          },
+          "text_metrics": {
+            "font_size_px": 26.67,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s04_sh11",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 434,
+            "y": 430,
+            "width": 662,
+            "height": 173
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s04_sh12",
+          "role": "label_candidate",
+          "text": "请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 466,
+            "y": 253,
+            "width": 615,
+            "height": 83
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 2
+          }
+        },
+        {
+          "slot_id": "s04_sh13",
+          "role": "label_candidate",
+          "text": "请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 466,
+            "y": 475,
+            "width": 615,
+            "height": 83
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 2
+          }
+        },
+        {
+          "slot_id": "s04_sh16",
+          "role": "title_candidate",
+          "text": "1.1  研究背景",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 143,
+            "y": 68,
+            "width": 211,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 5,
+      "page_type": "content_candidate",
+      "text_summary": "1.2  研究意义\n请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入您的正文内容\n请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入您的正文内容\n请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入您的正文内容\n请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入您的正文内容\n请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入您的正文内容",
+      "slots": [
+        {
+          "slot_id": "s05_sh2",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 44,
+            "y": 53,
+            "width": 441,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh4",
+          "role": "title_candidate",
+          "text": "1.2  研究意义",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 143,
+            "y": 68,
+            "width": 226,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s05_sh6",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 313,
+            "y": 249,
+            "width": 24,
+            "height": 37
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh7",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 509,
+            "y": 249,
+            "width": 24,
+            "height": 37
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh8",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 748,
+            "y": 249,
+            "width": 24,
+            "height": 37
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh9",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 943,
+            "y": 249,
+            "width": 24,
+            "height": 37
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh38",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 135,
+            "y": 219,
+            "width": 140,
+            "height": 140
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh39",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 173,
+            "y": 249,
+            "width": 63,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh11",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 108,
+            "y": 460,
+            "width": 196,
+            "height": 108
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh36",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 374,
+            "y": 240,
+            "width": 97,
+            "height": 97
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh37",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 401,
+            "y": 267,
+            "width": 43,
+            "height": 44
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh34",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 570,
+            "y": 219,
+            "width": 140,
+            "height": 140
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh35",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 608,
+            "y": 249,
+            "width": 63,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh32",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 809,
+            "y": 240,
+            "width": 97,
+            "height": 97
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh33",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 836,
+            "y": 267,
+            "width": 43,
+            "height": 44
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh30",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 1005,
+            "y": 219,
+            "width": 140,
+            "height": 140
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh31",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 1043,
+            "y": 249,
+            "width": 63,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s05_sh41",
+          "role": "body_candidate",
+          "text": "请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入您的正文内容",
+          "paragraph_count": 4,
+          "geometry": {
+            "x": 108,
+            "y": 465,
+            "width": 196,
+            "height": 144
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 4
+          }
+        },
+        {
+          "slot_id": "s05_sh42",
+          "role": "body_candidate",
+          "text": "请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入您的正文内容",
+          "paragraph_count": 4,
+          "geometry": {
+            "x": 542,
+            "y": 465,
+            "width": 196,
+            "height": 144
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 4
+          }
+        },
+        {
+          "slot_id": "s05_sh43",
+          "role": "body_candidate",
+          "text": "请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入您的正文内容",
+          "paragraph_count": 4,
+          "geometry": {
+            "x": 325,
+            "y": 424,
+            "width": 196,
+            "height": 144
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 4
+          }
+        },
+        {
+          "slot_id": "s05_sh44",
+          "role": "body_candidate",
+          "text": "请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入您的正文内容",
+          "paragraph_count": 4,
+          "geometry": {
+            "x": 977,
+            "y": 465,
+            "width": 196,
+            "height": 144
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 4
+          }
+        },
+        {
+          "slot_id": "s05_sh45",
+          "role": "body_candidate",
+          "text": "请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入您的正文内容",
+          "paragraph_count": 4,
+          "geometry": {
+            "x": 759,
+            "y": 424,
+            "width": 196,
+            "height": 144
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 4
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 6,
+      "page_type": "content_candidate",
+      "text_summary": "1.3  研究现状\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+      "slots": [
+        {
+          "slot_id": "s06_sh3",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 44,
+            "y": 53,
+            "width": 441,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh5",
+          "role": "title_candidate",
+          "text": "1.3  研究现状",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 143,
+            "y": 68,
+            "width": 226,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s06_sh63",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 376,
+            "y": 230,
+            "width": 61,
+            "height": 61
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh64",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 387,
+            "y": 245,
+            "width": 39,
+            "height": 30
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh57",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 843,
+            "y": 230,
+            "width": 61,
+            "height": 61
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh58",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 857,
+            "y": 244,
+            "width": 32,
+            "height": 32
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh53",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 376,
+            "y": 435,
+            "width": 61,
+            "height": 61
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh54",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 389,
+            "y": 448,
+            "width": 35,
+            "height": 34
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh47",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 843,
+            "y": 435,
+            "width": 61,
+            "height": 61
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh48",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 856,
+            "y": 447,
+            "width": 34,
+            "height": 37
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh14",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 496,
+            "y": 238,
+            "width": 288,
+            "height": 288
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh16",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 510,
+            "y": 252,
+            "width": 261,
+            "height": 261
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh17",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 540,
+            "y": 251,
+            "width": 89,
+            "height": 54
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh18",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 598,
+            "y": 284,
+            "width": 9,
+            "height": 7
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh19",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 610,
+            "y": 293,
+            "width": 2,
+            "height": 3
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh20",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 560,
+            "y": 254,
+            "width": 209,
+            "height": 244
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh21",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 614,
+            "y": 297,
+            "width": 2,
+            "height": 2
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh22",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 638,
+            "y": 304,
+            "width": 2,
+            "height": 3
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh23",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 640,
+            "y": 299,
+            "width": 2,
+            "height": 2
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh24",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 635,
+            "y": 268,
+            "width": 8,
+            "height": 6
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh25",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 651,
+            "y": 265,
+            "width": 3,
+            "height": 3
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh26",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 660,
+            "y": 269,
+            "width": 7,
+            "height": 11
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh27",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 648,
+            "y": 267,
+            "width": 4,
+            "height": 2
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh28",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 663,
+            "y": 281,
+            "width": 2,
+            "height": 2
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh29",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 668,
+            "y": 267,
+            "width": 3,
+            "height": 2
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh30",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 764,
+            "y": 365,
+            "width": 2,
+            "height": 9
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh31",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 690,
+            "y": 442,
+            "width": 2,
+            "height": 2
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh32",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 692,
+            "y": 453,
+            "width": 18,
+            "height": 27
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh33",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 719,
+            "y": 464,
+            "width": 2,
+            "height": 2
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh34",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 715,
+            "y": 467,
+            "width": 2,
+            "height": 2
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh35",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 699,
+            "y": 456,
+            "width": 2,
+            "height": 2
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh36",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 698,
+            "y": 455,
+            "width": 2,
+            "height": 2
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh37",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 619,
+            "y": 334,
+            "width": 4,
+            "height": 10
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh38",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 609,
+            "y": 339,
+            "width": 5,
+            "height": 3
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh39",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 630,
+            "y": 350,
+            "width": 2,
+            "height": 2
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh40",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 606,
+            "y": 342,
+            "width": 2,
+            "height": 2
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh41",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 665,
+            "y": 349,
+            "width": 6,
+            "height": 4
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh42",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 510,
+            "y": 381,
+            "width": 26,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s06_sh67",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 73,
+            "y": 247,
+            "width": 300,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 2
+          }
+        },
+        {
+          "slot_id": "s06_sh68",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 73,
+            "y": 450,
+            "width": 300,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 2
+          }
+        },
+        {
+          "slot_id": "s06_sh69",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 911,
+            "y": 247,
+            "width": 300,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 2
+          }
+        },
+        {
+          "slot_id": "s06_sh70",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 911,
+            "y": 449,
+            "width": 300,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 2
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 7,
+      "page_type": "content_candidate",
+      "text_summary": "1.4  研究创新点\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+      "slots": [
+        {
+          "slot_id": "s07_sh3",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 44,
+            "y": 53,
+            "width": 441,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh5",
+          "role": "title_candidate",
+          "text": "1.4  研究创新点",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 143,
+            "y": 68,
+            "width": 259,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s07_sh7",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 320,
+            "y": 49,
+            "width": 142,
+            "height": 89
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh8",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 150,
+            "y": 178,
+            "width": 357,
+            "height": 95
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh9",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 177,
+            "y": 98,
+            "width": 330,
+            "height": 247
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh10",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 177,
+            "y": 336,
+            "width": 266,
+            "height": 87
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh11",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 215,
+            "y": 213,
+            "width": 291,
+            "height": 201
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh12",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 215,
+            "y": 402,
+            "width": 199,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh13",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 242,
+            "y": 392,
+            "width": 199,
+            "height": 91
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh14",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 241,
+            "y": 480,
+            "width": 174,
+            "height": 14
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh15",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 252,
+            "y": 510,
+            "width": 152,
+            "height": 13
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh16",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 252,
+            "y": 531,
+            "width": 152,
+            "height": 13
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh17",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 252,
+            "y": 553,
+            "width": 152,
+            "height": 13
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh18",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 252,
+            "y": 574,
+            "width": 152,
+            "height": 13
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh19",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 252,
+            "y": 593,
+            "width": 152,
+            "height": 41
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh20",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 87,
+            "y": 92,
+            "width": 278,
+            "height": 82
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh21",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 349,
+            "y": 49,
+            "width": 113,
+            "height": 55
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh22",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 149,
+            "y": 204,
+            "width": 53,
+            "height": 71
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s07_sh23",
+          "role": "body_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 5,
+          "geometry": {
+            "x": 640,
+            "y": 225,
+            "width": 478,
+            "height": 207
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 5
+          }
+        },
+        {
+          "slot_id": "s07_sh24",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 640,
+            "y": 473,
+            "width": 478,
+            "height": 149
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 3
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 8,
+      "page_type": "chapter_candidate",
+      "text_summary": "2. 研究方法与思路",
+      "slots": [
+        {
+          "slot_id": "s08_sh13",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 311,
+            "y": 307,
+            "width": 657,
+            "height": 142
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s08_sh9",
+          "role": "label_candidate",
+          "text": "2. 研究方法与思路",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 437,
+            "y": 343,
+            "width": 488,
+            "height": 68
+          },
+          "text_metrics": {
+            "font_size_px": 48.0,
+            "paragraph_count": 1
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 9,
+      "page_type": "content_candidate",
+      "text_summary": "2.1  研究方法\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容\n请输入小标题",
+      "slots": [
+        {
+          "slot_id": "s09_sh3",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 44,
+            "y": 53,
+            "width": 441,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s09_sh5",
+          "role": "title_candidate",
+          "text": "2.1  研究方法",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 176,
+            "y": 68,
+            "width": 226,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s09_sh13",
+          "role": "label_candidate",
+          "text": "请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 197,
+            "y": 313,
+            "width": 346,
+            "height": 65
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 2
+          }
+        },
+        {
+          "slot_id": "s09_sh6",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 203,
+            "y": 246,
+            "width": 316,
+            "height": 56
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s09_sh14",
+          "role": "label_candidate",
+          "text": "请输入小标题",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 316,
+            "y": 246,
+            "width": 165,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s09_sh17",
+          "role": "label_candidate",
+          "text": "请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 739,
+            "y": 313,
+            "width": 346,
+            "height": 65
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 2
+          }
+        },
+        {
+          "slot_id": "s09_sh21",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 203,
+            "y": 246,
+            "width": 316,
+            "height": 56
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s09_sh22",
+          "role": "label_candidate",
+          "text": "请输入小标题",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 316,
+            "y": 246,
+            "width": 165,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s09_sh24",
+          "role": "label_candidate",
+          "text": "请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 197,
+            "y": 531,
+            "width": 346,
+            "height": 65
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 2
+          }
+        },
+        {
+          "slot_id": "s09_sh26",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 203,
+            "y": 246,
+            "width": 316,
+            "height": 56
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s09_sh27",
+          "role": "label_candidate",
+          "text": "请输入小标题",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 316,
+            "y": 246,
+            "width": 165,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s09_sh29",
+          "role": "label_candidate",
+          "text": "请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 739,
+            "y": 531,
+            "width": 346,
+            "height": 65
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 2
+          }
+        },
+        {
+          "slot_id": "s09_sh31",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 203,
+            "y": 246,
+            "width": 316,
+            "height": 56
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s09_sh32",
+          "role": "label_candidate",
+          "text": "请输入小标题",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 316,
+            "y": 246,
+            "width": 165,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s09_sh35",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 110,
+            "y": 168,
+            "width": 1060,
+            "height": 494
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 10,
+      "page_type": "content_candidate",
+      "text_summary": "2.2  研究思路\n请输入标题\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入标题\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+      "slots": [
+        {
+          "slot_id": "s10_sh4",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 529,
+            "y": 218,
+            "width": 368,
+            "height": 368
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s10_sh5",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 359,
+            "y": 354,
+            "width": 265,
+            "height": 265
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s10_sh6",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 566,
+            "y": 67,
+            "width": 265,
+            "height": 264
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s10_sh7",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 774,
+            "y": 354,
+            "width": 265,
+            "height": 265
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s10_sh19",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 44,
+            "y": 53,
+            "width": 441,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s10_sh21",
+          "role": "title_candidate",
+          "text": "2.2  研究思路",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 143,
+            "y": 68,
+            "width": 232,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s10_sh22",
+          "role": "label_candidate",
+          "text": "请输入标题\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 127,
+            "y": 235,
+            "width": 355,
+            "height": 120
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 3
+          }
+        },
+        {
+          "slot_id": "s10_sh23",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容\n请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 772,
+            "y": 215,
+            "width": 196,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 3
+          }
+        },
+        {
+          "slot_id": "s10_sh24",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容\n请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 596,
+            "y": 461,
+            "width": 196,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 3
+          }
+        },
+        {
+          "slot_id": "s10_sh25",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容\n请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 950,
+            "y": 461,
+            "width": 196,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 3
+          }
+        },
+        {
+          "slot_id": "s10_sh26",
+          "role": "label_candidate",
+          "text": "请输入标题\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 122,
+            "y": 404,
+            "width": 355,
+            "height": 120
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 3
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 11,
+      "page_type": "content_candidate",
+      "text_summary": "请输入您的标题\n请输入您的标题\n2.3  研究可行性分析\n请输入标题\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容\n请输入标题\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容\n惟真求新",
+      "slots": [
+        {
+          "slot_id": "s11_sh9219",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 211,
+            "height": 540
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s11_sh9220",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 95,
+            "y": 9,
+            "width": 540,
+            "height": 521
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s11_sh9221",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 102,
+            "y": 0,
+            "width": 211,
+            "height": 540
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s11_sh9223",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 369,
+            "height": 157
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s11_sh9224",
+          "role": "title_candidate",
+          "text": "请输入您的标题",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 93,
+            "y": 58,
+            "width": 297,
+            "height": 46
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s11_sh9226",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 369,
+            "height": 157
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s11_sh9227",
+          "role": "title_candidate",
+          "text": "请输入您的标题",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 59,
+            "y": 50,
+            "width": 262,
+            "height": 46
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s11_sh18",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 44,
+            "y": 53,
+            "width": 441,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s11_sh20",
+          "role": "title_candidate",
+          "text": "2.3  研究可行性分析",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 131,
+            "y": 69,
+            "width": 328,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s11_sh21",
+          "role": "body_candidate",
+          "text": "请输入标题\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 4,
+          "geometry": {
+            "x": 121,
+            "y": 408,
+            "width": 355,
+            "height": 149
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 4
+          }
+        },
+        {
+          "slot_id": "s11_sh22",
+          "role": "body_candidate",
+          "text": "请输入标题\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 4,
+          "geometry": {
+            "x": 928,
+            "y": 215,
+            "width": 352,
+            "height": 149
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 4
+          }
+        },
+        {
+          "slot_id": "s11_sh23",
+          "role": "label_candidate",
+          "text": "惟真求新",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 17,
+            "y": 668,
+            "width": 277,
+            "height": 39
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 1
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 12,
+      "page_type": "chapter_candidate",
+      "text_summary": "3. 关键技术与难点",
+      "slots": [
+        {
+          "slot_id": "s12_sh13",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 311,
+            "y": 307,
+            "width": 657,
+            "height": 142
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s12_sh9",
+          "role": "label_candidate",
+          "text": "3. 关键技术与难点",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 437,
+            "y": 343,
+            "width": 488,
+            "height": 68
+          },
+          "text_metrics": {
+            "font_size_px": 48.0,
+            "paragraph_count": 1
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 13,
+      "page_type": "content_candidate",
+      "text_summary": "3.1  关键技术\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+      "slots": [
+        {
+          "slot_id": "s13_sh3",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s13_sh4",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s13_sh15",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s13_sh16",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s13_sh17",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s13_sh6",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s13_sh12",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s13_sh13",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s13_sh14",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s13_sh9",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s13_sh10",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s13_sh11",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 0,
+            "height": 0
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s13_sh25",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 44,
+            "y": 53,
+            "width": 441,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s13_sh27",
+          "role": "title_candidate",
+          "text": "3.1  关键技术",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 181,
+            "y": 69,
+            "width": 226,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s13_sh28",
+          "role": "title_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 496,
+            "y": 132,
+            "width": 311,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 2
+          }
+        },
+        {
+          "slot_id": "s13_sh29",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 137,
+            "y": 447,
+            "width": 311,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 2
+          }
+        },
+        {
+          "slot_id": "s13_sh30",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 859,
+            "y": 445,
+            "width": 311,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 2
+          }
+        },
+        {
+          "slot_id": "s13_sh31",
+          "role": "label_candidate",
+          "text": "请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 198,
+            "y": 616,
+            "width": 994,
+            "height": 35
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 1
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 14,
+      "page_type": "content_candidate",
+      "text_summary": "请输入您的标题\n请输入您的内容请输入您的内容请输入您的内容请输入您的内容请输入您的内容\n3.2  实践难点\n请输入您的内容请输入您的内容请输入您的内容请输入您的内容请输入您的内容\n请输入您的标题\n请输入您的内容请输入您的内容请输入您的内容请输入您的内容请输入您的内容\n请输入您的内容请输入您的内容请输入您的内容请输入您的内容请输入您的内容\n请输入您的标题\n请输入您的内容请输入您的内容请输入您的内容请输入您的内容请输入您的内容\n请输入您的内容请输入您的内容请输入您的内容请输入您的内容请输入您的内容\n惟真求新",
+      "slots": [
+        {
+          "slot_id": "s14_sh23561",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 126,
+            "y": 207,
+            "width": 264,
+            "height": 395
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s14_sh23562",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 126,
+            "y": 207,
+            "width": 264,
+            "height": 65
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s14_sh23563",
+          "role": "label_candidate",
+          "text": "请输入您的标题",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 127,
+            "y": 218,
+            "width": 264,
+            "height": 39
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s14_sh23564",
+          "role": "label_candidate",
+          "text": "请输入您的内容请输入您的内容请输入您的内容请输入您的内容请输入您的内容",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 139,
+            "y": 297,
+            "width": 236,
+            "height": 97
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s14_sh23566",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 68,
+            "height": 68
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s14_sh26",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 44,
+            "y": 53,
+            "width": 441,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s14_sh28",
+          "role": "title_candidate",
+          "text": "3.2  实践难点",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 175,
+            "y": 69,
+            "width": 231,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s14_sh29",
+          "role": "label_candidate",
+          "text": "请输入您的内容请输入您的内容请输入您的内容请输入您的内容请输入您的内容",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 138,
+            "y": 412,
+            "width": 236,
+            "height": 97
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s14_sh30",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 514,
+            "y": 207,
+            "width": 264,
+            "height": 395
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s14_sh31",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 514,
+            "y": 207,
+            "width": 264,
+            "height": 65
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s14_sh32",
+          "role": "label_candidate",
+          "text": "请输入您的标题",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 515,
+            "y": 218,
+            "width": 264,
+            "height": 39
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s14_sh33",
+          "role": "label_candidate",
+          "text": "请输入您的内容请输入您的内容请输入您的内容请输入您的内容请输入您的内容",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 528,
+            "y": 297,
+            "width": 236,
+            "height": 97
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s14_sh35",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 606,
+            "y": 564,
+            "width": 82,
+            "height": 82
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s14_sh37",
+          "role": "label_candidate",
+          "text": "请输入您的内容请输入您的内容请输入您的内容请输入您的内容请输入您的内容",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 526,
+            "y": 412,
+            "width": 236,
+            "height": 97
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s14_sh38",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 905,
+            "y": 207,
+            "width": 264,
+            "height": 395
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s14_sh39",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 905,
+            "y": 207,
+            "width": 264,
+            "height": 65
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s14_sh40",
+          "role": "label_candidate",
+          "text": "请输入您的标题",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 906,
+            "y": 218,
+            "width": 264,
+            "height": 39
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s14_sh41",
+          "role": "label_candidate",
+          "text": "请输入您的内容请输入您的内容请输入您的内容请输入您的内容请输入您的内容",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 919,
+            "y": 297,
+            "width": 236,
+            "height": 97
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s14_sh45",
+          "role": "label_candidate",
+          "text": "请输入您的内容请输入您的内容请输入您的内容请输入您的内容请输入您的内容",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 917,
+            "y": 412,
+            "width": 236,
+            "height": 97
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s14_sh43",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 1003,
+            "y": 564,
+            "width": 82,
+            "height": 82
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s14_sh36",
+          "role": "label_candidate",
+          "text": "惟真求新",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 17,
+            "y": 668,
+            "width": 277,
+            "height": 39
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 1
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 15,
+      "page_type": "chapter_candidate",
+      "text_summary": "4. 研究成果与应用",
+      "slots": [
+        {
+          "slot_id": "s15_sh13",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 311,
+            "y": 307,
+            "width": 657,
+            "height": 142
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s15_sh9",
+          "role": "label_candidate",
+          "text": "4. 研究成果与应用",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 437,
+            "y": 343,
+            "width": 488,
+            "height": 126
+          },
+          "text_metrics": {
+            "font_size_px": 48.0,
+            "paragraph_count": 1
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 16,
+      "page_type": "content_candidate",
+      "text_summary": "输入内容\n输入内容\n输入内容\n小副标题\n小副标题\n输入内容\n输入内容\n输入内容\n小副标题\n输入内容\n输入内容\n输入内容\n小副标题\n输入内容\n输入内容\n输入内容\n4.1  研究成果",
+      "slots": [
+        {
+          "slot_id": "s16_sh4",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 528,
+            "y": 297,
+            "width": 227,
+            "height": 227
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh5",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 429,
+            "y": 337,
+            "width": 136,
+            "height": 136
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh6",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 722,
+            "y": 337,
+            "width": 136,
+            "height": 136
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh7",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 576,
+            "y": 492,
+            "width": 136,
+            "height": 136
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh8",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 576,
+            "y": 185,
+            "width": 136,
+            "height": 136
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh16",
+          "role": "label_candidate",
+          "text": "输入内容\n输入内容\n输入内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 878,
+            "y": 202,
+            "width": 163,
+            "height": 73
+          },
+          "text_metrics": {
+            "font_size_px": 17.6,
+            "paragraph_count": 3
+          }
+        },
+        {
+          "slot_id": "s16_sh18",
+          "role": "label_candidate",
+          "text": "小副标题",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 728,
+            "y": 202,
+            "width": 147,
+            "height": 41
+          },
+          "text_metrics": {
+            "font_size_px": 26.67,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s16_sh22",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 14,
+            "y": 338,
+            "width": 77,
+            "height": 61
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh23",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 17,
+            "y": 399,
+            "width": 70,
+            "height": 32
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh24",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 78,
+            "y": 410,
+            "width": 0,
+            "height": 21
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh25",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 68,
+            "y": 415,
+            "width": 0,
+            "height": 16
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh26",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 59,
+            "y": 421,
+            "width": 0,
+            "height": 10
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh27",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 50,
+            "y": 346,
+            "width": 4,
+            "height": 4
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh29",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 658,
+            "y": 95,
+            "width": 38,
+            "height": 83
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh30",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 667,
+            "y": 95,
+            "width": 64,
+            "height": 0
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh31",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 658,
+            "y": 86,
+            "width": 77,
+            "height": 32
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh32",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 725,
+            "y": 141,
+            "width": 0,
+            "height": 22
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh33",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 715,
+            "y": 154,
+            "width": 19,
+            "height": 10
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh34",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 699,
+            "y": 127,
+            "width": 51,
+            "height": 51
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh36",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 689,
+            "y": 91,
+            "width": 72,
+            "height": 72
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh37",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 680,
+            "y": 81,
+            "width": 75,
+            "height": 75
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh38",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 672,
+            "y": 73,
+            "width": 76,
+            "height": 77
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh39",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 688,
+            "y": 101,
+            "width": 51,
+            "height": 32
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh40",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 688,
+            "y": 85,
+            "width": 12,
+            "height": 13
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh41",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 672,
+            "y": 134,
+            "width": 76,
+            "height": 0
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh43",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 752,
+            "y": 155,
+            "width": 0,
+            "height": 8
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh44",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 758,
+            "y": 155,
+            "width": 0,
+            "height": 8
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh45",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 731,
+            "y": 163,
+            "width": 48,
+            "height": 8
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh46",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 725,
+            "y": 81,
+            "width": 61,
+            "height": 61
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh47",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 725,
+            "y": 81,
+            "width": 78,
+            "height": 78
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh48",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 722,
+            "y": 139,
+            "width": 6,
+            "height": 6
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh49",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 782,
+            "y": 78,
+            "width": 6,
+            "height": 6
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh51",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 201,
+            "y": 127,
+            "width": 57,
+            "height": 57
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh52",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 216,
+            "y": 100,
+            "width": 66,
+            "height": 60
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh55",
+          "role": "label_candidate",
+          "text": "小副标题",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 855,
+            "y": 358,
+            "width": 147,
+            "height": 41
+          },
+          "text_metrics": {
+            "font_size_px": 26.67,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s16_sh56",
+          "role": "label_candidate",
+          "text": "输入内容\n输入内容\n输入内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 991,
+            "y": 365,
+            "width": 163,
+            "height": 73
+          },
+          "text_metrics": {
+            "font_size_px": 17.6,
+            "paragraph_count": 3
+          }
+        },
+        {
+          "slot_id": "s16_sh57",
+          "role": "label_candidate",
+          "text": "小副标题",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 300,
+            "y": 411,
+            "width": 147,
+            "height": 41
+          },
+          "text_metrics": {
+            "font_size_px": 26.67,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s16_sh58",
+          "role": "label_candidate",
+          "text": "输入内容\n输入内容\n输入内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 174,
+            "y": 369,
+            "width": 107,
+            "height": 73
+          },
+          "text_metrics": {
+            "font_size_px": 17.6,
+            "paragraph_count": 3
+          }
+        },
+        {
+          "slot_id": "s16_sh59",
+          "role": "label_candidate",
+          "text": "小副标题",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 429,
+            "y": 565,
+            "width": 147,
+            "height": 41
+          },
+          "text_metrics": {
+            "font_size_px": 26.67,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s16_sh60",
+          "role": "label_candidate",
+          "text": "输入内容\n输入内容\n输入内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 301,
+            "y": 523,
+            "width": 109,
+            "height": 73
+          },
+          "text_metrics": {
+            "font_size_px": 17.6,
+            "paragraph_count": 3
+          }
+        },
+        {
+          "slot_id": "s16_sh61",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 44,
+            "y": 53,
+            "width": 441,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s16_sh63",
+          "role": "title_candidate",
+          "text": "4.1  研究成果",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 165,
+            "y": 69,
+            "width": 293,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 17,
+      "page_type": "content_candidate",
+      "text_summary": "4.2  应用前景\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容\n·······\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+      "slots": [
+        {
+          "slot_id": "s17_sh2",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": null,
+            "y": null,
+            "width": null,
+            "height": null
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s17_sh4",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 0,
+            "width": 1280,
+            "height": 352
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s17_sh5",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 455,
+            "y": 190,
+            "width": 371,
+            "height": 341
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s17_sh6",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 607,
+            "y": 584,
+            "width": 65,
+            "height": 61
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s17_sh14",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 44,
+            "y": 53,
+            "width": 441,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s17_sh16",
+          "role": "title_candidate",
+          "text": "4.2  应用前景",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 137,
+            "y": 69,
+            "width": 233,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s17_sh17",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 484,
+            "y": 212,
+            "width": 311,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 2
+          }
+        },
+        {
+          "slot_id": "s17_sh18",
+          "role": "label_candidate",
+          "text": "请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 484,
+            "y": 355,
+            "width": 311,
+            "height": 65
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s17_sh19",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 53,
+            "y": 470,
+            "width": 311,
+            "height": 144
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 3
+          }
+        },
+        {
+          "slot_id": "s17_sh20",
+          "role": "label_candidate",
+          "text": "·······",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 484,
+            "y": 447,
+            "width": 311,
+            "height": 36
+          },
+          "text_metrics": {
+            "font_size_px": 16.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s17_sh21",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 916,
+            "y": 469,
+            "width": 311,
+            "height": 144
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 3
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 18,
+      "page_type": "chapter_candidate",
+      "text_summary": "5. 论文总结",
+      "slots": [
+        {
+          "slot_id": "s18_sh13",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 311,
+            "y": 307,
+            "width": 657,
+            "height": 142
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s18_sh9",
+          "role": "label_candidate",
+          "text": "5. 论文总结",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 437,
+            "y": 343,
+            "width": 406,
+            "height": 68
+          },
+          "text_metrics": {
+            "font_size_px": 48.0,
+            "paragraph_count": 1
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 19,
+      "page_type": "content_candidate",
+      "text_summary": "5.1  研究结论\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+      "slots": [
+        {
+          "slot_id": "s19_sh4",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 383,
+            "y": 213,
+            "width": 197,
+            "height": 432
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s19_sh14",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 253,
+            "y": 299,
+            "width": 60,
+            "height": 60
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s19_sh15",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 267,
+            "y": 317,
+            "width": 32,
+            "height": 22
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s19_sh8",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 700,
+            "y": 118,
+            "width": 197,
+            "height": 432
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s19_sh12",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 253,
+            "y": 299,
+            "width": 60,
+            "height": 60
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s19_sh13",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 267,
+            "y": 313,
+            "width": 32,
+            "height": 32
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s19_sh16",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 44,
+            "y": 53,
+            "width": 441,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s19_sh18",
+          "role": "title_candidate",
+          "text": "5.1  研究结论",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 145,
+            "y": 69,
+            "width": 226,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s19_sh19",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 135,
+            "y": 502,
+            "width": 311,
+            "height": 144
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 3
+          }
+        },
+        {
+          "slot_id": "s19_sh20",
+          "role": "title_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 849,
+            "y": 118,
+            "width": 311,
+            "height": 144
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 3
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 20,
+      "page_type": "content_candidate",
+      "text_summary": "5.2  研究中的不足\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+      "slots": [
+        {
+          "slot_id": "s20_sh4",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 871,
+            "y": 120,
+            "width": 388,
+            "height": 600
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s20_sh18",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 44,
+            "y": 53,
+            "width": 441,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s20_sh20",
+          "role": "title_candidate",
+          "text": "5.2  研究中的不足",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 142,
+            "y": 69,
+            "width": 296,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s20_sh21",
+          "role": "body_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 4,
+          "geometry": {
+            "x": 96,
+            "y": 170,
+            "width": 617,
+            "height": 173
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 4
+          }
+        },
+        {
+          "slot_id": "s20_sh23",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 96,
+            "y": 364,
+            "width": 311,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 2
+          }
+        },
+        {
+          "slot_id": "s20_sh24",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 2,
+          "geometry": {
+            "x": 98,
+            "y": 522,
+            "width": 311,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 2
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 21,
+      "page_type": "content_candidate",
+      "text_summary": "5.3  总结思考\n请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入小标题\n请输入您的正文内容\n请输入您的正文内容\n请输入小标题\n请输入您的正文内容\n请输入您的正文内容",
+      "slots": [
+        {
+          "slot_id": "s21_sh4",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 492,
+            "width": 1280,
+            "height": 228
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s21_sh24",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 370,
+            "y": 328,
+            "width": 115,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s21_sh25",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 374,
+            "y": 332,
+            "width": 108,
+            "height": 108
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s21_sh11",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 205,
+            "y": 387,
+            "width": 63,
+            "height": 66
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s21_sh22",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 370,
+            "y": 328,
+            "width": 115,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s21_sh23",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 374,
+            "y": 332,
+            "width": 108,
+            "height": 108
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s21_sh13",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 473,
+            "y": 396,
+            "width": 66,
+            "height": 47
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s21_sh20",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 370,
+            "y": 328,
+            "width": 115,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s21_sh21",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 374,
+            "y": 332,
+            "width": 108,
+            "height": 108
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s21_sh15",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 741,
+            "y": 387,
+            "width": 66,
+            "height": 66
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s21_sh18",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 370,
+            "y": 328,
+            "width": 115,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s21_sh19",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 374,
+            "y": 332,
+            "width": 108,
+            "height": 108
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s21_sh17",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 1010,
+            "y": 389,
+            "width": 66,
+            "height": 61
+          },
+          "text_metrics": {
+            "font_size_px": 24.0,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s21_sh36",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 44,
+            "y": 53,
+            "width": 441,
+            "height": 79
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s21_sh38",
+          "role": "title_candidate",
+          "text": "5.3  总结思考",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 145,
+            "y": 69,
+            "width": 231,
+            "height": 48
+          },
+          "text_metrics": {
+            "font_size_px": 32.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s21_sh39",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容\n请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 185,
+            "y": 175,
+            "width": 912,
+            "height": 144
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 3
+          }
+        },
+        {
+          "slot_id": "s21_sh40",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容\n请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 139,
+            "y": 518,
+            "width": 196,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 3
+          }
+        },
+        {
+          "slot_id": "s21_sh41",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容\n请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 408,
+            "y": 518,
+            "width": 196,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 3
+          }
+        },
+        {
+          "slot_id": "s21_sh42",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容\n请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 677,
+            "y": 518,
+            "width": 196,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 3
+          }
+        },
+        {
+          "slot_id": "s21_sh43",
+          "role": "label_candidate",
+          "text": "请输入小标题\n请输入您的正文内容\n请输入您的正文内容",
+          "paragraph_count": 3,
+          "geometry": {
+            "x": 945,
+            "y": 518,
+            "width": 196,
+            "height": 115
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 3
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 22,
+      "page_type": "ending_candidate",
+      "text_summary": "致  谢\n四年的大学学习生活在即将划上一个句号，而于我的人生来说却仅仅只是一个逗号，我将面对新的征程的开始。\n本研究及论文是在我的导师XX的亲切关怀和耐心的指导下完成的。伟人、名人固然为我所崇拜，可是我更迫切地想要把我的敬意献给给一位平凡的人，我的导师XX老师。也许我不是您最出色的学生，但您却是我所最尊敬的老师。您是如此的治学严谨，学识渊博，视野广阔，思想深刻，您用心为我营造一种良好的学术氛围，让我的论文更加的严谨。\n同时，我还要感谢一下一起完成毕业论文小组的同学们，如果没有你们的支持和倾心的协助，我是无法解决这些困难和疑惑，最终能够让本文顺利完成。至此论文付梓之际，我的心情无法保持平静，从开始选择课题到论文的顺利答辩，有无数可敬的师长、朋友给了我很多的帮助，在这里请您接受我诚挚的谢意!\n最后，再次对那些在论文完成过程中，关心、帮助我的同学和朋友们表示衷心地感谢！",
+      "slots": [
+        {
+          "slot_id": "s22_sh2",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": -2,
+            "y": 0,
+            "width": 1282,
+            "height": 213
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s22_sh13",
+          "role": "label_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 444,
+            "y": 164,
+            "width": 389,
+            "height": 89
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s22_sh9",
+          "role": "label_candidate",
+          "text": "致  谢",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 463,
+            "y": 171,
+            "width": 355,
+            "height": 74
+          },
+          "text_metrics": {
+            "font_size_px": 53.33,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s22_sh3",
+          "role": "body_candidate",
+          "text": "四年的大学学习生活在即将划上一个句号，而于我的人生来说却仅仅只是一个逗号，我将面对新的征程的开始。\n本研究及论文是在我的导师XX的亲切关怀和耐心的指导下完成的。伟人、名人固然为我所崇拜，可是我更迫切地想要把我的敬意献给给一位平凡的人，我的导师XX老师。也许我不是您最出色的学生，但您却是我所最尊敬的老师。您是如此的治学严谨，学识渊博，视野广阔，思想深刻，您用心为我营造一种良好的学术氛围，让我的论文更加的严谨。\n同时，我还要感谢一下一起完成毕业论文小组的同学们，如果没有你们的支持和倾心的协助，我是无法解决这些困难和疑惑，最终能够让本文顺利完成。至此论文付梓之际，我的心情无法保持平静，从开始选择课题到论文的顺利答辩，有无数可敬的师长、朋友给了我很多的帮助，在这里请您接受我诚挚的谢意!\n最后，再次对那些在论文完成过程中，关心、帮助我的同学和朋友们表示衷心地感谢！",
+          "paragraph_count": 4,
+          "geometry": {
+            "x": 131,
+            "y": 303,
+            "width": 1019,
+            "height": 330
+          },
+          "text_metrics": {
+            "font_size_px": 18.67,
+            "paragraph_count": 4
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 23,
+      "page_type": "content_candidate",
+      "text_summary": "空白也是一种美！\n你的模板你做主！\nJUNE 12th",
+      "slots": [
+        {
+          "slot_id": "s23_sh11",
+          "role": "title_candidate",
+          "text": "空白也是一种美！",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 297,
+            "y": 253,
+            "width": 687,
+            "height": 107
+          },
+          "text_metrics": {
+            "font_size_px": 80.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s23_sh12",
+          "role": "label_candidate",
+          "text": "你的模板你做主！",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 301,
+            "y": 372,
+            "width": 687,
+            "height": 107
+          },
+          "text_metrics": {
+            "font_size_px": 80.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s23_sh17",
+          "role": "label_candidate",
+          "text": "JUNE 12th",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 1145,
+            "y": 676,
+            "width": 105,
+            "height": 36
+          },
+          "text_metrics": {
+            "font_size_px": 21.33,
+            "paragraph_count": 1
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    },
+    {
+      "slide_index": 24,
+      "page_type": "ending_candidate",
+      "text_summary": "山东科技大学答辩PPT模板\n您的学院—专业—姓名\n指导老师  ：山科球知道\n—— 惟真求新 ——",
+      "slots": [
+        {
+          "slot_id": "s24_sh4",
+          "role": "title_candidate",
+          "text": "",
+          "paragraph_count": 0,
+          "geometry": {
+            "x": 0,
+            "y": 242,
+            "width": 1280,
+            "height": 346
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 0
+          }
+        },
+        {
+          "slot_id": "s24_sh5",
+          "role": "label_candidate",
+          "text": "山东科技大学答辩PPT模板",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 121,
+            "y": 295,
+            "width": 1038,
+            "height": 116
+          },
+          "text_metrics": {
+            "font_size_px": 88.0,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s24_sh6",
+          "role": "body_candidate",
+          "text": "您的学院—专业—姓名",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 507,
+            "y": 500,
+            "width": 321,
+            "height": 39
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s24_sh7",
+          "role": "label_candidate",
+          "text": "指导老师  ：山科球知道",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 501,
+            "y": 450,
+            "width": 317,
+            "height": 39
+          },
+          "text_metrics": {
+            "font_size_px": null,
+            "paragraph_count": 1
+          }
+        },
+        {
+          "slot_id": "s24_sh16",
+          "role": "label_candidate",
+          "text": "—— 惟真求新 ——",
+          "paragraph_count": 1,
+          "geometry": {
+            "x": 463,
+            "y": 620,
+            "width": 354,
+            "height": 63
+          },
+          "text_metrics": {
+            "font_size_px": 37.33,
+            "paragraph_count": 1
+          }
+        }
+      ],
+      "tables": [],
+      "charts": []
+    }
+  ],
+  "plan_contract": {
+    "schema": "template_fill_pptx_plan.v1",
+    "slides": [
+      {
+        "source_slide": 1,
+        "purpose": "封面 / 章节 / 内容 / 结尾",
+        "replacements": [
+          {
+            "slot_id": "s01_sh2",
+            "text": "替换后的文字"
+          }
+        ],
+        "table_edits": [
+          {
+            "table_id": "s01_tbl3",
+            "cells": [
+              {
+                "row": 0,
+                "col": 0,
+                "text": "替换后的单元格"
+              }
+            ]
+          }
+        ],
+        "chart_edits": [
+          {
+            "chart_id": "s01_ch4",
+            "categories": [
+              "A",
+              "B"
+            ],
+            "series": [
+              {
+                "name": "系列1",
+                "values": [
+                  1,
+                  2
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -3,8 +3,6 @@
     <!-- Hero Banner -->
     <section class="hero-section">
       <div class="hero-bg-slide"></div>
-      <div class="hero-bg-slide hero-bg-slide-2"></div>
-      <div class="hero-bg-slide hero-bg-slide-3"></div>
       <div class="container">
         <div class="hero-content">
           <h1 class="hero-title">{{ $t('home.hero.title') }}</h1>
@@ -16,31 +14,29 @@
       </div>
     </section>
 
-    <!-- 核心业务板块 -->
+    <!-- 核心工具板块 -->
     <section class="section services-section">
       <div class="container">
         <h2 class="section__title">{{ $t('home.services.title') }}</h2>
         <p class="section__subtitle">{{ $t('home.services.subtitle') }}</p>
         <n-grid :x-gap="24" :y-gap="24" :cols="3" :cols-md="2" :cols-sm="1">
           <n-grid-item v-for="service in services" :key="service.id">
-            <div class="service-card" @click="navigateTo(`/business/${service.id}`)">
-              <div class="service-icon" :style="{ backgroundColor: service.color }">
-                <n-icon size="40" color="#fff">
-                  <component :is="service.icon" />
-                </n-icon>
+            <a class="service-card" :href="`/business/${service.id}`" @click.prevent="navigateTo(`/business/${service.id}`)">
+              <div class="service-image">
+                <img :src="service.image" :alt="service.title">
               </div>
-              <h3 class="service-title">{{ service.title }}</h3>
-              <p class="service-desc">{{ service.description }}</p>
-              <n-button text type="primary" class="service-btn">
-                {{ $t('common.readMore') }} →
-              </n-button>
-            </div>
+              <div class="service-content">
+                <h3 class="service-title">{{ service.title }}</h3>
+                <p class="service-desc">{{ service.description }}</p>
+                <span class="service-btn">{{ $t('common.readMore') }} →</span>
+              </div>
+            </a>
           </n-grid-item>
         </n-grid>
       </div>
     </section>
 
-    <!-- 企业优势 -->
+    <!-- 工作方式 -->
     <section class="section advantages-section">
       <div class="container">
         <h2 class="section__title">{{ $t('home.advantages.title') }}</h2>
@@ -61,55 +57,6 @@
       </div>
     </section>
 
-    <!-- 客户案例轮播 -->
-    <section class="section cases-section">
-      <div class="container">
-        <h2 class="section__title">{{ $t('home.cases.title') }}</h2>
-        <p class="section__subtitle">{{ $t('home.cases.subtitle') }}</p>
-        <n-carousel show-dots>
-          <div class="carousel-item" v-for="caseItem in cases" :key="caseItem.id">
-            <div class="case-card">
-              <div class="case-image">
-                <img :src="caseItem.image" :alt="caseItem.title">
-              </div>
-              <div class="case-content">
-                <h3>{{ caseItem.title }}</h3>
-                <p>{{ caseItem.description }}</p>
-                <n-button text type="primary" @click="navigateTo(`/cases/${caseItem.id}`)">
-                  {{ $t('common.readMore') }}
-                </n-button>
-              </div>
-            </div>
-          </div>
-        </n-carousel>
-      </div>
-    </section>
-
-    <!-- GitHub 项目开源 -->
-    <section class="section news-section">
-      <div class="container">
-        <h2 class="section__title">{{ $t('home.news.title') }}</h2>
-        <p class="section__subtitle">{{ $t('home.news.subtitle') }}</p>
-        <n-grid :x-gap="24" :y-gap="24" :cols="3" :cols-md="2" :cols-sm="1">
-          <n-grid-item v-for="project in projectList" :key="project.repo">
-            <div class="news-card" @click="navigateTo('/news')">
-              <div class="news-image">
-                <div class="project-preview">
-                  <n-icon size="54"><LogoGithub /></n-icon>
-                  <span>{{ project.category }}</span>
-                </div>
-                <div class="news-date">{{ project.repo.split('/')[0] }}</div>
-              </div>
-              <div class="news-content">
-                <h3>{{ project.repo.split('/')[1] }}</h3>
-                <p>{{ project.highlight }}</p>
-              </div>
-            </div>
-          </n-grid-item>
-        </n-grid>
-      </div>
-    </section>
-
     <!-- PPT 生成入口 -->
     <section class="section contact-section">
       <div class="container">
@@ -117,7 +64,7 @@
           <n-grid-item>
             <div class="contact-info">
               <h2>{{ $t('contact.title') }}</h2>
-              <p>上传论文与可选模板，让 mimo 规划结构并生成可编辑 PPTX。</p>
+              <p>把论文、模板和提示词交给后端队列，让 mimo 规划结构并生成可编辑 PPTX。</p>
               <div class="contact-items">
                 <div class="contact-item">
                   <n-icon size="24"><DocumentTextIcon /></n-icon>
@@ -130,7 +77,7 @@
                   <n-icon size="24"><BusinessIcon /></n-icon>
                   <div>
                     <span>模板风格</span>
-                    <p>可上传 PPTX 模板抽取配色和素材</p>
+                    <p>可上传 PPTX 模板继承版式与配色</p>
                   </div>
                 </div>
                 <div class="contact-item">
@@ -162,51 +109,42 @@
 </template>
 
 <script setup>
-import { onMounted, ref } from 'vue'
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  NButton, NGrid, NGridItem, NCarousel, NIcon
+  NButton, NGrid, NGridItem, NIcon
 } from 'naive-ui'
 import {
   BusinessOutline,
-  CloudOutline,
-  AnalyticsOutline,
-  BuildOutline,
   StarOutline,
   PeopleOutline,
-  ShieldCheckmarkOutline,
   FlashOutline,
-  DocumentTextOutline,
-  LogoGithub
+  DocumentTextOutline
 } from '@vicons/ionicons5'
-import { getGithubProjects } from '@/api'
-import { defaultGithubProjects } from '@/config/githubProjects'
+import literatureImage from '@/assets/images/home-literature-library.jpg'
+import translationImage from '@/assets/images/home-pdf-translation.jpg'
+import pptImage from '@/assets/images/home-ppt-generation.jpg'
+import openClawImage from '@/assets/images/home-openclaw-chat.jpg'
+import openSourceImage from '@/assets/images/home-open-source.jpg'
+import backendQueueImage from '@/assets/images/home-backend-queue.jpg'
 
 const router = useRouter()
 
 const services = ref([
-  { id: 1, title: '云计算服务', description: '提供稳定可靠的云计算解决方案', icon: CloudOutline, color: '#1890ff' },
-  { id: 2, title: '数据分析', description: '专业的数据分析与商业智能服务', icon: AnalyticsOutline, color: '#52c41a' },
-  { id: 3, title: '技术咨询', description: '全方位的技术咨询与架构设计', icon: BuildOutline, color: '#faad14' },
-  { id: 4, title: '人工智能', description: 'AI驱动的智能化解决方案', icon: BusinessOutline, color: '#722ed1' },
-  { id: 5, title: '移动开发', description: '跨平台移动应用开发服务', icon: CloudOutline, color: '#eb2f96' },
-  { id: 6, title: '安全服务', description: '企业级安全防护体系', icon: ShieldCheckmarkOutline, color: '#fa541c' }
+  { id: 1, title: 'Zotero 文献库', description: '缓存 Zotero 条目、分组和附件，快速检索论文资料', image: literatureImage },
+  { id: 2, title: 'PDF 论文翻译', description: 'BabelDOC 保留版式输出中文或双语 PDF', image: translationImage },
+  { id: 3, title: 'PPT 自动生成', description: '论文、提示词和模板直出可编辑答辩 PPTX', image: pptImage },
+  { id: 4, title: 'OpenClaw 对话', description: '站内访问本机 OpenClaw Gateway 会话和产物', image: openClawImage },
+  { id: 5, title: '开源项目展示', description: '由后端代理 GitHub 仓库数据和 README', image: openSourceImage },
+  { id: 6, title: '受控后台队列', description: '按 2 核 4GB 服务器基线控制并发、内存和历史记录', image: backendQueueImage }
 ])
 
 const advantages = ref([
-  { id: 1, title: '专业团队', description: '10年+行业经验', icon: PeopleOutline },
-  { id: 2, title: '技术创新', description: '领先的技术栈', icon: FlashOutline },
-  { id: 3, title: '品质保证', description: 'ISO质量认证', icon: StarOutline },
-  { id: 4, title: '贴心服务', description: '24小时技术支持', icon: BusinessOutline }
+  { id: 1, title: '个人研究流', description: '围绕论文阅读、翻译、答辩和实验汇报组织入口', icon: PeopleOutline },
+  { id: 2, title: '服务端代理', description: '浏览器只访问站内 API，密钥和外部请求留在后端', icon: FlashOutline },
+  { id: 3, title: '文件落盘', description: '大 PDF、PPTX、图片和任务结果不长期占用 JVM 内存', icon: StarOutline },
+  { id: 4, title: '可复查产物', description: '任务目录保留 manifest、日志和输出文件，便于定位问题', icon: BusinessOutline }
 ])
-
-const cases = ref([
-  { id: 1, title: '某大型企业数字化转型', description: '帮助客户实现业务流程数字化', image: 'https://picsum.photos/800/400?random=1' },
-  { id: 2, title: '智能客服系统', description: 'AI驱动的智能客服解决方案', image: 'https://picsum.photos/800/400?random=2' },
-  { id: 3, title: '电商平台搭建', description: '高性能电商系统开发', image: 'https://picsum.photos/800/400?random=3' }
-])
-
-const projectList = ref(defaultGithubProjects.filter(item => item.featured).slice(0, 3))
 
 const BusinessIcon = BusinessOutline
 const DocumentTextIcon = DocumentTextOutline
@@ -214,17 +152,6 @@ const DocumentTextIcon = DocumentTextOutline
 const navigateTo = (path) => {
   router.push(path)
 }
-
-onMounted(async () => {
-  try {
-    const res = await getGithubProjects()
-    if (res.code === 200 && Array.isArray(res.data) && res.data.length) {
-      projectList.value = res.data.filter(item => item.featured).slice(0, 3)
-    }
-  } catch (e) {
-    projectList.value = defaultGithubProjects.filter(item => item.featured).slice(0, 3)
-  }
-})
 </script>
 
 <style scoped lang="scss">
@@ -250,11 +177,10 @@ onMounted(async () => {
     left: 0;
     right: 0;
     bottom: 0;
-    background-image: url('https://images.unsplash.com/photo-1497366216548-37526070297c?w=1920');
+    background-image: url('@/assets/images/research-workbench-hero.jpg');
     background-size: cover;
     background-position: center;
     opacity: 1;
-    animation: slideShow 18s infinite;
     z-index: 0;
 
     &::after {
@@ -265,33 +191,6 @@ onMounted(async () => {
       right: 0;
       bottom: 0;
       background: rgba(0, 0, 0, 0.45);
-    }
-  }
-
-  .hero-bg-slide-2 {
-    background-image: url('https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=1920');
-    animation-delay: 6s;
-    opacity: 0;
-  }
-
-  .hero-bg-slide-3 {
-    background-image: url('https://images.unsplash.com/photo-1497366811353-6870744d04b2?w=1920');
-    animation-delay: 12s;
-    opacity: 0;
-  }
-
-  @keyframes slideShow {
-    0%, 30% {
-      opacity: 1;
-      transform: scale(1);
-    }
-    35%, 65% {
-      opacity: 0;
-      transform: scale(1.1);
-    }
-    70%, 100% {
-      opacity: 0;
-      transform: scale(1);
     }
   }
 
@@ -349,31 +248,48 @@ onMounted(async () => {
   }
 }
 
-// 核心业务板块
+// 核心工具板块
 .services-section {
   .service-card {
-    text-align: center;
-    padding: $spacing-xl;
+    color: inherit;
+    text-decoration: none;
     background: #fff;
     border-radius: $border-radius-lg;
     box-shadow: $shadow-sm;
     transition: all $transition-base;
     cursor: pointer;
     height: 100%;
+    overflow: hidden;
 
     &:hover {
       transform: translateY(-6px);
       box-shadow: $shadow-md;
+
+      .service-image img {
+        transform: scale(1.04);
+      }
     }
 
-    .service-icon {
-      width: 72px;
-      height: 72px;
-      border-radius: 50%;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto $spacing-md;
+    &:focus-visible {
+      outline: 3px solid rgba(24, 144, 255, 0.32);
+      outline-offset: 4px;
+    }
+
+    .service-image {
+      aspect-ratio: 4 / 3;
+      overflow: hidden;
+      background: #eef2f7;
+
+      img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform $transition-base;
+      }
+    }
+
+    .service-content {
+      padding: $spacing-lg;
     }
 
     .service-title {
@@ -392,7 +308,7 @@ onMounted(async () => {
   }
 }
 
-// 企业优势
+// 工作方式
 .advantages-section {
   background: $bg-color-secondary;
 
@@ -420,159 +336,9 @@ onMounted(async () => {
   }
 }
 
-// 客户案例轮播
-.cases-section {
-  :deep(.n-carousel) {
-    .n-carousel__slides {
-      padding: $spacing-md 0;
-    }
-  }
-
-  .carousel-item {
-    padding: 0 $spacing-md;
-  }
-
-  .case-card {
-    background: #fff;
-    border-radius: $border-radius-lg;
-    overflow: hidden;
-    box-shadow: $shadow-sm;
-    display: flex;
-    height: 420px;
-
-    .case-image {
-      flex: 1;
-      overflow: hidden;
-
-      img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-      }
-    }
-
-    .case-content {
-      flex: 1;
-      padding: $spacing-xl;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-
-      h3 {
-        font-size: $font-size-title-h2;
-        font-weight: 600;
-        margin-bottom: $spacing-md;
-        line-height: $line-height;
-      }
-
-      p {
-        color: $text-color-secondary;
-        margin-bottom: $spacing-md;
-        line-height: $line-height;
-        font-size: $font-size-base;
-      }
-    }
-  }
-}
-
-// GitHub 项目开源
-.news-section {
-  background: $bg-color-secondary;
-
-  .news-card {
-    background: #fff;
-    border-radius: $border-radius-lg;
-    overflow: hidden;
-    box-shadow: $shadow-sm;
-    cursor: pointer;
-    transition: all $transition-base;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-
-    &:hover {
-      transform: translateY(-4px);
-      box-shadow: $shadow-md;
-    }
-
-    .news-image {
-      position: relative;
-      height: 200px;
-      overflow: hidden;
-      flex-shrink: 0;
-
-      img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        transition: transform $transition-base;
-      }
-
-      &:hover img {
-        transform: scale(1.08);
-      }
-
-      .project-preview {
-        width: 100%;
-        height: 100%;
-        display: grid;
-        place-items: center;
-        gap: $spacing-sm;
-        align-content: center;
-        color: #fff;
-        background:
-          radial-gradient(circle at 20% 20%, rgba(24, 144, 255, 0.28), transparent 28%),
-          linear-gradient(135deg, #24292f 0%, #334155 58%, #0f766e 100%);
-
-        span {
-          font-size: 13px;
-          font-weight: 700;
-          background: rgba(255, 255, 255, 0.14);
-          border: 1px solid rgba(255, 255, 255, 0.24);
-          border-radius: $border-radius-sm;
-          padding: 3px 9px;
-        }
-      }
-
-      .news-date {
-        position: absolute;
-        top: $spacing-sm;
-        right: $spacing-sm;
-        background: $primary-color;
-        color: #fff;
-        padding: $spacing-xs $spacing-sm;
-        border-radius: $border-radius-sm;
-        font-size: $font-size-caption;
-        font-weight: 500;
-      }
-    }
-
-    .news-content {
-      padding: $spacing-lg;
-      flex-grow: 1;
-      display: flex;
-      flex-direction: column;
-
-      h3 {
-        font-size: $font-size-title-h3;
-        font-weight: 600;
-        margin-bottom: $spacing-sm;
-        line-height: $line-height;
-        flex-grow: 1;
-      }
-
-      p {
-        color: $text-color-secondary;
-        font-size: $font-size-base;
-        line-height: $line-height;
-      }
-    }
-  }
-}
-
-// 联系方式
+// PPT 生成入口
 .contact-section {
-  background: linear-gradient(135deg, #1890ff 0%, #722ed1 100%);
+  background: linear-gradient(135deg, #155e75 0%, #365314 52%, #713f12 100%);
   color: #fff;
 
   .container {
@@ -652,14 +418,6 @@ onMounted(async () => {
     }
   }
 
-  .case-card {
-    flex-direction: column;
-    height: auto;
-
-    .case-image {
-      height: 280px;
-    }
-  }
 }
 
 @media (max-width: 768px) {
@@ -667,21 +425,6 @@ onMounted(async () => {
     height: calc(100vh - 64px);
     padding: $spacing-xl 0;
 
-    .hero-bg-slide {
-      animation: slideShowMobile 18s infinite;
-    }
-
-    @keyframes slideShowMobile {
-      0%, 30% {
-        transform: translateX(-50%);
-      }
-      35%, 65% {
-        transform: translateX(0%);
-      }
-      70%, 100% {
-        transform: translateX(50%);
-      }
-    }
   }
 
   .hero-content {
@@ -707,24 +450,6 @@ onMounted(async () => {
     }
   }
 
-  .case-card {
-    .case-image {
-      height: 220px;
-    }
-
-    .case-content {
-      padding: $spacing-lg;
-
-      h3 {
-        font-size: $font-size-title-h2;
-      }
-    }
-  }
-
-  .news-image {
-    height: 180px;
-  }
-
   .contact-section {
     .contact-info {
       h2 {
@@ -746,7 +471,9 @@ onMounted(async () => {
   }
 
   .service-card {
-    padding: $spacing-md;
+    .service-content {
+      padding: $spacing-md;
+    }
   }
 
   .contact-form {

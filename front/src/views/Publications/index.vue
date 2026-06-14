@@ -1,9 +1,9 @@
 <template>
-  <div class="publications-page">
-    <section class="section">
+  <div class="publications-page tool-page">
+    <section>
       <div class="container">
-        <div class="page-header">
-          <h2>文献库</h2>
+        <div class="page-header tool-page__header">
+          <h1>文献库</h1>
           <p>同步自 Zotero · 共 {{ total }} 条 · 显示 {{ filtered.length }} 条匹配</p>
         </div>
 
@@ -34,40 +34,46 @@
                   <h3>Collections</h3>
                   <n-input
                     v-model:value="treeFilter"
+                    aria-label="过滤文献分组"
                     placeholder="过滤分组..."
                     size="small"
                     clearable
                     style="margin-bottom: 12px"
                   />
                   <div class="coll-list">
-                    <div
+                    <button
+                      type="button"
                       class="coll-item"
                       :class="{ active: selectedKey === null }"
+                      :aria-pressed="selectedKey === null"
                       @click="selectedKey = null"
                     >
                       <span class="coll-name">全部</span>
                       <span class="count">{{ total }}</span>
-                    </div>
-                    <div
+                    </button>
+                    <button
                       v-for="c in visibleCollections"
                       :key="c.key"
+                      type="button"
                       class="coll-item"
                       :class="{ active: selectedKey === c.key }"
                       :style="{ paddingLeft: 12 + c.depth * 16 + 'px' }"
+                      :aria-pressed="selectedKey === c.key"
                       @click="selectedKey = c.key"
                     >
                       <span class="coll-name" :title="c.name">{{ c.name }}</span>
                       <span class="count">{{ countMap[c.key] || 0 }}</span>
-                    </div>
+                    </button>
                   </div>
                 </template>
               </aside>
             </div>
 
-            <main class="content">
+            <div class="content">
               <div class="filter-bar">
                 <n-input
                   v-model:value="keyword"
+                  aria-label="搜索文献"
                   placeholder="搜索标题 / 作者 / 期刊 / 摘要..."
                   clearable
                   style="max-width: 360px"
@@ -78,6 +84,7 @@
                 </n-input>
                 <n-select
                   v-model:value="typeFilter"
+                  aria-label="按文献类型筛选"
                   :options="typeOptions"
                   placeholder="文献类型"
                   clearable
@@ -108,11 +115,13 @@
 
                   <div v-if="item.abstractNote" class="pub-abstract">
                     <p :class="{ collapsed: !expanded[item.key] }">{{ item.abstractNote }}</p>
-                    <a
+                    <button
                       v-if="item.abstractNote.length > 200"
+                      type="button"
                       class="toggle"
+                      :aria-expanded="Boolean(expanded[item.key])"
                       @click="expanded[item.key] = !expanded[item.key]"
-                    >{{ expanded[item.key] ? '收起' : '展开' }}</a>
+                    >{{ expanded[item.key] ? '收起' : '展开' }}</button>
                   </div>
 
                   <div class="pub-foot">
@@ -158,6 +167,7 @@
                     <iframe
                       v-if="!openedMd[item.key]"
                       :src="`/api/zotero/file/${openedPdf[item.key]}#toolbar=1&navpanes=0`"
+                      :title="`${item.title || '文献'}附件预览`"
                       frameborder="0"
                       loading="lazy"
                     />
@@ -179,7 +189,7 @@
                   @update:page="scrollToListTop"
                 />
               </div>
-            </main>
+            </div>
           </div>
         </n-spin>
       </div>
@@ -513,12 +523,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .publications-page {
-  padding-top: 80px;
-  min-height: 100vh;
-  background: #f7f7f9;
+  background: #f5f7fa;
 }
-
-.section { padding: 60px 0; }
 
 .container {
   max-width: 1280px;
@@ -527,8 +533,7 @@ onBeforeUnmount(() => {
 }
 
 .page-header { margin-bottom: 24px; }
-.page-header h2 { font-size: 32px; margin: 0 0 6px; }
-.page-header p { color: #888; margin: 0; }
+.page-header p { color: #666; margin: 0; }
 
 .layout {
   display: grid;
@@ -596,6 +601,13 @@ onBeforeUnmount(() => {
 .coll-list { display: flex; flex-direction: column; }
 
 .coll-item {
+  appearance: none;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
   padding: 8px 12px;
   border-radius: 6px;
   cursor: pointer;
@@ -608,6 +620,12 @@ onBeforeUnmount(() => {
 }
 
 .coll-item:hover { background: #f3f4f6; }
+.coll-item:focus-visible,
+.sidebar-toggle:focus-visible,
+.toggle:focus-visible {
+  outline: 3px solid rgba(22, 119, 255, 0.28);
+  outline-offset: 2px;
+}
 .coll-item.active { background: #e6f0ff; color: #1677ff; font-weight: 500; }
 
 .coll-name {
@@ -642,6 +660,11 @@ onBeforeUnmount(() => {
   padding: 12px 16px;
   border-radius: 12px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+}
+
+.filter-bar :deep(.n-input),
+.filter-bar :deep(.n-select) {
+  min-width: 0;
 }
 
 .empty { padding: 48px 0; }
@@ -692,6 +715,7 @@ onBeforeUnmount(() => {
   font-size: 17px;
   margin: 0 0 8px;
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .pub-title a {
@@ -727,6 +751,11 @@ onBeforeUnmount(() => {
 }
 
 .toggle {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  font: inherit;
   display: inline-block;
   margin-top: 4px;
   font-size: 12px;
@@ -744,7 +773,7 @@ onBeforeUnmount(() => {
   margin-bottom: 12px;
 }
 
-.doi-link { color: #1677ff; text-decoration: none; }
+.doi-link { color: #1677ff; text-decoration: none; overflow-wrap: anywhere; }
 
 .item-colls {
   display: inline-flex;
@@ -838,6 +867,9 @@ onBeforeUnmount(() => {
   margin: 0.6em 0;
 }
 .md-render :deep(table) {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
   border-collapse: collapse;
   margin: 0.8em 0;
 }
@@ -867,10 +899,53 @@ onBeforeUnmount(() => {
     position: relative;
     z-index: 2;
     max-height: 50vh;
+    width: 100%;
   }
 
   .sidebar.collapsed {
-    width: 48px;
+    width: 100%;
+    height: 48px;
+  }
+
+  .filter-bar {
+    display: grid;
+    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+
+  .filter-bar :deep(.n-input),
+  .filter-bar :deep(.n-select),
+  .filter-bar :deep(.n-button) {
+    width: 100% !important;
+    max-width: none !important;
+  }
+
+  .pub-item {
+    padding: 16px;
+  }
+
+  .pub-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .pub-actions :deep(.n-button) {
+    width: 100%;
+  }
+
+  .pdf-frame iframe {
+    height: 62vh;
+    min-height: 360px;
+  }
+
+  .md-render {
+    padding: 16px;
+    max-height: 62vh;
+  }
+
+  .pagination-wrap :deep(.n-pagination) {
+    flex-wrap: wrap;
+    justify-content: center;
   }
 }
 </style>

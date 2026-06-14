@@ -16,6 +16,8 @@ public class TranslationSession {
     private int endPage = 1;
     private volatile String status = "preview";
     private volatile String errorMessage;
+    private volatile boolean textQualitySuspicious;
+    private volatile String textQualityWarning;
     private String fontFamily = "auto";
     private int qps = 4;
     private int requestedQps = 4;
@@ -49,6 +51,8 @@ public class TranslationSession {
     public int getEndPage() { return endPage; }
     public String getStatus() { return status; }
     public String getErrorMessage() { return errorMessage; }
+    public boolean isTextQualitySuspicious() { return textQualitySuspicious; }
+    public String getTextQualityWarning() { return textQualityWarning; }
     public String getFontFamily() { return fontFamily; }
     public int getQps() { return qps; }
     public int getRequestedQps() { return requestedQps; }
@@ -83,6 +87,8 @@ public class TranslationSession {
         touch();
     }
     public void setErrorMessage(String errorMessage) { this.errorMessage = errorMessage; touch(); }
+    public void setTextQualitySuspicious(boolean textQualitySuspicious) { this.textQualitySuspicious = textQualitySuspicious; touch(); }
+    public void setTextQualityWarning(String textQualityWarning) { this.textQualityWarning = textQualityWarning; touch(); }
     public void setFontFamily(String fontFamily) { this.fontFamily = fontFamily; touch(); }
     public void setQps(int qps) { this.qps = qps; touch(); }
     public void setRequestedQps(int requestedQps) { this.requestedQps = requestedQps; touch(); }

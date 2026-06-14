@@ -10,7 +10,11 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 @Service
@@ -18,6 +22,12 @@ public class PdfParseService {
 
     private static final Pattern PAGE_NUMBER_PATTERN = Pattern.compile("^\\s*\\d+\\s*$");
     private static final Pattern EQUATION_NUMBER_PATTERN = Pattern.compile("^\\s*\\(?\\d+(?:\\.\\d+)*\\)?\\s*$");
+    private static final Pattern WORD_SPLIT_PATTERN = Pattern.compile("[^A-Za-z]+");
+    private static final Set<String> COMMON_ENGLISH_WORDS = new HashSet<>(Arrays.asList(
+            "the", "and", "for", "with", "that", "this", "from", "between", "system", "systems",
+            "model", "models", "data", "method", "methods", "results", "study", "studies",
+            "reaction", "reactions", "chemical", "using", "used", "were", "was", "are", "is",
+            "as", "in", "of", "to", "by", "on", "an", "be", "we", "it", "can"));
 
     /**
      * 获取 PDF 总页数
@@ -32,6 +42,63 @@ public class PdfParseService {
         try (PDDocument document = Loader.loadPDF(pdfPath.toFile())) {
             return document.getNumberOfPages();
         }
+    }
+
+    public PdfTextQuality analyzeTextQuality(Path pdfPath) throws IOException {
+        try (PDDocument document = Loader.loadPDF(pdfPath.toFile())) {
+            if (document.isEncrypted()) {
+                throw new IllegalArgumentException("PDF 已加密，请先解密后再上传");
+            }
+
+            PDFTextStripper stripper = new PDFTextStripper();
+            stripper.setSortByPosition(true);
+            stripper.setStartPage(1);
+            stripper.setEndPage(Math.min(3, document.getNumberOfPages()));
+            return analyzeExtractedText(stripper.getText(document));
+        }
+    }
+
+    private PdfTextQuality analyzeExtractedText(String text) {
+        if (text == null || text.isBlank()) {
+            return new PdfTextQuality(false, "");
+        }
+
+        int latinLetters = 0;
+        int vowels = 0;
+        for (int index = 0; index < text.length(); index++) {
+            char c = text.charAt(index);
+            if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z')) {
+                latinLetters++;
+                char lower = Character.toLowerCase(c);
+                if (lower == 'a' || lower == 'e' || lower == 'i' || lower == 'o' || lower == 'u') {
+                    vowels++;
+                }
+            }
+        }
+
+        if (latinLetters < 500) {
+            return new PdfTextQuality(false, "");
+        }
+
+        int words = 0;
+        int commonWords = 0;
+        for (String token : WORD_SPLIT_PATTERN.split(text.toLowerCase(Locale.ROOT))) {
+            if (token.length() < 2) continue;
+            words++;
+            if (COMMON_ENGLISH_WORDS.contains(token)) {
+                commonWords++;
+            }
+        }
+
+        double vowelRatio = (double) vowels / latinLetters;
+        double commonWordRatio = words == 0 ? 0 : (double) commonWords / words;
+        if (vowelRatio >= 0.18 || commonWordRatio >= 0.03) {
+            return new PdfTextQuality(false, "");
+        }
+
+        return new PdfTextQuality(true,
+                "PDF 文本层疑似乱码或字体映射异常，当前翻译链路可能读取到错误内容。"
+                        + "系统会尝试在翻译前自动修复，请优先检查完成后的预览；如仍不理想，再换用可正常复制英文的 PDF 或 OCR/重新导出。");
     }
 
     /**
@@ -367,4 +434,6 @@ public class PdfParseService {
     public record Paragraph(int pageNumber, int index, String text,
                             float x, float y, float width, float height, float fontSize,
                             boolean translatable) {}
+
+    public record PdfTextQuality(boolean suspicious, String warning) {}
 }

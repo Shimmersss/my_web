@@ -1,9 +1,9 @@
 export default {
   common: {
     home: '首页',
-    about: '关于我们',
-    business: '业务模块',
-    cases: '案例展示',
+    about: '项目说明',
+    business: '工具模块',
+    cases: '案例归档',
     news: '开源项目',
     contact: 'PPT 生成',
     franchise: 'OpenClaw',
@@ -22,21 +22,21 @@ export default {
   },
   home: {
     hero: {
-      title: '创新引领未来，品质铸就辉煌',
-      subtitle: '专注高端企业服务，为客户创造卓越价值',
+      title: '论文、翻译、PPT 与 AI 对话工作台',
+      subtitle: '把 Zotero 文献、BabelDOC 翻译、PPT 生成和 OpenClaw 对话收束到一个个人研究入口',
       cta: '生成 PPT'
     },
     services: {
-      title: '核心业务',
-      subtitle: '为您提供全方位的专业服务'
+      title: '核心工具',
+      subtitle: '围绕论文阅读、翻译、汇报和本机 AI 对话的常用入口'
     },
     advantages: {
-      title: '企业优势',
-      subtitle: '为什么选择我们'
+      title: '工作方式',
+      subtitle: '服务端代理、受控队列和可复查产物优先'
     },
     cases: {
-      title: '客户案例',
-      subtitle: '成功案例见证实力'
+      title: '任务样例',
+      subtitle: '保留可直接访问的工作流归档'
     },
     news: {
       title: 'GitHub 项目开源',
@@ -44,31 +44,31 @@ export default {
     }
   },
   about: {
-    title: '关于我们',
-    intro: '企业简介',
-    history: '发展历程',
-    organization: '组织架构',
-    team: '核心团队',
-    honors: '荣誉资质',
-    culture: '企业文化'
+    title: '项目说明',
+    intro: '项目简介',
+    history: '演进记录',
+    organization: '系统结构',
+    team: '核心模块',
+    honors: '维护重点',
+    culture: '工作原则'
   },
   business: {
-    title: '业务模块',
-    solution: '解决方案',
-    process: '服务流程'
+    title: '工具模块',
+    solution: '工作流组合',
+    process: '使用流程'
   },
   cases: {
-    title: '案例展示',
-    filterIndustry: '行业筛选',
-    filterType: '类型筛选',
+    title: '任务样例',
+    filterIndustry: '模块筛选',
+    filterType: '链路筛选',
     background: '项目背景',
-    solution: '解决方案',
-    result: '项目成果',
-    download: '案例下载'
+    solution: '处理链路',
+    result: '产物记录',
+    download: '归档下载'
   },
   contact: {
     title: 'PPT 生成',
-    address: '公司地址',
+    address: '项目路径',
     phone: '联系电话',
     email: '电子邮箱',
     message: '生成提示词',
@@ -78,8 +78,8 @@ export default {
   franchise: {
     title: 'OpenClaw 对话',
     apply: '立即申请',
-    benefits: '加盟优势',
-    process: '加盟流程',
-    requirements: '加盟条件'
+    benefits: '工具能力',
+    process: '对话流程',
+    requirements: '访问条件'
   }
 }

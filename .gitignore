@@ -6,6 +6,7 @@ target/
 .release/
 server-upload/
 outputs/
+deploy/
 
 # IDE
 .idea/
@@ -22,7 +23,8 @@ outputs/
 .env.local
 .env.*.local
 .deploy.local
-
+.env.local.example
+.deploy.local.example
 # os
 .DS_Store
 Thumbs.db
@@ -32,5 +34,15 @@ Thumbs.db
 
 # tmp
 .tmp/
+
+# md
+AGENTS.md
+WORKLOG.md
+MAINTENANCE.md
+design-qa.md
+
+# review
+.review/
+
 
 # Root Markdown docs stay trackable for deployment handoff.

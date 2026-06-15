@@ -21,9 +21,9 @@
 ./deploy/deploy-server-improved.sh
 ```
 
-脚本默认部署到当前线上目录，自动生成发布包、上传、备份旧应用目录、安装并检查后端健康接口与公网首页。它不会上传 `.env.local`，也不会覆盖服务器上的 `/etc/web-homepage/web.env`。
+脚本默认部署到当前线上目录，自动生成发布包、上传、备份旧应用目录、安装并检查后端健康接口与公网首页。它不会上传 `.env.local`，也不会覆盖服务器上的 `/etc/web-homepage/web.env`。发布包会携带 `release-manifest.txt`、`AGENTS.md`、`MAINTENANCE.md` 和 `WORKLOG.md`，用于追踪构建时间、commit、dirty 状态和维护记录。
 
-已有 `/etc/nginx/sites-available/corporate-site` 会被部署脚本保留，避免覆盖 Certbot 管理的 SSL 配置。不要在普通发布时传 `FORCE_NGINX_CONFIG=1`。
+已有 `/etc/nginx/sites-available/corporate-site` 会被部署脚本保留，避免覆盖 Certbot 管理的 SSL 配置。不要在普通发布时传 `FORCE_NGINX_CONFIG=1`；如果现有配置包含 Certbot/SSL 标记，安装脚本会拒绝强制覆盖，避免误把 HTTPS 站点降级为 HTTP-only 模板。
 
 部署参数需要调整时复制 `.deploy.local.example` 为 `.deploy.local`。该文件已被 gitignore，不要在其中保存密码或 API Key。
 
@@ -40,7 +40,7 @@ curl -I https://shimmer.help/
 ss -lntup
 ```
 
-服务器本机检查首页时必须带 `Host: shimmer.help`。裸 `curl -I http://127.0.0.1/` 可能被 Nginx 匹配到其它默认站点或带访问限制的 server block，返回 403；这不代表公网 `https://shimmer.help/` 异常。后端健康接口仍可直接检查 `http://127.0.0.1:8080/api/health`。
+服务器本机检查首页时必须带 `Host: shimmer.help`。裸 `curl -I http://127.0.0.1/` 可能被 Nginx 匹配到其它默认站点或带访问限制的 server block，返回 403；这不代表公网 `https://shimmer.help/` 异常。后端健康接口仍可直接检查 `http://127.0.0.1:8080/api/health`。如果安装或本机健康检查失败，一键部署脚本会尝试用本次部署前的备份包恢复；公网 DNS/外部网络验证失败不会自动回滚已通过本机健康检查的服务。
 
 更新前建议备份当前部署目录、环境变量和 Nginx 配置：
 
@@ -96,60 +96,11 @@ ResponseBodyEmitter has already completed
 
 服务器已有 `/etc/web-homepage/web.env` 不会被安装脚本覆盖，升级后需手动确认该值。
 
-### OpenClaw 路由与 CLI 兼容
+### OpenClaw 下线
 
-- OpenClaw 页面同时支持 `/franchise` 和 `/openclaw`
-- 新增 `backen/scripts/openclaw_compat.sh`
-- 推荐环境变量：
+2026-06-15 起，OpenClaw 网页对话已从站点移除。当前发布包不再包含 `/franchise`、`/openclaw`、`/api/openclaw/*`、`backen/scripts/openclaw_compat.sh`，安装脚本也不再检查 Node/OpenClaw Gateway 或写入 OpenClaw 运行环境变量。
 
-```bash
-OPENCLAW_COMMAND=./scripts/openclaw_compat.sh
-OPENCLAW_NO_RESPAWN=1
-NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache
-OPENCLAW_MAX_CONCURRENT_CALLS=2
-OPENCLAW_HISTORY_CACHE_MILLIS=1000
-OPENCLAW_SESSIONS_CACHE_MILLIS=5000
-OPENCLAW_MODELS_CACHE_MILLIS=60000
-OPENCLAW_COMMANDS_CACHE_MILLIS=300000
-```
-
-兼容脚本会把旧参数格式转换为新版 CLI 的：
-
-```bash
-openclaw gateway call <method> --json --params '{}'
-```
-
-如果页面仍慢或无法发送，检查 Gateway 权限与连接：
-
-```bash
-openclaw gateway probe
-openclaw doctor
-openclaw gateway call sessions.list --json --params '{"includeDerivedTitles":true}'
-```
-
-线上已批准本机 OpenClaw device 的写权限，`gateway probe` 从 `read-only` 变为 `write-capable`。缓存未命中的单次接口仍可能需要约 1 秒，主要原因是后端需要启动 CLI 进程；进一步优化需要改为长连接或进程内 Gateway client。
-
-### OpenClaw 页面性能优化
-
-实测每次 `openclaw gateway call` 冷启动约需 1 秒 CPU 时间，历史响应约几十 KB，200 Mbps 峰值带宽不是瓶颈。2 核服务器同时启动多个 Node CLI 会明显拖慢页面。
-
-当前后端采用：
-
-- 最多同时运行 2 个 CLI
-- 相同只读请求合并，避免并发启动重复 CLI
-- 历史缓存 1 秒、会话缓存 5 秒、模型缓存 60 秒、指令缓存 5 分钟
-- Spring 启动后后台预热模型、指令和会话缓存
-- 写操作后主动失效相关缓存
-
-本机站内代理实测：
-
-```text
-sessions 冷调用约 1.56s，热缓存约 2ms
-history  冷调用约 0.94s，热缓存约 2ms
-models / commands 预热后约 2-4ms
-```
-
-页面空闲历史轮询已从 2 秒调整为 5 秒。若仍需进一步降低首屏冷启动延迟，下一步应改为后端长连接或进程内 Gateway client，而不是增加服务器带宽。
+服务器已有 `/etc/web-homepage/web.env` 中残留的 `OPENCLAW_*`、`OPENCLAW_NO_RESPAWN`、`NODE_COMPILE_CACHE` 不再被应用读取，可在维护窗口清理；不清理也不会影响当前 Spring Boot 启动。
 
 ## 2026-06-06 已同步的线上修复
 
@@ -217,9 +168,13 @@ systemctl show web-backen.service -p MemoryHigh -p MemoryMax -p MemoryCurrent -p
 curl -fsS http://127.0.0.1:8080/api/health
 ```
 
+PPT 论文解析、Python renderer 和 template-fill 外部脚本超时后会终止整个进程树，避免 `uv` 子进程残留继续占用 CPU、内存或磁盘。新服务器安装时脚本会硬性检查 Java/uv，并对 Node 和 CJK 字体缺失给出 warning；这些 warning 不阻断静态站点和基础后端启动，但会影响 PPT/PDF 中文渲染等功能。
+
+Nginx 模板对 `/api/translate/stream/`、`/api/ppt-generate/stream/` 和 `/api/zotero/file/` 单独关闭代理缓冲，保证 SSE 与 Zotero 慢速附件预览能实时向浏览器传递进度。已有线上 `corporate-site` 会被保留，模板更新后如果需要应用这些 location，必须手动合并到现有 Certbot 配置，或先备份后人工调整。2026-06-15 已将 PPT SSE 与 Zotero 附件流式 location 手动合并到线上 `/etc/nginx/sites-available/corporate-site`，备份为 `corporate-site.bak-20260615-streaming-2`。
+
 Zotero 文献缓存只保存在 JVM 内存，不写入磁盘；附件代理按请求临时拉取，不持久化。硬盘增长重点是：
 
 - `/home/admin/web-homepage/.run/translation-tasks/`：翻译任务文件，`preview` 和 `completed/error` 各默认保留 5 条，超出后删除整个任务目录。
 - `/home/admin/.web-homepage-releases/`：部署发布包和备份包，一键部署后默认各保留最近 3 个。
 
-2026-06-06 排查时目录大小：翻译任务约 `130M`，OpenClaw 编译缓存约 `46M`，release/backup 目录约 `3.6G`。按最近 3 个发布包 + 最近 3 个备份包清理后，release/backup 目录约 `1.3G`。
+2026-06-06 排查时目录大小：翻译任务约 `130M`，release/backup 目录约 `3.6G`。按最近 3 个发布包 + 最近 3 个备份包清理后，release/backup 目录约 `1.3G`。

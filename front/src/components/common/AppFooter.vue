@@ -41,9 +41,9 @@
             <n-icon><PhoneIcon /></n-icon>
             论文翻译
           </a>
-          <a href="/openclaw" @click.prevent="navigateTo('/openclaw')">
+          <a href="/news" @click.prevent="navigateTo('/news')">
             <n-icon><MailIcon /></n-icon>
-            OpenClaw 对话
+            GitHub 项目
           </a>
         </div>
       </div>

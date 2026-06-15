@@ -3,6 +3,9 @@ node_modules/
 dist/
 target/
 *.class
+.release/
+server-upload/
+outputs/
 
 # IDE
 .idea/
@@ -29,3 +32,5 @@ Thumbs.db
 
 # tmp
 .tmp/
+
+# Root Markdown docs stay trackable for deployment handoff.

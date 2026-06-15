@@ -31,13 +31,13 @@ admin@115.28.129.221
 
 服务器本机 Nginx 验证会显式使用 `Host: shimmer.help`，避免 `127.0.0.1` 命中其他虚拟主机或访问控制规则。
 
-脚本不会上传 `.env.local`，也不会覆盖服务器上的 `/etc/web-homepage/web.env`。
+脚本不会上传 `.env.local`，也不会覆盖服务器上的 `/etc/web-homepage/web.env`。发布包会包含 `release-manifest.txt`，记录构建时间、git commit、分支和 dirty 状态，服务器安装目录也会同步 `AGENTS.md`、`MAINTENANCE.md`、`WORKLOG.md` 与 manifest。
 
 脚本默认启用 `REQUIRE_DOCS_SYNC=1`。如果检测到 `backen/`、`front/`、`deploy/` 或 `project.sh` 有改动，但没有同步修改 Markdown 文档，会停止部署。功能和线上行为更新应记录到根目录 `AGENTS.md` 或 `MAINTENANCE.md`；只有明确不需要记录的特殊发布才临时设置 `REQUIRE_DOCS_SYNC=0`。
 
 服务器已有 Nginx 站点配置时，安装脚本默认保留该文件，避免覆盖 Certbot 写入的 HTTPS、证书路径和 HTTP 跳转配置。只有首次安装或明确传入 `FORCE_NGINX_CONFIG=1` 时才从模板重建 Nginx 配置。
 
-`FORCE_NGINX_CONFIG=1` 会清除现有 Certbot SSL 配置，普通发布不要使用。
+`FORCE_NGINX_CONFIG=1` 会清除现有 Certbot SSL 配置，普通发布不要使用。若现有配置包含 `ssl_certificate` 或 Certbot 标记，安装脚本会拒绝强制覆盖；需要更新 Nginx location 时，优先手动合并模板中的 `/api/ppt-generate/stream/` 和 `/api/zotero/file/` 配置。
 
 SSH 登录建议使用密钥或 `ssh-agent`。脚本执行远程安装时，`sudo` 可能要求输入服务器密码。
 
@@ -73,6 +73,8 @@ DRY_RUN=1 ./deploy/deploy-server-improved.sh       # 只打印流程，不连接
 RUN_TESTS=0 ./deploy/deploy-server-improved.sh     # 已经完整验收过时跳过重复测试
 REQUIRE_CLEAN=1 ./deploy/deploy-server-improved.sh # 只允许从干净工作区部署
 ```
+
+安装或本机健康检查失败时，脚本会尝试恢复本次部署前生成的服务器备份包；公网 DNS 或外部网络检查失败不会回滚已通过本机健康检查的服务。远端 staging 目录会在退出时清理。
 
 旧入口 `./deploy/deploy-server.sh` 会转发到增强版脚本，保留兼容性。
 
@@ -112,7 +114,7 @@ ZOTERO_USER_ID=
 ADMIN_KEY=
 ```
 
-如果需要 PDF 翻译和 OpenClaw，再补齐 BabelDOC/OpenClaw 相关配置。改完后重启后端：
+如果需要 PDF 翻译，再补齐 BabelDOC 相关配置。改完后重启后端：
 
 ```bash
 sudo systemctl restart web-backen
@@ -136,7 +138,7 @@ BABELDOC_RESOURCE_MAX_SWAP_USED_MIB=1200
 
 翻译任务不使用 H2 数据库。后端重启后会从磁盘任务目录恢复最近记录，未完成任务只要原始 PDF 仍在就会重新排队并从头翻译。
 
-部署完成后，脚本会清理远端 `/home/admin/.web-homepage-releases/` 的旧发布包，默认只保留最近 3 个 `web-homepage-*.tar.gz` 和最近 3 个 `web-homepage-backup-*.tar.gz`。需要调整保留数量时设置 `REMOTE_RELEASE_KEEP`。
+部署完成后，脚本会清理远端 `/home/admin/.web-homepage-releases/` 的旧发布包，默认只保留最近 3 个 `web-homepage-*.tar.gz` 和最近 3 个 `web-homepage-backup-*.tar.gz`。需要调整保留数量时设置 `REMOTE_RELEASE_KEEP`，该值必须至少为 1。
 
 ## 常用命令
 
@@ -152,7 +154,9 @@ sudo systemctl reload nginx
 - Java 17+
 - Nginx
 - 如果使用 PDF 翻译：`uv`
-- 如果使用 OpenClaw 网页对话：OpenClaw CLI、本机 Gateway 和 `python3`
+- 如果生成中文 PPT/PDF：fontconfig 与可用 CJK 字体
+
+安装脚本会硬性检查 Java 与 uv；CJK 字体缺失时会给出 warning，部署仍可继续，但会影响中文 PPT/PDF 渲染。
 
 Ubuntu/Debian 可先装基础依赖：
 

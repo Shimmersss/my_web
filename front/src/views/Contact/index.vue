@@ -25,7 +25,7 @@
                   </div>
                   <div class="contact-content">
                     <span>核心入口</span>
-                    <p>文献 / 翻译 / PPT / OpenClaw</p>
+                    <p>文献 / 翻译 / PPT / GitHub</p>
                   </div>
                 </div>
                 <div class="contact-item">
@@ -209,7 +209,7 @@ const typeOptions = [
   { label: '文献库', value: 'library' },
   { label: '论文翻译', value: 'translate' },
   { label: 'PPT 生成', value: 'ppt' },
-  { label: 'OpenClaw', value: 'openclaw' },
+  { label: 'GitHub 项目', value: 'github' },
   { label: '其他', value: 'other' }
 ]
 

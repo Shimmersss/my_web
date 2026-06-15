@@ -8,6 +8,50 @@
 
 ## 2026-06-15
 
+### chore: 安全移除 OpenClaw 网页对话并准备上线
+
+**目标**：按要求把 OpenClaw 相关入口、接口、配置、脚本和部署依赖全部下线，保留当前站点最小可用功能：文献库、PDF 翻译、PPT 生成和 GitHub 项目展示。
+
+**改动**：
+- 删除后端 `OpenClawConfig`、`openclaw/` controller/service、OpenClaw 单测和 `backen/scripts/openclaw_compat.sh`
+- 删除前端 `Franchise/index.vue`、`/franchise` / `/openclaw` 路由、OpenClaw API wrapper，并从导航、首页、页脚、关于、工具、样例页移除入口
+- 移除 `application.yml` 的 `openclaw.*` 配置、`.env.local.example` 的 `OPENCLAW_*` 模板项、systemd 的 OpenClaw/Node 环境变量和安装脚本里的 OpenClaw Gateway 检查
+- 更新 `AGENTS.md`、`MAINTENANCE.md`、README 和部署说明，明确 OpenClaw 已下线，后续不要默认恢复
+
+**验证**：
+- `mvn test` 通过：25 tests, 0 failures, 0 errors
+- `npm run build` 通过；仅剩既有 Sass deprecation 和 chunk size warning
+- `rg "OpenClaw|openclaw|Franchise|franchise|/openclaw|/franchise|OPENCLAW|NODE_COMPILE_CACHE"` 扫描仅剩 `AGENTS.md` / `MAINTENANCE.md` 的下线说明
+
+### fix: 收口服务器部署审查问题
+
+**问题**：部署审查发现发布链路缺少自动回滚和 release manifest，`WORKLOG.md` 不随包同步，Nginx 只对翻译 SSE 关闭 buffering，PPT 外部脚本超时只杀父进程；同时早前“根目录只发布 README”的 `.gitignore` 规则导致 `AGENTS.md / MAINTENANCE.md / WORKLOG.md` 被 staged 删除，直接破坏部署交接资料。
+
+**改动**：
+- 取消内部维护文档的 staged 删除，撤回根目录 Markdown 全忽略策略，保留部署审计文档
+- 发布包生成 `release-manifest.txt`，记录构建时间、commit、分支、dirty 状态和变更列表；安装时同步 `AGENTS.md / MAINTENANCE.md / WORKLOG.md / release-manifest.txt`
+- 一键部署在安装或本机健康检查失败时尝试恢复本次备份，并在退出时清理远端 staging；`REMOTE_RELEASE_KEEP` 至少为 1
+- 安装脚本拒绝用 HTTP-only 模板覆盖已有 Certbot/SSL Nginx 配置，并对 Node、OpenClaw Gateway、CJK 字体缺失给出 warning
+- Nginx 模板为 `/api/ppt-generate/stream/` 和 `/api/zotero/file/` 增加禁缓冲 location
+- 线上保留 Certbot 配置的 `corporate-site` 已手动合并 PPT SSE 与 Zotero 附件流式 location，并通过 `nginx -t` / reload
+- PPT 文档解析、Python renderer 和 template-fill 超时后终止整个进程树；BabelDOC Java 默认超时/QPS 与生产文档统一为 21600 秒 / 2 QPS
+
+**验证**：
+- 待运行后端单测、前端构建、发布脚本 dry-run 和最小部署审查命令
+
+### chore: 清理本地生成目录的 Git 跟踪规则
+
+**问题**：`.release/npm-cache` 已经误入 Git 索引，且 `.gitignore` 没有覆盖发布包目录、服务器拷贝目录和手工输出目录，后续构建/部署容易继续把缓存和产物带进仓库。
+
+**改动**：
+- 根 `.gitignore` 增加 `.release/`、`server-upload/`、`outputs/`
+- 从 Git 索引移除已跟踪的 `.release/`、`server-upload/`、`outputs/` 本地产物，保留本机文件
+- `AGENTS.md` 补充本地生成目录不得提交的长期维护规则
+
+**验证**：
+- `git check-ignore -v` 确认新增目录由根 `.gitignore` 命中
+- `git ls-files '.release/**' 'server-upload/**' 'outputs/**'` 确认索引中不再包含这些生成目录
+
 ### fix: 附件进度条改为真实字节进度（待用户验证，未部署）
 
 **问题**：首版进度条启用了 Naive UI `processing` 动画，即使浏览器没有收到新字节也会持续滚动；生产 Nginx 默认响应缓冲还可能导致数据成批到达，视觉进度不可信。

@@ -8,8 +8,7 @@ Type=simple
 WorkingDirectory=__INSTALL_DIR__/backen
 EnvironmentFile=__ENV_FILE__
 Environment=HOME=/home/admin
-Environment=OPENCLAW_NO_RESPAWN=1
-Environment=NODE_COMPILE_CACHE=/var/tmp/openclaw-compile-cache
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment="JAVA_TOOL_OPTIONS=-Xms128m -Xmx768m -XX:+UseG1GC"
 ExecStart=/usr/bin/env java -jar __INSTALL_DIR__/backen/backen.jar
 Restart=always

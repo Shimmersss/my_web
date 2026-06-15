@@ -34,6 +34,14 @@ command -v uv >/dev/null 2>&1 || {
   exit 1
 }
 
+if command -v fc-list >/dev/null 2>&1; then
+  if ! fc-list | grep -Eiq 'Noto.*CJK|Source Han|WenQuanYi|Microsoft YaHei|SimSun|PingFang|Heiti'; then
+    warn "No common CJK font found via fc-list. Generated PPT/PDF Chinese text may render poorly."
+  fi
+else
+  warn "fontconfig fc-list not found. Install fontconfig and CJK fonts for reliable Chinese PPT/PDF rendering."
+fi
+
 if ! java -version 2>&1 | grep -Eq 'version "17|version "18|version "19|version "2[0-9]|openjdk version "17|openjdk version "18|openjdk version "19|openjdk version "2[0-9]'; then
   warn "Java exists, but it may be older than 17. Spring Boot 3 requires Java 17+."
 fi
@@ -54,7 +62,7 @@ cp -R "$CURRENT_DIR/backen/scripts" "$INSTALL_DIR/backen/scripts"
 rm -rf "$INSTALL_DIR/front/dist"
 cp -R "$CURRENT_DIR/front/dist" "$INSTALL_DIR/front/dist"
 
-for document in AGENTS.md MAINTENANCE.md README.md; do
+for document in AGENTS.md MAINTENANCE.md WORKLOG.md README.md release-manifest.txt; do
   if [[ -f "$CURRENT_DIR/$document" ]]; then
     cp "$CURRENT_DIR/$document" "$INSTALL_DIR/$document"
     chmod 644 "$INSTALL_DIR/$document"
@@ -68,7 +76,7 @@ fi
 if [[ ! -f "$ENV_FILE" ]]; then
   cp "$CURRENT_DIR/web.env.example" "$ENV_FILE"
   chmod 600 "$ENV_FILE"
-  warn "Created $ENV_FILE. Fill in ZOTERO_API_KEY, ZOTERO_USER_ID, ADMIN_KEY and optional translation/OpenClaw settings."
+  warn "Created $ENV_FILE. Fill in ZOTERO_API_KEY, ZOTERO_USER_ID, ADMIN_KEY and optional translation settings."
 else
   ok "Keeping existing env file: $ENV_FILE"
 fi
@@ -91,7 +99,10 @@ if command -v nginx >/dev/null 2>&1; then
     NGINX_CONF="/etc/nginx/$NGINX_SITE_NAME.conf"
   fi
 
-  if [[ -f "$NGINX_CONF" && "$FORCE_NGINX_CONFIG" != "1" ]]; then
+  if [[ -f "$NGINX_CONF" && "$FORCE_NGINX_CONFIG" == "1" ]] && grep -Eq 'ssl_certificate|managed by Certbot' "$NGINX_CONF"; then
+    warn "Existing Nginx config contains SSL/Certbot directives; refusing FORCE_NGINX_CONFIG=1 to avoid breaking HTTPS."
+    warn "Back up and edit $NGINX_CONF manually if you intentionally need to rebuild it."
+  elif [[ -f "$NGINX_CONF" && "$FORCE_NGINX_CONFIG" != "1" ]]; then
     ok "Keeping existing Nginx config: $NGINX_CONF"
   else
     sed "s#__INSTALL_DIR__#$INSTALL_DIR#g; s#__DOMAIN__#$DOMAIN#g" \

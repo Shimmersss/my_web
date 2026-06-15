@@ -6,8 +6,8 @@
         <h2 class="section__title">{{ $t('about.intro') }}</h2>
         <div class="intro-content">
           <div class="intro-text">
-            <p>这个站点是个人研究与自动化工作台，集中承载 Zotero 文献库、PDF 论文翻译、PPT 生成和 OpenClaw 对话入口。</p>
-            <p>前端负责可视化操作，后端代理 Zotero、GitHub、BabelDOC、mimo 和本机 OpenClaw Gateway，把密钥、队列和大文件处理留在服务端。</p>
+            <p>这个站点是个人研究与自动化工作台，集中承载 Zotero 文献库、PDF 论文翻译、PPT 生成和 GitHub 项目展示入口。</p>
+            <p>前端负责可视化操作，后端代理 Zotero、GitHub、BabelDOC 和 mimo，把密钥、队列和大文件处理留在服务端。</p>
             <div class="intro-stats">
               <div class="stat-item">
                 <div class="stat-number">4</div>
@@ -159,7 +159,7 @@ const history = ref([
   { year: '文献', title: 'Zotero 缓存展示', description: '后端预热和刷新 Zotero 条目，前端展示文献、分组与附件代理结果' },
   { year: '翻译', title: 'BabelDOC 版式链路', description: '按页码范围生成纯中文和双语 PDF，并保留结果预览与下载' },
   { year: 'PPT', title: '论文到答辩稿', description: 'mimo 规划结构，结合论文图片、模板和 renderer 生成 PPTX' },
-  { year: '对话', title: 'OpenClaw 站内控制台', description: '用后端代理本机 Gateway 的会话、模型、历史与产物下载' },
+  { year: '开源', title: 'GitHub 项目展示', description: '用后端代理仓库元数据和 README，并保留管理后台配置' },
   { year: '部署', title: '低资源服务器约束', description: '以 2 核 CPU / 4 GB 内存为生产基线，控制 worker、队列和大文件内存占用' }
 ])
 
@@ -187,9 +187,9 @@ const team = ref([
   },
   {
     id: 4,
-    name: 'OpenClaw',
-    position: 'WebChat',
-    bio: '站内访问本机 AI 对话与产物',
+    name: 'GitHub 项目',
+    position: 'News',
+    bio: '展示仓库元数据、README 与项目配置',
     icon: RocketOutline
   }
 ])

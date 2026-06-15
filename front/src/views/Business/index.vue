@@ -104,7 +104,6 @@ import {
   BuildOutline,
   RocketOutline,
   DocumentTextOutline,
-  ChatbubbleEllipsesOutline,
   CheckmarkCircleOutline,
   ArrowForwardOutline
 } from '@vicons/ionicons5'
@@ -119,7 +118,6 @@ const categories = ref([
   { id: 'library', name: '文献' },
   { id: 'translate', name: '翻译' },
   { id: 'ppt', name: 'PPT' },
-  { id: 'chat', name: '对话' },
   { id: 'open-source', name: '开源' },
   { id: 'ops', name: '运维' }
 ])
@@ -154,15 +152,6 @@ const services = ref([
   },
   {
     id: 4,
-    category: 'chat',
-    title: 'OpenClaw 对话',
-    description: '站内管理 OpenClaw 会话、模型、历史和产物',
-    icon: RocketOutline,
-    color: '#722ed1',
-    image: heroImage
-  },
-  {
-    id: 5,
     category: 'open-source',
     title: 'GitHub 项目展示',
     description: '后端代理仓库元数据和 README，避免前端直连 GitHub',
@@ -171,7 +160,7 @@ const services = ref([
     image: pipelineImage
   },
   {
-    id: 6,
+    id: 5,
     category: 'ops',
     title: '部署与资源保护',
     description: '围绕 2 核 4GB 服务器限制控制队列、内存和文件保留',
@@ -193,7 +182,7 @@ const solutions = ref([
   {
     id: 2,
     title: '本机 AI 工具链',
-    description: '把 OpenClaw、mimo、BabelDOC 和 GitHub/Zotero API 统一收束到站内入口',
+    description: '把 mimo、BabelDOC 和 GitHub/Zotero API 统一收束到站内入口',
     icon: BuildOutline,
     color: '#52c41a',
     features: ['后端代理', '任务排队', '结果落盘', '低资源保护']
@@ -204,8 +193,8 @@ const process = ref([
   {
     id: 1,
     title: '选择入口',
-    description: '从文献、翻译、PPT 或 OpenClaw 进入对应任务',
-    icon: ChatbubbleEllipsesOutline
+    description: '从文献、翻译、PPT 或 GitHub 项目进入对应任务',
+    icon: RocketOutline
   },
   {
     id: 2,
@@ -222,7 +211,7 @@ const process = ref([
   {
     id: 4,
     title: '预览下载',
-    description: '在页面检查 PDF、PPTX 或聊天产物后下载结果',
+    description: '在页面检查 PDF、PPTX 或 README 代理结果后下载或查看',
     icon: CheckmarkCircleOutline
   },
   {

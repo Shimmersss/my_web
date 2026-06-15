@@ -6,7 +6,6 @@ export default {
     cases: '案例归档',
     news: '开源项目',
     contact: 'PPT 生成',
-    franchise: 'OpenClaw',
     search: '搜索',
     readMore: '了解更多',
     viewAll: '查看全部',
@@ -22,13 +21,13 @@ export default {
   },
   home: {
     hero: {
-      title: '论文、翻译、PPT 与 AI 对话工作台',
-      subtitle: '把 Zotero 文献、BabelDOC 翻译、PPT 生成和 OpenClaw 对话收束到一个个人研究入口',
+      title: '论文、翻译、PPT 与开源项目工作台',
+      subtitle: '把 Zotero 文献、BabelDOC 翻译、PPT 生成和 GitHub 项目展示收束到一个个人研究入口',
       cta: '生成 PPT'
     },
     services: {
       title: '核心工具',
-      subtitle: '围绕论文阅读、翻译、汇报和本机 AI 对话的常用入口'
+      subtitle: '围绕论文阅读、翻译、汇报和开源项目展示的常用入口'
     },
     advantages: {
       title: '工作方式',
@@ -75,11 +74,4 @@ export default {
     submit: '开始生成',
     service: '客服咨询'
   },
-  franchise: {
-    title: 'OpenClaw 对话',
-    apply: '立即申请',
-    benefits: '工具能力',
-    process: '对话流程',
-    requirements: '访问条件'
-  }
 }

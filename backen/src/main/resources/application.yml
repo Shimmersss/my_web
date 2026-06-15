@@ -58,7 +58,7 @@ babeldoc:
   openai-api-key: ${BABELDOC_OPENAI_API_KEY:${LLM_API_KEY:}}
   openai-model: ${BABELDOC_OPENAI_MODEL:mimo-v2.5-pro}
   timeout-seconds: ${BABELDOC_TIMEOUT_SECONDS:21600}
-  qps: ${BABELDOC_QPS:4}
+  qps: ${BABELDOC_QPS:2}
   resource-cgroup-limit-mi-b: ${BABELDOC_RESOURCE_CGROUP_LIMIT_MIB:2600}
   resource-min-available-mi-b: ${BABELDOC_RESOURCE_MIN_AVAILABLE_MIB:400}
   resource-max-swap-used-mi-b: ${BABELDOC_RESOURCE_MAX_SWAP_USED_MIB:1200}
@@ -92,15 +92,3 @@ ppt-generation:
   template-fill-script: ${PPT_GENERATION_TEMPLATE_FILL_SCRIPT:./scripts/ppt-template-fill/template_fill_pptx.py}
   paper-parser-command: ${PPT_GENERATION_PAPER_PARSER_COMMAND:uv run --with docling --with markitdown python}
   paper-parser-script: ${PPT_GENERATION_PAPER_PARSER_SCRIPT:./scripts/ppt_document_parser.py}
-
-openclaw:
-  # 后端通过本机 CLI 访问 Gateway，凭证不会暴露给浏览器
-  command: ${OPENCLAW_COMMAND:./scripts/openclaw_compat.sh}
-  session-key: ${OPENCLAW_SESSION_KEY:main}
-  timeout-seconds: ${OPENCLAW_TIMEOUT_SECONDS:30}
-  # 2 核服务器限制同时启动的 Node CLI 数量，并缓存高频只读调用
-  max-concurrent-calls: ${OPENCLAW_MAX_CONCURRENT_CALLS:2}
-  history-cache-millis: ${OPENCLAW_HISTORY_CACHE_MILLIS:1000}
-  sessions-cache-millis: ${OPENCLAW_SESSIONS_CACHE_MILLIS:5000}
-  models-cache-millis: ${OPENCLAW_MODELS_CACHE_MILLIS:60000}
-  commands-cache-millis: ${OPENCLAW_COMMANDS_CACHE_MILLIS:300000}

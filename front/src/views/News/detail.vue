@@ -72,12 +72,12 @@ const newsData = ref({
   author: 'Research Desk',
   views: 1234,
   image: heroImage,
-  summary: '把旧模板内容替换为文献、翻译、PPT 和 OpenClaw 工作流入口',
+  summary: '把旧模板内容替换为文献、翻译、PPT 和 GitHub 工作流入口',
   content: `
     <p>这个页面保留为项目记录详情示例，不再展示无关新闻、获奖或外联内容。</p>
     
     <h3>当前入口</h3>
-    <p>站点核心入口包括 Zotero 文献库、BabelDOC 论文翻译、PPT 生成和 OpenClaw 对话。浏览器通过站内 API 访问后端，由后端处理外部服务、密钥和任务队列。</p>
+    <p>站点核心入口包括 Zotero 文献库、BabelDOC 论文翻译、PPT 生成和 GitHub 项目展示。浏览器通过站内 API 访问后端，由后端处理外部服务、密钥和任务队列。</p>
     
     <h3>视觉资产</h3>
     <p>首页和关于页使用本地生成的研究工作台图片，替换随机占位图和办公素材。</p>
@@ -104,8 +104,8 @@ const relatedNews = computed(() => [
   },
   {
     id: 4,
-    title: 'OpenClaw 对话',
-    summary: '站内访问本机会话、模型和产物',
+    title: 'GitHub 项目展示',
+    summary: '站内代理仓库信息和 README',
     date: '2026-06-11',
     image: pipelineImage
   }

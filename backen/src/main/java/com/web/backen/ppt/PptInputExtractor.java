@@ -241,7 +241,7 @@ public class PptInputExtractor {
         Process process = builder.start();
         CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> readProcessOutput(process));
         if (!process.waitFor(documentParserTimeoutSeconds(), TimeUnit.SECONDS)) {
-            process.destroyForcibly();
+            terminateProcessTree(process);
             outputFuture.cancel(true);
             throw new IllegalStateException("文档解析超时");
         }
@@ -260,6 +260,22 @@ public class PptInputExtractor {
             return new String(input.readAllBytes(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             return e.getMessage() == null ? "" : e.getMessage();
+        }
+    }
+
+    private void terminateProcessTree(Process process) {
+        ProcessHandle handle = process.toHandle();
+        handle.descendants().forEach(ProcessHandle::destroy);
+        handle.destroy();
+        try {
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                handle.descendants().forEach(ProcessHandle::destroyForcibly);
+                process.destroyForcibly();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            handle.descendants().forEach(ProcessHandle::destroyForcibly);
+            process.destroyForcibly();
         }
     }
 

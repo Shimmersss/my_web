@@ -81,7 +81,6 @@ const industries = ref([
   { id: 'library', name: '文献' },
   { id: 'translate', name: '翻译' },
   { id: 'ppt', name: 'PPT' },
-  { id: 'chat', name: '对话' },
   { id: 'ops', name: '运维' }
 ])
 
@@ -126,16 +125,6 @@ const cases = ref([
   },
   {
     id: 4,
-    title: 'OpenClaw 会话样例',
-    summary: '读取模型、历史和产物下载入口',
-    industry: '对话',
-    type: '后端链路',
-    date: '2026-06-11',
-    client: '本机会话',
-    image: heroImage
-  },
-  {
-    id: 5,
     title: 'GitHub README 代理样例',
     summary: '由后端获取仓库信息和 README',
     industry: '运维',
@@ -145,7 +134,7 @@ const cases = ref([
     image: pipelineImage
   },
   {
-    id: 6,
+    id: 5,
     title: '低资源部署样例',
     summary: '按 2 核 4GB 基线限制队列、内存和任务保留',
     industry: '运维',

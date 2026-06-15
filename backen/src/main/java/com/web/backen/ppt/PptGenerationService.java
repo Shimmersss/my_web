@@ -2072,7 +2072,8 @@ public class PptGenerationService {
 
         boolean exited = process.waitFor(Math.max(30, config.getTimeoutSeconds()), TimeUnit.SECONDS);
         if (!exited) {
-            process.destroyForcibly();
+            terminateProcessTree(process);
+            outputFuture.cancel(true);
             throw new IllegalStateException("PPT 渲染脚本超时");
         }
         String output = outputFuture.orTimeout(5, TimeUnit.SECONDS).exceptionally(e -> "").join();
@@ -2123,11 +2124,28 @@ public class PptGenerationService {
 
         boolean exited = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
         if (!exited) {
-            process.destroyForcibly();
+            terminateProcessTree(process);
+            outputFuture.cancel(true);
             throw new IllegalStateException("外部脚本执行超时");
         }
         String output = outputFuture.orTimeout(5, TimeUnit.SECONDS).exceptionally(e -> "").join();
         return new ProcessResult(process.exitValue(), output);
+    }
+
+    private void terminateProcessTree(Process process) {
+        ProcessHandle handle = process.toHandle();
+        handle.descendants().forEach(ProcessHandle::destroy);
+        handle.destroy();
+        try {
+            if (!process.waitFor(5, TimeUnit.SECONDS)) {
+                handle.descendants().forEach(ProcessHandle::destroyForcibly);
+                process.destroyForcibly();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            handle.descendants().forEach(ProcessHandle::destroyForcibly);
+            process.destroyForcibly();
+        }
     }
 
     private Path findTimestampedTemplateOutput(PptGenerationSession session) throws IOException {

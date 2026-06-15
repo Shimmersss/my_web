@@ -99,11 +99,11 @@ const toolModules = [
   },
   {
     id: 4,
-    title: 'OpenClaw 对话',
-    description: '站内管理 OpenClaw 会话、模型、历史和产物',
-    introduction: 'OpenClaw 页面通过后端调用本机 Gateway CLI。前端不接触 Gateway token，也不 iframe 官方 UI，而是使用原生聊天界面读取模型、会话、历史和可下载产物。',
-    features: ['ADMIN_KEY 登录保护', '模型和会话读取', '历史消息恢复', '产物安全下载'],
-    scenarios: ['本机 AI 对话', '任务讨论', '产物下载', '模型切换'],
+    title: 'GitHub 项目展示',
+    description: '后端代理仓库元数据、README 和展示配置',
+    introduction: 'GitHub 项目页通过后端代理仓库元数据和 README。前端不直接请求 api.github.com 或 raw.githubusercontent.com，管理配置仍由 ADMIN_KEY 保护。',
+    features: ['ADMIN_KEY 管理保护', '仓库元数据补全', 'README 代理', '展示配置落盘'],
+    scenarios: ['项目作品集', 'README 展示', '开源记录', '展示配置维护'],
     image: heroImage
   },
   {

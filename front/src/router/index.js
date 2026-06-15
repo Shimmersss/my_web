@@ -50,13 +50,6 @@ const routes = [
     meta: { title: 'PPT 生成' }
   },
   {
-    path: '/franchise',
-    alias: '/openclaw',
-    name: 'Franchise',
-    component: () => import('@/views/Franchise/index.vue'),
-    meta: { title: 'OpenClaw 对话' }
-  },
-  {
     path: '/publications',
     name: 'Publications',
     component: () => import('@/views/Publications/index.vue'),

@@ -84,7 +84,10 @@ for pair in \
   "SERVICE_NAME=$SERVICE_NAME" \
   "NGINX_SITE_NAME=$NGINX_SITE_NAME" \
   "DOMAIN=$DOMAIN" \
-  "LOCAL_SITE_HOST=$LOCAL_SITE_HOST"; do
+  "LOCAL_SITE_HOST=$LOCAL_SITE_HOST" \
+  "PUBLIC_URL=$PUBLIC_URL" \
+  "BACKEND_HEALTH_URL=$BACKEND_HEALTH_URL" \
+  "LOCAL_SITE_URL=$LOCAL_SITE_URL"; do
   validate_simple_value "${pair%%=*}" "${pair#*=}"
 done
 
@@ -97,6 +100,7 @@ done
 [[ "$VERIFY_TIMEOUT" =~ ^[0-9]+$ ]] || die "VERIFY_TIMEOUT must be a number"
 [[ "$VERIFY_INTERVAL" =~ ^[0-9]+$ ]] || die "VERIFY_INTERVAL must be a number"
 [[ "$REMOTE_RELEASE_KEEP" =~ ^[0-9]+$ ]] || die "REMOTE_RELEASE_KEEP must be a number"
+(( REMOTE_RELEASE_KEEP >= 1 )) || die "REMOTE_RELEASE_KEEP must be at least 1"
 
 TARGET="$DEPLOY_USER@$DEPLOY_HOST"
 SSH_OPTIONS=(-p "$DEPLOY_PORT")
@@ -162,6 +166,47 @@ REMOTE_ARCHIVE="$REMOTE_UPLOAD_DIR/$ARCHIVE_NAME"
 REMOTE_STAGE="$REMOTE_UPLOAD_DIR/stage-$VERSION"
 REMOTE_PACKAGE="$REMOTE_STAGE/web-homepage"
 REMOTE_BACKUP="$REMOTE_UPLOAD_DIR/web-homepage-backup-$VERSION.tar.gz"
+REMOTE_PARENT="$(dirname "$REMOTE_DIR")"
+REMOTE_BASENAME="$(basename "$REMOTE_DIR")"
+INSTALL_ATTEMPTED=0
+LOCAL_VERIFY_PASSED=0
+
+cleanup_remote_stage() {
+  [[ "${DRY_RUN:-0}" == "1" ]] && return 0
+  [[ -n "${REMOTE_STAGE:-}" ]] || return 0
+  "${SSH[@]}" "rm -rf '$REMOTE_STAGE'" >/dev/null 2>&1 || true
+}
+
+rollback_remote_release() {
+  [[ "${DRY_RUN:-0}" == "1" ]] && return 0
+  [[ "${INSTALL_ATTEMPTED:-0}" == "1" ]] || return 0
+  [[ "${LOCAL_VERIFY_PASSED:-0}" != "1" ]] || return 0
+  warn "Install or local verification failed; attempting to restore server backup: $REMOTE_BACKUP"
+  "${SSH_TTY[@]}" \
+    "set -e; \
+    if [ -f '$REMOTE_BACKUP' ]; then \
+      sudo systemctl stop '$SERVICE_NAME.service' || true; \
+      sudo rm -rf '$REMOTE_DIR'; \
+      sudo mkdir -p '$REMOTE_PARENT'; \
+      sudo tar -xzf '$REMOTE_BACKUP' -C '$REMOTE_PARENT'; \
+      sudo systemctl daemon-reload; \
+      sudo systemctl start '$SERVICE_NAME.service'; \
+      if command -v nginx >/dev/null 2>&1; then sudo nginx -t && sudo systemctl reload nginx || true; fi; \
+    else \
+      echo '[!] Backup archive missing: $REMOTE_BACKUP' >&2; \
+      exit 1; \
+    fi" || true
+}
+
+on_exit() {
+  local code=$?
+  if [[ "$code" -ne 0 ]]; then
+    rollback_remote_release
+  fi
+  cleanup_remote_stage
+  exit "$code"
+}
+trap on_exit EXIT
 
 info "Preparing remote release directory..."
 run "${SSH[@]}" "mkdir -p '$REMOTE_UPLOAD_DIR'"
@@ -171,9 +216,10 @@ run "${SCP[@]}" "$ARCHIVE" "$TARGET:$REMOTE_ARCHIVE"
 
 info "Creating server backup and extracting release..."
 run "${SSH[@]}" \
-  "set -e; rm -rf '$REMOTE_STAGE'; mkdir -p '$REMOTE_STAGE'; if [ -d '$REMOTE_DIR' ]; then tar -czf '$REMOTE_BACKUP' -C '$(dirname "$REMOTE_DIR")' '$(basename "$REMOTE_DIR")'; fi; tar -xzf '$REMOTE_ARCHIVE' -C '$REMOTE_STAGE'"
+  "set -e; rm -rf '$REMOTE_STAGE'; mkdir -p '$REMOTE_STAGE'; if [ -d '$REMOTE_DIR' ]; then tar -czf '$REMOTE_BACKUP' -C '$REMOTE_PARENT' '$REMOTE_BASENAME'; fi; tar -xzf '$REMOTE_ARCHIVE' -C '$REMOTE_STAGE'"
 
 info "Installing release. sudo may ask for the server password..."
+INSTALL_ATTEMPTED=1
 run "${SSH_TTY[@]}" \
   "sudo env INSTALL_DIR='$REMOTE_DIR' CONFIG_DIR='$CONFIG_DIR' SERVICE_NAME='$SERVICE_NAME' NGINX_SITE_NAME='$NGINX_SITE_NAME' DOMAIN='$DOMAIN' FORCE_NGINX_CONFIG='$FORCE_NGINX_CONFIG' bash '$REMOTE_PACKAGE/install-linux.sh'"
 
@@ -192,12 +238,13 @@ run "${SSH[@]}" \
     sleep '$VERIFY_INTERVAL'; \
   done; \
   curl -fsSI -H 'Host: $LOCAL_SITE_HOST' '$LOCAL_SITE_URL' >/dev/null"
+LOCAL_VERIFY_PASSED=1
 
 info "Verifying public response: $PUBLIC_URL"
 run "${SSH[@]}" "curl -fsSI '$PUBLIC_URL' >/dev/null"
 
 info "Cleaning extracted staging directory..."
-run "${SSH[@]}" "rm -rf '$REMOTE_STAGE'"
+cleanup_remote_stage
 
 info "Pruning old release archives on server..."
 run "${SSH[@]}" \

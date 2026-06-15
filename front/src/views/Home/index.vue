@@ -90,7 +90,6 @@ import { useRouter } from 'vue-router'
 import { NIcon } from 'naive-ui'
 import {
   BookOutline,
-  ChatbubbleEllipsesOutline,
   DocumentTextOutline,
   LogoGithub,
   SchoolOutline
@@ -105,7 +104,7 @@ const tools = [
   { title: '文献库', description: '管理与阅读学术文献', path: '/publications', icon: BookOutline },
   { title: '论文翻译', description: '保留版式输出双语 PDF', path: '/translate', icon: DocumentTextOutline },
   { title: 'PPT 生成', description: '从论文生成答辩材料', path: '/contact', icon: SchoolOutline },
-  { title: 'AI 对话', description: '进入 OpenClaw 研究会话', path: '/franchise', icon: ChatbubbleEllipsesOutline }
+  { title: '开源项目', description: '浏览 GitHub 仓库与 README', path: '/news', icon: LogoGithub }
 ]
 
 const progress = [

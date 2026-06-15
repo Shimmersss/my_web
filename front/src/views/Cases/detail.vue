@@ -147,8 +147,8 @@ const relatedCases = computed(() => [
   },
   {
     id: 4,
-    title: 'OpenClaw 对话',
-    summary: '站内访问本机会话',
+    title: 'GitHub 项目展示',
+    summary: '站内代理仓库信息和 README',
     image: pipelineImage
   }
 ])

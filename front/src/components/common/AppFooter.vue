@@ -3,9 +3,7 @@
     <div class="container footer-content">
       <div class="footer-section">
         <div class="footer-logo">
-          <n-icon size="36" color="#1890ff">
-            <LogoIcon />
-          </n-icon>
+          <span class="footer-mark" aria-hidden="true"></span>
           <span class="logo-text">Research Desk</span>
         </div>
         <p class="footer-desc">{{ $t('home.hero.subtitle') }}</p>
@@ -26,10 +24,9 @@
         <h4 class="footer-title">工作入口</h4>
         <ul class="footer-links">
           <li><a href="/" @click.prevent="navigateTo('/')">{{ $t('common.home') }}</a></li>
-          <li><a href="/about" @click.prevent="navigateTo('/about')">{{ $t('common.about') }}</a></li>
-          <li><a href="/business" @click.prevent="navigateTo('/business')">{{ $t('common.business') }}</a></li>
           <li><a href="/publications" @click.prevent="navigateTo('/publications')">文献</a></li>
           <li><a href="/translate" @click.prevent="navigateTo('/translate')">翻译</a></li>
+          <li><a href="/news" @click.prevent="navigateTo('/news')">GitHub 项目</a></li>
         </ul>
       </div>
 
@@ -74,7 +71,6 @@ import {
 
 const router = useRouter()
 
-const LogoIcon = () => '▣'
 const WechatIcon = LogoWechat
 const WeiboIcon = ShareSocial
 const LinkedinIcon = LogoLinkedin
@@ -91,7 +87,7 @@ const navigateTo = (path) => {
 @use '@/assets/styles/variables' as *;
 
 .app-footer {
-  background: #f5f5f5;
+  background: #e8e1d5;
   color: #333;
   padding: $spacing-section 0 0;
 
@@ -121,7 +117,8 @@ const navigateTo = (path) => {
     .logo-text {
       font-size: 28px;
       font-weight: 700;
-      color: $primary-color;
+    color: #34332d;
+    font-family: Georgia, serif;
     }
   }
 
@@ -203,6 +200,12 @@ const navigateTo = (path) => {
       margin: 0;
     }
   }
+}
+
+.footer-mark {
+  width: 4px;
+  height: 28px;
+  background: #b83126;
 }
 
 @media (max-width: 768px) {

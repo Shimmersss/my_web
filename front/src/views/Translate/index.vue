@@ -19,7 +19,7 @@
           @click="triggerFileInput"
         >
           <div class="drop-icon">
-            <n-icon size="64" color="#1890ff">
+            <n-icon size="64" color="#b83126">
               <CloudUploadOutline />
             </n-icon>
           </div>
@@ -35,7 +35,7 @@
       <div v-else-if="step === 'config'" class="config-section">
         <div class="config-card">
           <div class="config-header">
-            <n-icon size="32" color="#1890ff">
+            <n-icon size="32" color="#b83126">
               <DocumentTextOutline />
             </n-icon>
             <div>
@@ -127,7 +127,7 @@
       <!-- 翻译中态 -->
       <div v-else-if="step === 'translating'" class="progress-section">
         <div class="progress-header">
-          <n-icon size="32" color="#1890ff">
+          <n-icon size="32" color="#b83126">
             <DocumentTextOutline />
           </n-icon>
           <div>
@@ -142,7 +142,7 @@
             type="line"
             :percentage="translationProgress"
             :processing="translationProgress < 100"
-            indicator-text-color="#1890ff"
+            indicator-text-color="#b83126"
           />
           <p class="progress-text">
             {{ progressStageLabel }}
@@ -735,7 +735,7 @@ onBeforeUnmount(() => {
 @use '@/assets/styles/variables' as *;
 
 .translate-page {
-  background: #f6f8fb;
+  background: #eee9df;
 }
 
 .container {
@@ -748,9 +748,10 @@ onBeforeUnmount(() => {
 .recent-section {
   margin-top: 28px;
   padding: 20px 24px;
-  border-radius: 16px;
-  background: #fff;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  border: 1px solid #d2cabc;
+  border-radius: 2px;
+  background: #fbf9f3;
+  box-shadow: 2px 3px 0 rgba(95, 86, 65, 0.1);
 }
 
 .recent-header {
@@ -843,8 +844,8 @@ onBeforeUnmount(() => {
   max-width: 600px;
   padding: 60px 40px;
   border: 2px dashed #d0d7de;
-  border-radius: 16px;
-  background: #fff;
+  border-radius: 2px;
+  background: #fbf9f3;
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -852,9 +853,9 @@ onBeforeUnmount(() => {
   &:hover,
   &.dragging {
     border-color: $primary-color;
-    background: #f0f7ff;
+    background: #f3eadf;
     transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(24, 144, 255, 0.1);
+    box-shadow: 2px 3px 0 rgba(95, 86, 65, 0.1);
   }
 
   &:focus-visible {
@@ -902,9 +903,10 @@ onBeforeUnmount(() => {
 .config-card {
   width: 100%;
   max-width: 480px;
-  background: #fff;
-  border-radius: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+  background: #fbf9f3;
+  border: 1px solid #d2cabc;
+  border-radius: 2px;
+  box-shadow: 2px 3px 0 rgba(95, 86, 65, 0.1);
   overflow: hidden;
 }
 

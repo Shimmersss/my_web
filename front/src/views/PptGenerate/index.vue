@@ -468,7 +468,7 @@ function formatTime(ts) {
 
 <style scoped lang="scss">
 .ppt-page {
-  background: #f6f8fb;
+  background: #eee9df;
 }
 
 .container {
@@ -492,10 +492,10 @@ function formatTime(ts) {
 
 .panel,
 .recent-panel {
-  background: #fff;
-  border: 1px solid #e5eaf2;
-  border-radius: 8px;
-  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.06);
+  background: #fbf9f3;
+  border: 1px solid #d2cabc;
+  border-radius: 2px;
+  box-shadow: 2px 3px 0 rgba(95, 86, 65, 0.1);
 }
 
 .panel {
@@ -535,8 +535,8 @@ function formatTime(ts) {
   border-radius: 999px;
   display: grid;
   place-items: center;
-  color: #1d4ed8;
-  background: #dbeafe;
+  color: #b83126;
+  background: #f0e5d9;
   font-size: 12px;
 }
 
@@ -571,9 +571,9 @@ p {
 
 .template-card,
 .file-box {
-  border: 1px solid #dbe3ef;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid #d2cabc;
+  border-radius: 2px;
+  background: #fbf9f3;
   padding: 16px;
   text-align: left;
   cursor: pointer;
@@ -582,9 +582,9 @@ p {
 }
 
 .template-card.active {
-  border-color: #2563eb;
-  background: #eff6ff;
-  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  border-color: #b83126;
+  background: #f3eadf;
+  box-shadow: 0 0 0 3px rgba(184, 49, 38, 0.1);
 }
 
 .template-card:focus-visible,
@@ -648,7 +648,7 @@ p {
 
 .range-control {
   width: 100%;
-  accent-color: #2563eb;
+  accent-color: #b83126;
 }
 
 .actions {
@@ -695,9 +695,9 @@ p {
 }
 
 .stage-item.active {
-  color: #2563eb;
-  border-color: #bfdbfe;
-  background: #eff6ff;
+  color: #b83126;
+  border-color: #d9b5ab;
+  background: #f3eadf;
 }
 
 .result-panel {
@@ -741,9 +741,9 @@ p {
 
 .recent-item {
   width: 100%;
-  border: 1px solid #e5eaf2;
-  border-radius: 8px;
-  background: #fff;
+  border: 1px solid #d2cabc;
+  border-radius: 2px;
+  background: #fbf9f3;
   padding: 12px;
   display: grid;
   grid-template-columns: 1fr auto;

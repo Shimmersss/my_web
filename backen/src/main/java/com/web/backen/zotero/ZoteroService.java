@@ -2,13 +2,14 @@ package com.web.backen.zotero;
 
 import com.web.backen.config.ZoteroConfig;
 import org.springframework.core.ParameterizedTypeReference;
-import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 
-import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.PushbackInputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -64,7 +65,7 @@ public class ZoteroService {
      * - 如果上游返回 ZIP 包（snapshot 类型常见，如 markdown / 网页快照），
      *   自动解出包内主文件并按文件名后缀推断 content-type
      */
-    public ResponseEntity<byte[]> fetchItemFile(String itemKey) throws Exception {
+    public ProxiedFile fetchItemFile(String itemKey) throws Exception {
         URI uri = URI.create(config.getBaseUrl()
                 + "/users/" + config.getUserId()
                 + "/items/" + itemKey + "/file");
@@ -74,42 +75,48 @@ public class ZoteroService {
                 .timeout(Duration.ofSeconds(30))
                 .GET()
                 .build();
-        HttpResponse<byte[]> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofByteArray());
-        byte[] body = resp.body();
+        HttpResponse<InputStream> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofInputStream());
         String upstreamCt = resp.headers().firstValue("content-type").orElse("");
+        long upstreamLength = resp.headers().firstValueAsLong("content-length").orElse(-1);
+        PushbackInputStream body = new PushbackInputStream(resp.body(), 4);
+        byte[] prefix = body.readNBytes(4);
+        body.unread(prefix);
 
         // 检测 ZIP 头 PK\003\004
-        if (body != null && body.length >= 4
-                && body[0] == 0x50 && body[1] == 0x4B
-                && body[2] == 0x03 && body[3] == 0x04) {
-            UnzipResult unzipped = unzipPickFirstUseful(body);
-            if (unzipped != null) {
-                HttpHeaders h = new HttpHeaders();
-                h.setContentType(MediaType.parseMediaType(guessContentType(unzipped.filename)));
-                return new ResponseEntity<>(unzipped.bytes, h, 200);
+        if (prefix.length == 4
+                && prefix[0] == 0x50 && prefix[1] == 0x4B
+                && prefix[2] == 0x03 && prefix[3] == 0x04) {
+            ZipInputStream zis = new ZipInputStream(body);
+            ZipEntry entry;
+            while ((entry = zis.getNextEntry()) != null) {
+                if (!entry.isDirectory()) {
+                    return new ProxiedFile(
+                            HttpStatusCode.valueOf(resp.statusCode()),
+                            MediaType.parseMediaType(guessContentType(entry.getName())),
+                            -1,
+                            zis);
+                }
             }
+            zis.close();
+            throw new IOException("Zotero attachment ZIP contains no files");
         }
 
-        HttpHeaders headers = new HttpHeaders();
-        headers.setContentType(MediaType.parseMediaType(
-                upstreamCt.isBlank() ? "application/pdf" : upstreamCt));
-        return new ResponseEntity<>(body, headers, resp.statusCode());
+        return new ProxiedFile(
+                HttpStatusCode.valueOf(resp.statusCode()),
+                MediaType.parseMediaType(upstreamCt.isBlank() ? "application/pdf" : upstreamCt),
+                upstreamLength,
+                body);
     }
 
-    private record UnzipResult(String filename, byte[] bytes) {}
-
-    /** 解 ZIP，返回第一个非目录条目（一般 Zotero snapshot 就一个主文件） */
-    private UnzipResult unzipPickFirstUseful(byte[] zip) {
-        try (ZipInputStream zis = new ZipInputStream(new ByteArrayInputStream(zip))) {
-            ZipEntry e;
-            while ((e = zis.getNextEntry()) != null) {
-                if (e.isDirectory()) continue;
-                return new UnzipResult(e.getName(), zis.readAllBytes());
-            }
-        } catch (Exception ex) {
-            return null;
+    public record ProxiedFile(
+            HttpStatusCode statusCode,
+            MediaType contentType,
+            long contentLength,
+            InputStream body) implements AutoCloseable {
+        @Override
+        public void close() throws IOException {
+            body.close();
         }
-        return null;
     }
 
     private String guessContentType(String filename) {

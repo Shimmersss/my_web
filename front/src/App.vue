@@ -1,7 +1,7 @@
 <template>
   <n-message-provider>
     <n-dialog-provider>
-      <n-config-provider :theme="theme" :locale="naiveLocale" :date-locale="dateLocale">
+      <n-config-provider :theme="theme" :theme-overrides="themeOverrides" :locale="naiveLocale" :date-locale="dateLocale">
         <a class="skip-link" href="#main-content">跳到主要内容</a>
         <n-layout>
           <n-layout-header bordered>
@@ -42,6 +42,15 @@ import { zhCN, dateZhCN } from 'naive-ui'
 const themeStore = useThemeStore()
 
 const theme = computed(() => themeStore.isDark ? darkTheme : null)
+const themeOverrides = {
+  common: {
+    primaryColor: '#b83126',
+    primaryColorHover: '#9f2a20',
+    primaryColorPressed: '#812219',
+    primaryColorSuppl: '#b83126',
+    borderRadius: '2px'
+  }
+}
 const naiveLocale = zhCN
 const dateLocale = dateZhCN
 </script>
@@ -51,7 +60,8 @@ html, body, #app {
   margin: 0;
   padding: 0;
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-family: 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: #eee9df;
 }
 
 .skip-link {

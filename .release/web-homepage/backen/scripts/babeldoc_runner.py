@@ -3,6 +3,7 @@ import argparse
 import asyncio
 import json
 import os
+import re
 
 from babeldoc.docvision.doclayout import DocLayoutModel
 from babeldoc.format.pdf import high_level
@@ -12,13 +13,121 @@ from babeldoc.translator.translator import OpenAITranslator
 from babeldoc.translator.translator import set_translate_rate_limiter
 
 
+COMMON_ENGLISH_WORDS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "that",
+    "this",
+    "from",
+    "between",
+    "system",
+    "systems",
+    "model",
+    "models",
+    "data",
+    "method",
+    "methods",
+    "results",
+    "study",
+    "studies",
+    "reaction",
+    "reactions",
+    "chemical",
+    "using",
+    "used",
+    "were",
+    "was",
+    "are",
+    "is",
+    "as",
+    "in",
+    "of",
+    "to",
+    "by",
+    "on",
+    "an",
+    "be",
+    "we",
+    "it",
+    "can",
+}
+
+
 def emit(event):
     print(json.dumps(event, ensure_ascii=False), flush=True)
 
 
+def repair_pdf_font_text(text):
+    if not text:
+        return text
+    if len(re.findall(r"[A-Za-z]", text)) < 20:
+        return text
+
+    candidate = "".join(repair_pdf_font_char(char) for char in text)
+    original_score = english_score(text)
+    candidate_score = english_score(candidate)
+    if (
+        candidate_score["common_ratio"] >= 0.06
+        and candidate_score["vowel_ratio"] > original_score["vowel_ratio"] + 0.08
+        and candidate_score["score"] > original_score["score"] + 0.18
+    ):
+        return candidate
+    return text
+
+
+def repair_pdf_font_char(char):
+    if "a" <= char <= "y":
+        return chr(ord(char) + 1)
+    if "A" <= char <= "V":
+        return chr(ord(char) + 1)
+    if char in {"W", "X", "Z"}:
+        return "a"
+    if "0" <= char <= "8":
+        return chr(ord(char) + 1)
+    return {
+        "/": "0",
+        "+": ",",
+        "-": ".",
+        ":": "A",
+        ";": "A",
+    }.get(char, char)
+
+
+def english_score(text):
+    letters = re.findall(r"[A-Za-z]", text)
+    if not letters:
+        return {"score": 0.0, "vowel_ratio": 0.0, "common_ratio": 0.0}
+    vowels = sum(1 for char in letters if char.lower() in "aeiou")
+    words = [word for word in re.split(r"[^A-Za-z]+", text.lower()) if len(word) >= 2]
+    common = sum(1 for word in words if word in COMMON_ENGLISH_WORDS)
+    vowel_ratio = vowels / len(letters)
+    common_ratio = common / len(words) if words else 0.0
+    return {
+        "score": common_ratio * 3 + min(vowel_ratio, 0.45),
+        "vowel_ratio": vowel_ratio,
+        "common_ratio": common_ratio,
+    }
+
+
+class RepairingOpenAITranslator(OpenAITranslator):
+    name = "openai-fontfix"
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.add_cache_impact_parameters("pdf_font_text_repair", "shift-v1")
+
+    def do_translate(self, text, rate_limit_params=None):
+        return super().do_translate(repair_pdf_font_text(text), rate_limit_params)
+
+    def do_llm_translate(self, text, rate_limit_params=None):
+        return super().do_llm_translate(repair_pdf_font_text(text), rate_limit_params)
+
+
 async def run(args):
     high_level.init()
-    translator = OpenAITranslator(
+    translator = RepairingOpenAITranslator(
         lang_in="en",
         lang_out="zh",
         model=args.model,

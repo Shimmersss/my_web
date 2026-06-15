@@ -50,7 +50,7 @@
 .tool-page {
   min-height: calc(100vh - 72px);
   padding: 32px 0 56px;
-  background: #f5f7fa;
+  background: #eee9df;
 }
 
 .tool-page__header {
@@ -59,7 +59,8 @@
   h1 {
     margin: 0 0 8px;
     color: $text-color;
-    font-size: 32px;
+    font-family: Georgia, 'Noto Serif SC', 'Songti SC', serif;
+    font-size: 38px;
     line-height: 1.25;
   }
 
@@ -73,7 +74,7 @@
 .tool-page__surface {
   border: 1px solid $border-color;
   border-radius: $border-radius-lg;
-  background: #fff;
+  background: #fbf9f3;
   box-shadow: $shadow-sm;
 }
 

@@ -149,7 +149,7 @@
                       @click="togglePdf(item.key, att)"
                     >
                       <template #icon><n-icon><DocumentTextOutline /></n-icon></template>
-                      {{ openedPdf[item.key] === att.key ? '收起' : attachmentLabel(att) }}
+                      {{ attachmentButtonLabel(item.key, att) }}
                     </n-button>
                     <n-dropdown
                       :options="exportOptions"
@@ -163,10 +163,27 @@
                     </n-dropdown>
                   </div>
 
+                  <div
+                    v-if="activeDownload(item)"
+                    class="attachment-progress"
+                    role="status"
+                    aria-live="polite"
+                  >
+                    <div class="attachment-progress__head">
+                      <span>{{ downloadProgressText(activeDownload(item)) }}</span>
+                      <span>{{ downloadSizeText(activeDownload(item)) }}</span>
+                    </div>
+                    <n-progress
+                      type="line"
+                      :percentage="activeDownload(item).percentage"
+                      :show-indicator="false"
+                    />
+                  </div>
+
                   <div v-if="openedPdf[item.key]" class="pdf-frame">
                     <iframe
                       v-if="!openedMd[item.key]"
-                      :src="`/api/zotero/file/${openedPdf[item.key]}#toolbar=1&navpanes=0`"
+                      :src="`${openedPdfUrl[item.key]}#toolbar=1&navpanes=0`"
                       :title="`${item.title || '文献'}附件预览`"
                       frameborder="0"
                       loading="lazy"
@@ -234,7 +251,10 @@ const PAGE_SIZE = 20
 const currentPage = ref(1)
 const expanded = reactive({})
 const openedPdf = reactive({})
+const openedPdfUrl = reactive({})
 const openedMd = reactive({})
+const attachmentDownloads = reactive({})
+const attachmentAbortControllers = new Map()
 
 const typeMap = {
   journalArticle: '期刊论文',
@@ -417,6 +437,37 @@ function attachmentLabel(att) {
   return '查看附件'
 }
 
+function attachmentButtonLabel(itemKey, att) {
+  if (attachmentDownloads[att.key]?.status === 'loading') return '取消下载'
+  return openedPdf[itemKey] === att.key ? '收起' : attachmentLabel(att)
+}
+
+function activeDownload(item) {
+  return (item.attachments || [])
+    .map(att => attachmentDownloads[att.key])
+    .find(download => download?.status === 'loading')
+}
+
+function formatBytes(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const unit = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  return `${(bytes / (1024 ** unit)).toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`
+}
+
+function downloadProgressText(download) {
+  if (download.loaded === 0) return '正在连接附件服务器'
+  return download.total > 0 ? `正在下载附件 ${download.percentage.toFixed(1)}%` : '正在下载附件'
+}
+
+function downloadSizeText(download) {
+  if (download.loaded === 0) return '等待首批数据'
+  const size = download.total > 0
+    ? `${formatBytes(download.loaded)} / ${formatBytes(download.total)}`
+    : `${formatBytes(download.loaded)} 已下载`
+  return download.bytesPerSecond > 0 ? `${size} · ${formatBytes(download.bytesPerSecond)}/s` : size
+}
+
 function pdfAttachments(item) {
   return (item.attachments || []).filter(a => a.isPdf)
 }
@@ -427,15 +478,18 @@ function isMarkdown(att) {
 }
 
 async function togglePdf(itemKey, att) {
-  if (openedPdf[itemKey] === att.key) {
-    delete openedPdf[itemKey]
-    delete openedMd[itemKey]
+  if (attachmentDownloads[att.key]?.status === 'loading') {
+    attachmentAbortControllers.get(att.key)?.abort()
     return
   }
-  openedPdf[itemKey] = att.key
-  delete openedMd[itemKey]
+  if (openedPdf[itemKey] === att.key) {
+    closeAttachment(itemKey)
+    return
+  }
 
   if (isMarkdown(att)) {
+    openedPdf[itemKey] = att.key
+    delete openedMd[itemKey]
     try {
       const res = await fetch(`/api/zotero/file/${att.key}`)
       const text = await res.text()
@@ -444,7 +498,66 @@ async function togglePdf(itemKey, att) {
     } catch (e) {
       openedMd[itemKey] = `<p style="color:#d03050">加载失败：${e.message}</p>`
     }
+    return
   }
+
+  const controller = new AbortController()
+  attachmentAbortControllers.set(att.key, controller)
+  const startedAt = Date.now()
+  attachmentDownloads[att.key] = {
+    status: 'loading',
+    loaded: 0,
+    total: 0,
+    percentage: 0,
+    bytesPerSecond: 0
+  }
+  try {
+    const res = await fetch(`/api/zotero/file/${att.key}`, { signal: controller.signal })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const total = Number(res.headers.get('content-length')) || 0
+    const reader = res.body?.getReader()
+    if (!reader) throw new Error('浏览器不支持流式下载')
+    const chunks = []
+    let loaded = 0
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(value)
+      loaded += value.byteLength
+      const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.001)
+      attachmentDownloads[att.key] = {
+        status: 'loading',
+        loaded,
+        total,
+        percentage: total > 0 ? Math.min(99.9, loaded / total * 100) : 0,
+        bytesPerSecond: loaded / elapsedSeconds
+      }
+    }
+    closeAttachment(itemKey)
+    openedPdf[itemKey] = att.key
+    openedPdfUrl[itemKey] = URL.createObjectURL(new Blob(chunks, {
+      type: res.headers.get('content-type') || 'application/pdf'
+    }))
+    attachmentDownloads[att.key] = {
+      status: 'done',
+      loaded,
+      total,
+      percentage: 100,
+      bytesPerSecond: loaded / Math.max((Date.now() - startedAt) / 1000, 0.001)
+    }
+  } catch (e) {
+    delete attachmentDownloads[att.key]
+    if (e.name !== 'AbortError') message.error('附件下载失败：' + e.message)
+  } finally {
+    attachmentAbortControllers.delete(att.key)
+  }
+}
+
+function closeAttachment(itemKey) {
+  if (openedPdfUrl[itemKey]) URL.revokeObjectURL(openedPdfUrl[itemKey])
+  delete openedPdf[itemKey]
+  delete openedPdfUrl[itemKey]
+  delete openedMd[itemKey]
 }
 
 async function doExport(itemKey, opt) {
@@ -511,6 +624,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  attachmentAbortControllers.forEach(controller => controller.abort())
+  Object.values(openedPdfUrl).forEach(url => URL.revokeObjectURL(url))
   clearTimeout(sidebarResizeTimer)
   sidebarScrollContainers.forEach(container => {
     container.removeEventListener('scroll', updateSidebarFollow)
@@ -523,7 +638,7 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .publications-page {
-  background: #f5f7fa;
+  background: #eee9df;
 }
 
 .container {
@@ -552,10 +667,11 @@ onBeforeUnmount(() => {
 }
 
 .sidebar {
-  background: #fff;
-  border-radius: 12px;
+  background: #fbf9f3;
+  border: 1px solid #d2cabc;
+  border-radius: 2px;
   padding: 16px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: 2px 3px 0 rgba(95, 86, 65, 0.1);
   width: 100%;
   max-height: calc(100vh - 120px);
   overflow-y: auto;
@@ -626,7 +742,7 @@ onBeforeUnmount(() => {
   outline: 3px solid rgba(22, 119, 255, 0.28);
   outline-offset: 2px;
 }
-.coll-item.active { background: #e6f0ff; color: #1677ff; font-weight: 500; }
+.coll-item.active { background: #f0e5d9; color: #b83126; font-weight: 500; }
 
 .coll-name {
   overflow: hidden;
@@ -644,7 +760,7 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-.coll-item.active .count { background: #cfe1ff; color: #1677ff; }
+.coll-item.active .count { background: #e5d8c9; color: #b83126; }
 
 .content {
   background: transparent;
@@ -656,10 +772,11 @@ onBeforeUnmount(() => {
   margin-bottom: 16px;
   flex-wrap: wrap;
   align-items: center;
-  background: #fff;
+  background: #fbf9f3;
+  border: 1px solid #d2cabc;
   padding: 12px 16px;
-  border-radius: 12px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  border-radius: 2px;
+  box-shadow: 2px 3px 0 rgba(95, 86, 65, 0.1);
 }
 
 .filter-bar :deep(.n-input),
@@ -676,10 +793,11 @@ onBeforeUnmount(() => {
 }
 
 .pub-item {
-  background: #fff;
-  border-radius: 12px;
+  background: #fbf9f3;
+  border: 1px solid #d2cabc;
+  border-radius: 2px;
   padding: 20px 24px;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  box-shadow: 2px 3px 0 rgba(95, 86, 65, 0.1);
   transition: box-shadow 0.2s;
 }
 
@@ -696,8 +814,8 @@ onBeforeUnmount(() => {
 .pub-type {
   display: inline-block;
   font-size: 12px;
-  color: #1677ff;
-  background: #e6f0ff;
+  color: #52624e;
+  background: #edf0e8;
   padding: 2px 10px;
   border-radius: 4px;
 }
@@ -802,6 +920,22 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.attachment-progress {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #d2cabc;
+  background: #f7f2e8;
+}
+
+.attachment-progress__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
+  color: #5f5641;
+  font-size: 12px;
 }
 
 .pdf-frame {

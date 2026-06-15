@@ -5,7 +5,7 @@
         <div class="page-head">
           <div>
             <p class="eyebrow">GitHub Open Source</p>
-            <h2>GitHub 项目开源</h2>
+            <h1>GitHub 项目开源</h1>
             <p>展示我指定的开源项目，自动同步 GitHub stars、forks、语言、topics 与最近更新时间。</p>
           </div>
           <div class="page-actions">
@@ -440,8 +440,8 @@ onMounted(async () => {
 
 .open-source-page {
   min-height: 100vh;
-  background: #f6f8fb;
-  padding-top: 72px;
+  background: #eee9df;
+  padding: 32px 0 56px;
 }
 
 .page-head {
@@ -451,8 +451,9 @@ onMounted(async () => {
   align-items: flex-end;
   margin-bottom: $spacing-xl;
 
-  h2 {
-    font-size: 34px;
+  h1 {
+    font-family: Georgia, 'Noto Serif SC', 'Songti SC', serif;
+    font-size: 40px;
     margin: 4px 0 8px;
     color: $text-color;
   }
@@ -464,9 +465,11 @@ onMounted(async () => {
   }
 
   .eyebrow {
-    color: $primary-color;
+    color: #b83126;
     font-weight: 700;
-    letter-spacing: 0;
+    letter-spacing: 0.12em;
+    font-size: 12px;
+    text-transform: uppercase;
   }
 }
 
@@ -482,9 +485,9 @@ onMounted(async () => {
   grid-template-columns: minmax(240px, 1fr) 180px auto;
   gap: $spacing-md;
   align-items: center;
-  background: #fff;
-  border: 1px solid #e8edf3;
-  border-radius: 8px;
+  background: #fbf9f3;
+  border: 1px solid #d2cabc;
+  border-radius: 2px;
   padding: $spacing-md;
   margin-bottom: $spacing-lg;
 }
@@ -503,16 +506,16 @@ onMounted(async () => {
   min-height: 360px;
   display: flex;
   flex-direction: column;
-  background: #fff;
-  border: 1px solid #e6ebf2;
-  border-radius: 8px;
+  background: #fbf9f3;
+  border: 1px solid #d2cabc;
+  border-radius: 2px;
   padding: $spacing-lg;
   box-shadow: $shadow-sm;
   transition: transform $transition-base, box-shadow $transition-base, border-color $transition-base;
 
   &:hover {
     transform: translateY(-3px);
-    border-color: rgba(24, 144, 255, 0.35);
+    border-color: #b83126;
     box-shadow: $shadow-lg;
   }
 }
@@ -527,11 +530,11 @@ onMounted(async () => {
 .repo-mark {
   width: 48px;
   height: 48px;
-  border-radius: 8px;
+  border-radius: 2px;
   display: grid;
   place-items: center;
   color: #fff;
-  background: #24292f;
+  background: #373730;
   flex-shrink: 0;
 }
 
@@ -560,7 +563,7 @@ onMounted(async () => {
 
 .category {
   flex-shrink: 0;
-  background: #e8f4ff;
+  background: #f0e5d9;
   color: $primary-color;
   border-radius: 4px;
   padding: 3px 9px;
@@ -605,9 +608,9 @@ onMounted(async () => {
 
   span {
     color: #476582;
-    background: #f1f5f9;
-    border: 1px solid #e2e8f0;
-    border-radius: 4px;
+    background: #edf0e8;
+    border: 1px solid #c6ccbf;
+    border-radius: 2px;
     padding: 3px 8px;
     font-size: 12px;
   }

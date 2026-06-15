@@ -1,6 +1,7 @@
 package com.web.backen.zotero;
 
 import org.springframework.http.HttpHeaders;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -61,15 +62,18 @@ public class ZoteroController {
      * PDF / 附件文件代理，inline 显示
      */
     @GetMapping("/file/{key}")
-    public ResponseEntity<byte[]> file(@PathVariable String key) {
+    public ResponseEntity<?> file(@PathVariable String key) {
         try {
-            ResponseEntity<byte[]> upstream = zoteroService.fetchItemFile(key);
+            ZoteroService.ProxiedFile upstream = zoteroService.fetchItemFile(key);
             HttpHeaders out = new HttpHeaders();
-            MediaType ct = upstream.getHeaders().getContentType();
-            out.setContentType(ct != null ? ct : MediaType.APPLICATION_PDF);
+            out.setContentType(upstream.contentType());
             out.set(HttpHeaders.CONTENT_DISPOSITION, "inline");
             out.setCacheControl("private, max-age=3600");
-            return new ResponseEntity<>(upstream.getBody(), out, upstream.getStatusCode());
+            out.set("X-Accel-Buffering", "no");
+            if (upstream.contentLength() >= 0) {
+                out.setContentLength(upstream.contentLength());
+            }
+            return new ResponseEntity<>(new InputStreamResource(upstream.body()), out, upstream.statusCode());
         } catch (Exception e) {
             return ResponseEntity.status(502).body(("file proxy error: " + e.getMessage()).getBytes());
         }

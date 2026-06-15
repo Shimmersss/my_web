@@ -2,10 +2,9 @@
   <header class="app-header">
     <div class="header-content">
       <button class="logo" type="button" aria-label="返回首页" @click="navigateTo('/')">
-        <n-icon size="36" :color="isDark ? '#4096ff' : '#1890ff'">
-          <LogoIcon />
-        </n-icon>
+        <span class="logo-mark" aria-hidden="true"></span>
         <span class="logo-text">Research Desk</span>
+        <small>个人研究工具台</small>
       </button>
 
       <div class="header-right">
@@ -32,14 +31,6 @@
           </n-button>
 
           <n-button
-            type="primary"
-            @click="navigateTo('/contact')"
-            class="contact-btn"
-          >
-            PPT 生成
-          </n-button>
-
-          <n-button
             text
             circle
             class="mobile-menu-btn"
@@ -61,9 +52,6 @@
           :options="mobileMenuOptions"
           class="mobile-nav-menu"
         />
-        <div class="mobile-drawer-actions">
-          <n-button block type="primary" @click="navigateTo('/contact')">PPT 生成</n-button>
-        </div>
       </n-drawer-content>
     </n-drawer>
   </header>
@@ -96,27 +84,11 @@ const activeKey = computed(() => {
   return activeMap[route.name] || route.name
 })
 
-const LogoIcon = () => '▣'
 const MenuIcon = MenuOutline
 const MoonIcon = MoonOutline
 const SunIcon = SunnyOutline
 
 const menuOptions = computed(() => [
-  {
-    label: () => t('common.home'),
-    key: 'Home',
-    onClick: () => navigateTo('/')
-  },
-  {
-    label: () => t('common.about'),
-    key: 'About',
-    onClick: () => navigateTo('/about')
-  },
-  {
-    label: () => t('common.business'),
-    key: 'Business',
-    onClick: () => navigateTo('/business')
-  },
   {
     label: '文献',
     key: 'Publications',
@@ -136,10 +108,15 @@ const menuOptions = computed(() => [
     label: 'PPT 生成',
     key: 'Contact',
     onClick: () => navigateTo('/contact')
+  },
+  {
+    label: 'GitHub 项目',
+    key: 'News',
+    onClick: () => navigateTo('/news')
   }
 ])
 
-const mobileMenuOptions = computed(() => menuOptions.value.filter(option => option.key !== 'Contact'))
+const mobileMenuOptions = computed(() => menuOptions.value)
 
 const navigateTo = (path) => {
   mobileMenuOpen.value = false
@@ -158,8 +135,9 @@ const toggleTheme = () => {
   position: sticky;
   top: 0;
   z-index: 1000;
-  background: #fff;
-  box-shadow: $shadow-sm;
+  background: #f8f5ee;
+  border-bottom: 1px solid #cfc7b7;
+  box-shadow: none;
   transition: background 0.3s ease, box-shadow 0.3s ease;
   overflow: visible;
 
@@ -180,7 +158,7 @@ const toggleTheme = () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 72px;
+  height: 80px;
   width: 100%;
 }
 
@@ -192,7 +170,7 @@ const toggleTheme = () => {
   font: inherit;
   display: flex;
   align-items: center;
-  gap: $spacing-sm;
+  gap: 10px;
   cursor: pointer;
   transition: all $transition-fast;
   flex-shrink: 0;
@@ -207,14 +185,29 @@ const toggleTheme = () => {
   }
 
   &-text {
-    font-size: 26px;
+    font-family: Georgia, serif;
+    font-size: 25px;
     font-weight: 700;
-    color: $text-color;
+    color: #25251f;
 
     .dark & {
       color: var(--n-text-color);
     }
   }
+
+  small {
+    border-left: 1px solid #b9b1a3;
+    padding-left: 10px;
+    color: #777168;
+    font-size: 11px;
+    font-weight: 400;
+  }
+}
+
+.logo-mark {
+  width: 4px;
+  height: 27px;
+  background: #b83126;
 }
 
 .header-right {
@@ -239,12 +232,12 @@ const toggleTheme = () => {
     gap: 0;
 
     .n-menu-item {
-      font-size: 18px;
+      font-size: 15px;
       padding: 0 12px;
       font-weight: 500;
       transition: all $transition-fast;
       flex-shrink: 0;
-      height: 72px;
+      height: 80px;
       display: flex;
       align-items: center;
 
@@ -265,21 +258,10 @@ const toggleTheme = () => {
     padding: 6px;
   }
 
-  .contact-btn {
-    padding: 10px 18px;
-    font-size: 16px;
-    font-weight: 500;
-  }
 }
 
 .mobile-menu-btn {
   display: none;
-}
-
-.mobile-drawer-actions {
-  display: grid;
-  gap: 10px;
-  margin-top: 18px;
 }
 
 .mobile-nav-menu {
@@ -313,10 +295,6 @@ const toggleTheme = () => {
 
   .logo-text {
     font-size: 22px;
-  }
-
-  .contact-btn {
-    display: none;
   }
 
   .mobile-menu-btn {

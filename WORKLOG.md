@@ -6,7 +6,77 @@
 
 ---
 
+## 2026-06-15
+
+### fix: 附件进度条改为真实字节进度（待用户验证，未部署）
+
+**问题**：首版进度条启用了 Naive UI `processing` 动画，即使浏览器没有收到新字节也会持续滚动；生产 Nginx 默认响应缓冲还可能导致数据成批到达，视觉进度不可信。
+
+**改动**：
+- 移除与实际字节无关的进度动画，百分比改为按 `loaded / Content-Length` 保留一位小数计算
+- 增加按已接收字节和经过时间计算的实时下载速度
+- 附件代理响应增加 `X-Accel-Buffering: no`，要求 Nginx 实时向浏览器转发流
+
+**发布状态**：按用户要求仅完成本地修改和验证，等待用户确认后再部署。
+
+**本地验证**：
+- `npm run build`、`mvn -q -Dtest=ZoteroServiceTest test` 和 `git diff --check` 通过
+- 本地附件响应确认包含 `X-Accel-Buffering: no`、真实 `Content-Length`
+- 本地前后端已运行在 `http://localhost:3000` / `http://localhost:8080`，等待用户手动确认进度表现
+
+### feat: 文献附件预览增加下载进度
+
+**目标**：生产服务器到 Zotero/S3 的附件链路较慢，点击“查看 PDF”后 iframe 会长时间空白，用户无法判断是否仍在下载。
+
+**改动**：
+- 文献页改用浏览器 `ReadableStream` 下载 PDF，显示实时百分比、已下载大小和总大小
+- 首批数据到达前显示“正在连接附件服务器”，避免进度暂时为零时仍像页面卡死
+- 下载完成后创建 Blob URL 打开 iframe 预览；下载中再次点击可取消
+- 收起附件或组件卸载时中止请求并释放 Blob URL，避免无效下载和内存泄漏
+
+**验证**：
+- `npm run build` 通过；仍有既有 Sass legacy API / `darken()` deprecation 和 chunk size 警告
+- 本地浏览器点击“查看 PDF”后显示下载状态，完成后以 Blob URL 自动打开 iframe
+- 一键部署已完成构建、安装和后端健康检查；服务器内 HTTPS/Nginx 返回 200，线上静态资源包含“正在连接附件服务器 / 正在下载附件 / 取消下载”
+- 部署脚本最后的公网检查遇到临时 DNS 解析失败；服务器服务 active，安装结果不受影响
+
 ## 2026-06-14
+
+### fix: Zotero PDF 附件代理改为流式转发
+
+**问题**：生产环境文献库打开 PDF 返回 `file proxy error: request timed out`。服务器实测 Zotero/S3 附件链路约 15 KB/s，旧实现用 `BodyHandlers.ofByteArray()` 等完整 PDF 下载完成后才响应，并有 30 秒总超时，因此稳定失败。
+
+**改动**：
+- `ZoteroService.fetchItemFile()` 改用 `BodyHandlers.ofInputStream()`，读取前 4 字节识别 ZIP 后直接流式返回
+- 普通 PDF/附件不再完整缓冲到 JVM 堆；ZIP 附件继续通过 `ZipInputStream` 解出首个文件并推断 content-type
+- `ZoteroController` 改用 `InputStreamResource` 边读边响应，保留 inline、缓存头、上游状态码与普通附件 content-length
+- 新增慢速 PDF 首字节返回与 ZIP 流式解包测试
+
+**线上诊断**：
+- 后端 `/api/zotero/items` 正常，缓存刷新耗时多为 10-25 秒
+- 旧 `/api/zotero/file/{key}` 在服务器精确 30.00 秒返回 502
+- 直接从服务器下载约 4.99 MB 测试 PDF：90 秒仅收到 1.33 MB，首字节约 2.5 秒，确认不是 Nginx 或浏览器超时
+
+**验证**：
+- `mvn -q -Dtest=ZoteroServiceTest test` 与完整 `mvn -q test` 通过
+- 一键部署脚本完成后端测试、前端构建、服务安装及健康检查
+- 同一生产附件经后端直连和公网 Nginx 链路均返回 `HTTP 200`，首字节约 2.6-2.9 秒；15 秒内持续传输约 147 KB，不再在 30 秒返回 502
+- 生产后端保持 active，验证时 JVM/cgroup 内存约 260 MB
+
+### feat: 切换 Paper Index Studio 视觉并恢复 GitHub 项目入口
+
+**目标**：采用用户选定的第 3 套纸张索引视觉方向，隐藏暂时不用的“项目说明”和“工具模块”，把 GitHub 项目恢复为核心公开模块。
+
+**改动**：
+- 首页重做为纸张索引研究工作台，包含当前工作、研究进度、核心工作流和 GitHub 项目四个区块
+- 首页通过站内 `/api/github-projects` 展示首个精选项目，失败时使用本地配置回退
+- 顶部导航和页脚隐藏 `/about`、`/business`，恢复 `/news` GitHub 项目入口
+- 全局主色、背景、边框、阴影、标题字体，以及文献、翻译、PPT 核心工作区切换为暖白纸张、索引红与低饱和绿
+- GitHub 项目页同步采用纸张卡片视觉，并把页面主标题调整为 `h1`
+
+**验证**：
+- `npm run build` 通过；仍有既有 Sass legacy API / `darken()` deprecation 和 chunk size 警告
+- `git diff --check -- front/src` 通过
 
 ### fix: 修复前端可访问性基础并统一核心工具页首屏结构
 

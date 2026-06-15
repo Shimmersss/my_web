@@ -1,156 +1,146 @@
 <template>
   <div class="home-page">
-    <!-- Hero Banner -->
-    <section class="hero-section">
-      <div class="hero-bg-slide"></div>
-      <div class="container">
-        <div class="hero-content">
-          <h1 class="hero-title">{{ $t('home.hero.title') }}</h1>
-          <p class="hero-subtitle">{{ $t('home.hero.subtitle') }}</p>
-          <n-button type="primary" size="large" @click="navigateTo('/contact')" class="hero-btn">
-            {{ $t('home.hero.cta') }}
-          </n-button>
-        </div>
-      </div>
-    </section>
+    <section class="desk-hero">
+      <div class="container desk-grid">
+        <article class="paper-panel current-work">
+          <p class="section-kicker">01 / 当前工作</p>
+          <h1>把研究资料，整理成可以继续推进的工作。</h1>
+          <p class="lead">集中管理文献、翻译论文、生成答辩 PPT，并随时回到你的开源项目。</p>
 
-    <!-- 核心工具板块 -->
-    <section class="section services-section">
-      <div class="container">
-        <h2 class="section__title">{{ $t('home.services.title') }}</h2>
-        <p class="section__subtitle">{{ $t('home.services.subtitle') }}</p>
-        <n-grid :x-gap="24" :y-gap="24" :cols="3" :cols-md="2" :cols-sm="1">
-          <n-grid-item v-for="service in services" :key="service.id">
-            <a class="service-card" :href="`/business/${service.id}`" @click.prevent="navigateTo(`/business/${service.id}`)">
-              <div class="service-image">
-                <img :src="service.image" :alt="service.title">
-              </div>
-              <div class="service-content">
-                <h3 class="service-title">{{ service.title }}</h3>
-                <p class="service-desc">{{ service.description }}</p>
-                <span class="service-btn">{{ $t('common.readMore') }} →</span>
-              </div>
+          <div class="topic-tags" aria-label="研究主题">
+            <span>文献综述</span>
+            <span>论文翻译</span>
+            <span>学术表达</span>
+          </div>
+
+          <nav class="quick-actions" aria-label="核心工具快捷入口">
+            <a v-for="tool in tools" :key="tool.path" :href="tool.path" @click.prevent="navigateTo(tool.path)">
+              <n-icon size="25"><component :is="tool.icon" /></n-icon>
+              <span><strong>{{ tool.title }}</strong><small>{{ tool.description }}</small></span>
             </a>
-          </n-grid-item>
-        </n-grid>
-      </div>
-    </section>
+          </nav>
+        </article>
 
-    <!-- 工作方式 -->
-    <section class="section advantages-section">
-      <div class="container">
-        <h2 class="section__title">{{ $t('home.advantages.title') }}</h2>
-        <p class="section__subtitle">{{ $t('home.advantages.subtitle') }}</p>
-        <n-grid :x-gap="24" :y-gap="24" :cols="4" :cols-md="2" :cols-sm="1">
-          <n-grid-item v-for="advantage in advantages" :key="advantage.id">
-            <div class="advantage-card">
-              <div class="advantage-icon">
-                <n-icon size="48" color="#1890ff">
-                  <component :is="advantage.icon" />
-                </n-icon>
-              </div>
-              <h3 class="advantage-title">{{ advantage.title }}</h3>
-              <p class="advantage-desc">{{ advantage.description }}</p>
+        <aside class="paper-panel progress-panel">
+          <p class="section-kicker">02 / 研究进度</p>
+          <div v-for="item in progress" :key="item.label" class="progress-row">
+            <div class="progress-head">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
             </div>
-          </n-grid-item>
-        </n-grid>
-      </div>
-    </section>
+            <div class="progress-track"><span :style="{ width: item.percent + '%' }"></span></div>
+            <small>{{ item.note }}</small>
+          </div>
+          <div class="paper-note">本周目标：完成论文整理，并把核心结果汇总为可分享材料。</div>
+        </aside>
 
-    <!-- PPT 生成入口 -->
-    <section class="section contact-section">
-      <div class="container">
-        <n-grid :x-gap="48" :y-gap="24" :cols="2" :cols-sm="1">
-          <n-grid-item>
-            <div class="contact-info">
-              <h2>{{ $t('contact.title') }}</h2>
-              <p>把论文、模板和提示词交给后端队列，让 mimo 规划结构并生成可编辑 PPTX。</p>
-              <div class="contact-items">
-                <div class="contact-item">
-                  <n-icon size="24"><DocumentTextIcon /></n-icon>
-                  <div>
-                    <span>论文输入</span>
-                    <p>支持 PDF / DOCX，也可以只输入提示词</p>
-                  </div>
-                </div>
-                <div class="contact-item">
-                  <n-icon size="24"><BusinessIcon /></n-icon>
-                  <div>
-                    <span>模板风格</span>
-                    <p>可上传 PPTX 模板继承版式与配色</p>
-                  </div>
-                </div>
-                <div class="contact-item">
-                  <n-icon size="24"><FlashOutline /></n-icon>
-                  <div>
-                    <span>后台队列</span>
-                    <p>单 worker 有界队列，生成完成后下载 PPTX</p>
-                  </div>
-                </div>
+        <article class="paper-panel recent-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">03 / 快速入口</p>
+              <h2>研究工作流</h2>
+            </div>
+            <a href="/publications" @click.prevent="navigateTo('/publications')">打开文献库 →</a>
+          </div>
+          <div class="workflow-list">
+            <a v-for="(tool, index) in tools" :key="tool.path" :href="tool.path" @click.prevent="navigateTo(tool.path)">
+              <span class="row-index">{{ String(index + 1).padStart(2, '0') }}</span>
+              <n-icon size="22"><component :is="tool.icon" /></n-icon>
+              <span><strong>{{ tool.title }}</strong><small>{{ tool.description }}</small></span>
+              <span class="row-arrow">→</span>
+            </a>
+          </div>
+        </article>
+
+        <article class="paper-panel github-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">04 / GitHub</p>
+              <h2>我的开源项目</h2>
+            </div>
+            <a href="/news" @click.prevent="navigateTo('/news')">查看全部 →</a>
+          </div>
+
+          <div v-if="featuredProject" class="featured-repo">
+            <div class="repo-title">
+              <n-icon size="22"><LogoGithub /></n-icon>
+              <div>
+                <strong>{{ featuredProject.full_name }}</strong>
+                <small>{{ featuredProject.category || 'Open Source' }}</small>
               </div>
             </div>
-          </n-grid-item>
-          <n-grid-item>
-            <div class="contact-form">
-              <h3>从论文到答辩稿</h3>
-              <p>适合毕业答辩、项目汇报、论文分享等场景。页面保留 `/contact` URL，点击即可开始生成。</p>
-              <n-button type="primary" block size="large" @click="navigateTo('/contact')">
-                <template #icon>
-                  <n-icon><DocumentTextIcon /></n-icon>
-                </template>
-                打开 PPT 生成
-              </n-button>
+            <p>{{ featuredProject.highlight || featuredProject.description }}</p>
+            <div class="repo-meta">
+              <span>{{ featuredProject.language || 'Unknown' }}</span>
+              <span>★ {{ formatNumber(featuredProject.stargazers_count) }}</span>
+              <span>⑂ {{ formatNumber(featuredProject.forks_count) }}</span>
             </div>
-          </n-grid-item>
-        </n-grid>
+            <a class="repo-link" href="/news" @click.prevent="navigateTo('/news')">浏览项目与 README <span>→</span></a>
+          </div>
+          <div v-else class="featured-repo repo-loading">正在整理 GitHub 项目索引…</div>
+        </article>
       </div>
     </section>
   </div>
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { NIcon } from 'naive-ui'
 import {
-  NButton, NGrid, NGridItem, NIcon
-} from 'naive-ui'
-import {
-  BusinessOutline,
-  StarOutline,
-  PeopleOutline,
-  FlashOutline,
-  DocumentTextOutline
+  BookOutline,
+  ChatbubbleEllipsesOutline,
+  DocumentTextOutline,
+  LogoGithub,
+  SchoolOutline
 } from '@vicons/ionicons5'
-import literatureImage from '@/assets/images/home-literature-library.jpg'
-import translationImage from '@/assets/images/home-pdf-translation.jpg'
-import pptImage from '@/assets/images/home-ppt-generation.jpg'
-import openClawImage from '@/assets/images/home-openclaw-chat.jpg'
-import openSourceImage from '@/assets/images/home-open-source.jpg'
-import backendQueueImage from '@/assets/images/home-backend-queue.jpg'
+import { getGithubProjects } from '@/api'
+import { defaultGithubProjects, githubProjectFallback } from '@/config/githubProjects'
 
 const router = useRouter()
+const projects = ref([])
 
-const services = ref([
-  { id: 1, title: 'Zotero 文献库', description: '缓存 Zotero 条目、分组和附件，快速检索论文资料', image: literatureImage },
-  { id: 2, title: 'PDF 论文翻译', description: 'BabelDOC 保留版式输出中文或双语 PDF', image: translationImage },
-  { id: 3, title: 'PPT 自动生成', description: '论文、提示词和模板直出可编辑答辩 PPTX', image: pptImage },
-  { id: 4, title: 'OpenClaw 对话', description: '站内访问本机 OpenClaw Gateway 会话和产物', image: openClawImage },
-  { id: 5, title: '开源项目展示', description: '由后端代理 GitHub 仓库数据和 README', image: openSourceImage },
-  { id: 6, title: '受控后台队列', description: '按 2 核 4GB 服务器基线控制并发、内存和历史记录', image: backendQueueImage }
-])
+const tools = [
+  { title: '文献库', description: '管理与阅读学术文献', path: '/publications', icon: BookOutline },
+  { title: '论文翻译', description: '保留版式输出双语 PDF', path: '/translate', icon: DocumentTextOutline },
+  { title: 'PPT 生成', description: '从论文生成答辩材料', path: '/contact', icon: SchoolOutline },
+  { title: 'AI 对话', description: '进入 OpenClaw 研究会话', path: '/franchise', icon: ChatbubbleEllipsesOutline }
+]
 
-const advantages = ref([
-  { id: 1, title: '个人研究流', description: '围绕论文阅读、翻译、答辩和实验汇报组织入口', icon: PeopleOutline },
-  { id: 2, title: '服务端代理', description: '浏览器只访问站内 API，密钥和外部请求留在后端', icon: FlashOutline },
-  { id: 3, title: '文件落盘', description: '大 PDF、PPTX、图片和任务结果不长期占用 JVM 内存', icon: StarOutline },
-  { id: 4, title: '可复查产物', description: '任务目录保留 manifest、日志和输出文件，便于定位问题', icon: BusinessOutline }
-])
+const progress = [
+  { label: '文献阅读与整理', value: '18 / 24', percent: 75, note: '已整理 18 篇，待处理 6 篇' },
+  { label: '论文翻译', value: '7 / 10', percent: 70, note: '已完成 7 篇，排队中 3 篇' },
+  { label: 'PPT 资料准备', value: '2 / 4', percent: 50, note: '已完成 2 份，进行中 1 份' }
+]
 
-const BusinessIcon = BusinessOutline
-const DocumentTextIcon = DocumentTextOutline
+const featuredProject = computed(() => projects.value[0] || null)
 
-const navigateTo = (path) => {
+onMounted(async () => {
+  try {
+    const response = await getGithubProjects()
+    const items = response?.data || response || []
+    projects.value = items
+      .filter(item => item.featured !== false)
+      .map(item => ({
+        ...item,
+        full_name: item.full_name || item.repo || '未命名仓库'
+      }))
+  } catch {
+    projects.value = defaultGithubProjects.map(item => {
+      const fullName = item.repo.replace(/^https?:\/\/github\.com\//, '')
+      return { ...githubProjectFallback, ...item, full_name: fullName, language: githubProjectFallback.language }
+    })
+  }
+})
+
+function navigateTo(path) {
   router.push(path)
+}
+
+function formatNumber(value) {
+  const number = Number(value || 0)
+  return number >= 1000 ? `${(number / 1000).toFixed(1)}k` : String(number)
 }
 </script>
 
@@ -158,326 +148,226 @@ const navigateTo = (path) => {
 @use '@/assets/styles/variables' as *;
 
 .home-page {
-  padding-bottom: 0;
+  background: #eee9df;
+  color: #25251f;
 }
 
-// Hero Section
-.hero-section {
+.desk-hero {
+  min-height: calc(100vh - 81px);
+  padding: 28px 0 42px;
+}
+
+.desk-grid {
+  display: grid;
+  grid-template-columns: 1.42fr 1fr;
+  gap: 14px;
+}
+
+.paper-panel {
   position: relative;
-  height: calc(100vh - 72px);
-  min-height: 600px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
+  border: 1px solid #cfc7b7;
+  border-radius: 2px;
+  background: #fbf9f3;
+  box-shadow: 2px 3px 0 rgba(95, 86, 65, 0.12);
+  padding: 28px;
+}
 
-  .hero-bg-slide {
+.section-kicker {
+  margin: 0 0 14px;
+  color: #b83126;
+  font: 700 12px/1.2 $font-en;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.current-work {
+  min-height: 390px;
+  padding-left: 72px;
+
+  &::before {
+    content: '01';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-image: url('@/assets/images/research-workbench-hero.jpg');
-    background-size: cover;
-    background-position: center;
-    opacity: 1;
-    z-index: 0;
-
-    &::after {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0, 0, 0, 0.45);
-    }
+    left: 25px;
+    top: 74px;
+    color: #c04a3e;
+    font: 400 20px/1 Georgia, serif;
   }
 
-  .container {
-    position: relative;
-    z-index: 1;
+  h1 {
+    max-width: 700px;
+    margin: 0;
+    font-family: Georgia, 'Noto Serif SC', 'Songti SC', serif;
+    font-size: clamp(34px, 4vw, 58px);
+    line-height: 1.16;
+    letter-spacing: -0.035em;
+  }
+
+  .lead {
+    max-width: 690px;
+    margin: 22px 0;
+    color: #68645b;
+    font-size: 16px;
+    line-height: 1.8;
   }
 }
 
-.hero-content {
-  text-align: center;
-  color: #fff;
+.topic-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 
-  .hero-title {
-    font-size: 48px;
-    font-weight: 700;
-    line-height: $line-height-title;
-    margin-bottom: $spacing-md;
-    color: #fff;
-  }
-
-  .hero-subtitle {
-    font-size: $font-size-large;
-    color: rgba(255, 255, 255, 0.95);
-    margin-bottom: $spacing-xl;
-    line-height: $line-height;
-  }
-
-  .hero-btn {
-    font-size: $font-size-base;
-    padding: $spacing-md $spacing-xxl;
-    font-weight: 500;
+  span {
+    border: 1px solid #bfc4b6;
+    background: #edf0e8;
+    color: #52624e;
+    padding: 4px 9px;
+    font-size: 12px;
   }
 }
 
-// 统一的 Section 样式
-.section {
-  padding: $spacing-section 0;
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-top: 46px;
+  border-top: 1px solid #d9d2c5;
 
-  &__title {
-    font-size: $font-size-title-h1;
-    font-weight: 600;
-    text-align: center;
-    margin-bottom: $spacing-sm;
-    color: #000000;
-    line-height: $line-height-title;
+  a {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    color: inherit;
+    padding: 20px 14px 0;
+    text-decoration: none;
+    border-right: 1px solid #ded7ca;
+
+    &:first-child { padding-left: 0; }
+    &:last-child { border-right: 0; }
+    &:hover strong { color: #b83126; }
   }
 
-  &__subtitle {
-    font-size: $font-size-base;
-    color: $text-color-secondary;
-    text-align: center;
-    margin-bottom: $spacing-xl;
-    line-height: $line-height;
-  }
+  strong, small { display: block; }
+  strong { margin-bottom: 4px; font-size: 14px; }
+  small { color: #858077; font-size: 11px; }
 }
 
-// 核心工具板块
-.services-section {
-  .service-card {
+.progress-panel {
+  display: grid;
+  align-content: start;
+  gap: 22px;
+}
+
+.progress-row {
+  small { display: block; margin-top: 7px; color: #8b867c; text-align: right; }
+}
+
+.progress-head {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.progress-track {
+  height: 5px;
+  background: #e4dfd4;
+
+  span { display: block; height: 100%; background: #607b56; }
+}
+
+.paper-note {
+  margin-top: 3px;
+  border: 1px solid #ddd1b9;
+  background: #f3ead6;
+  padding: 12px 14px;
+  color: #6f634e;
+  font-family: Georgia, 'Noto Serif SC', serif;
+  font-size: 13px;
+}
+
+.panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #d8d1c5;
+
+  h2 { margin: 0; font-family: Georgia, 'Noto Serif SC', serif; font-size: 25px; }
+  a { color: #656158; text-decoration: none; font-size: 13px; }
+  a:hover { color: #b83126; }
+}
+
+.workflow-list {
+  a {
+    display: grid;
+    grid-template-columns: 34px 28px 1fr auto;
+    gap: 10px;
+    align-items: center;
+    min-height: 64px;
     color: inherit;
     text-decoration: none;
-    background: #fff;
-    border-radius: $border-radius-lg;
-    box-shadow: $shadow-sm;
-    transition: all $transition-base;
-    cursor: pointer;
-    height: 100%;
-    overflow: hidden;
-
-    &:hover {
-      transform: translateY(-6px);
-      box-shadow: $shadow-md;
-
-      .service-image img {
-        transform: scale(1.04);
-      }
-    }
-
-    &:focus-visible {
-      outline: 3px solid rgba(24, 144, 255, 0.32);
-      outline-offset: 4px;
-    }
-
-    .service-image {
-      aspect-ratio: 4 / 3;
-      overflow: hidden;
-      background: #eef2f7;
-
-      img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        transition: transform $transition-base;
-      }
-    }
-
-    .service-content {
-      padding: $spacing-lg;
-    }
-
-    .service-title {
-      font-size: $font-size-title-h2;
-      font-weight: 600;
-      margin-bottom: $spacing-sm;
-      line-height: $line-height;
-    }
-
-    .service-desc {
-      color: $text-color-secondary;
-      margin-bottom: $spacing-md;
-      line-height: $line-height;
-      font-size: $font-size-base;
-    }
+    border-bottom: 1px solid #e3ddd2;
   }
+
+  strong, small { display: block; }
+  strong { font-size: 14px; }
+  small { margin-top: 3px; color: #89847a; font-size: 11px; }
+  a:hover .row-arrow { color: #b83126; transform: translateX(3px); }
 }
 
-// 工作方式
-.advantages-section {
-  background: $bg-color-secondary;
+.row-index { color: #a49d90; font: 12px/1 Georgia, serif; }
+.row-arrow { transition: 0.2s ease; }
 
-  .advantage-card {
-    text-align: center;
-    padding: $spacing-xl;
-    height: 100%;
+.featured-repo {
+  margin-top: 18px;
+  border: 1px solid #d8d1c5;
+  padding: 18px;
 
-    .advantage-icon {
-      margin-bottom: $spacing-md;
-    }
-
-    .advantage-title {
-      font-size: $font-size-title-h3;
-      font-weight: 600;
-      margin-bottom: $spacing-sm;
-      line-height: $line-height;
-    }
-
-    .advantage-desc {
-      color: $text-color-secondary;
-      font-size: $font-size-base;
-      line-height: $line-height;
-    }
-  }
+  p { min-height: 48px; color: #69645b; line-height: 1.65; }
 }
 
-// PPT 生成入口
-.contact-section {
-  background: linear-gradient(135deg, #155e75 0%, #365314 52%, #713f12 100%);
-  color: #fff;
+.repo-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 
-  .container {
-    :deep(.n-grid) {
-      color: #fff;
-    }
-  }
-
-  .contact-info {
-    h2 {
-      font-size: $font-size-title-h1;
-      font-weight: 600;
-      margin-bottom: $spacing-md;
-      color: #fff;
-      line-height: $line-height-title;
-    }
-
-    p {
-      color: rgba(255, 255, 255, 0.95);
-      margin-bottom: $spacing-xl;
-      font-size: $font-size-large;
-      line-height: $line-height;
-    }
-
-    .contact-items {
-      .contact-item {
-        display: flex;
-        align-items: flex-start;
-        gap: $spacing-md;
-        margin-bottom: $spacing-lg;
-
-        .n-icon {
-          flex-shrink: 0;
-          color: rgba(255, 255, 255, 0.95);
-        }
-
-        span {
-          font-weight: 600;
-          display: block;
-          margin-bottom: $spacing-xs;
-          color: rgba(255, 255, 255, 0.95);
-          font-size: $font-size-base;
-        }
-
-        p {
-          color: rgba(255, 255, 255, 0.85);
-          margin: 0;
-          font-size: $font-size-base;
-          line-height: $line-height;
-        }
-      }
-    }
-  }
-
-  .contact-form {
-    background: #fff;
-    padding: $spacing-xl;
-    border-radius: $border-radius-lg;
-    box-shadow: $shadow-lg;
-
-    :deep(.n-form-item-label) {
-      color: $text-color;
-      font-weight: 500;
-      font-size: $font-size-base;
-    }
-  }
+  strong, small { display: block; }
+  strong { overflow-wrap: anywhere; font: 700 16px/1.3 $font-en; }
+  small { margin-top: 3px; color: #999287; font-size: 11px; }
 }
 
-// 响应式设计
-@media (max-width: 992px) {
-  .hero-section {
-    height: calc(100vh - 72px);
-    min-height: 500px;
-
-    .hero-content {
-      text-align: center;
-    }
-  }
-
+.repo-meta {
+  display: flex;
+  gap: 18px;
+  color: #6c7565;
+  font-size: 12px;
+  padding: 12px 0;
+  border-top: 1px solid #e3ddd2;
 }
 
-@media (max-width: 768px) {
-  .hero-section {
-    height: calc(100vh - 64px);
-    padding: $spacing-xl 0;
-
-  }
-
-  .hero-content {
-    text-align: center;
-    margin-bottom: $spacing-xl;
-
-    .hero-title {
-      font-size: 36px;
-    }
-
-    .hero-subtitle {
-      font-size: $font-size-base;
-    }
-  }
-
-  .section {
-    &__title {
-      font-size: 32px;
-    }
-
-    &__subtitle {
-      font-size: $font-size-base;
-    }
-  }
-
-  .contact-section {
-    .contact-info {
-      h2 {
-        font-size: 32px;
-      }
-
-      p {
-        font-size: $font-size-base;
-      }
-    }
-  }
+.repo-link {
+  display: flex;
+  justify-content: space-between;
+  border: 1px solid #d8d1c5;
+  padding: 11px 12px;
+  color: #b83126;
+  font-weight: 600;
+  text-decoration: none;
 }
 
-@media (max-width: 480px) {
-  .hero-content {
-    .hero-title {
-      font-size: 28px;
-    }
-  }
+.repo-loading { color: #817b70; }
 
-  .service-card {
-    .service-content {
-      padding: $spacing-md;
-    }
-  }
+@media (max-width: 1000px) {
+  .desk-grid { grid-template-columns: 1fr; }
+}
 
-  .contact-form {
-    padding: $spacing-lg;
-  }
+@media (max-width: 700px) {
+  .desk-hero { padding-top: 14px; }
+  .paper-panel { padding: 20px; }
+  .current-work { min-height: auto; padding-left: 20px; }
+  .current-work::before { display: none; }
+  .current-work h1 { font-size: 34px; }
+  .quick-actions { grid-template-columns: 1fr 1fr; margin-top: 26px; }
+  .quick-actions a { padding: 15px 8px; border-bottom: 1px solid #ded7ca; }
 }
 </style>

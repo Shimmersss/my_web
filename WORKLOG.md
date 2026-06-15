@@ -8,6 +8,24 @@
 
 ## 2026-06-15
 
+### ops: 生产后端出站请求接入 Mihomo 代理
+
+**问题**：服务器点击“查看 PDF”仍然慢，审查发现前端已走 `/api/zotero/file/{key}` 和 `/api/github-projects*` 后端代理，但 Spring Boot 到 Zotero/S3、GitHub API、raw README 的出站请求没有显式使用服务器上的 Clash Verge / Mihomo。
+
+**处理**：
+- 线上确认 `verge-mihomo` 进程为 `/usr/bin/verge-mihomo -d /home/admin -f /home/admin/mihomo-local.yaml`
+- 线上配置文件显示 `mixed-port: 7890`，实际监听 `*:7890`、`127.0.0.1:9090`、`127.0.0.1:5334`
+- 新增 systemd drop-in `/etc/systemd/system/web-backen.service.d/10-outbound-proxy.conf`
+- 将 `web-backen` 的 `JAVA_TOOL_OPTIONS` 设置为 `-Xms128m -Xmx768m -XX:+UseG1GC -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7890 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7890`
+- 执行 `systemctl daemon-reload` 和 `systemctl restart web-backen`
+
+**验证**：
+- `systemctl show web-backen -p Environment` 显示 Java 已带 `http.proxyHost/https.proxyHost=127.0.0.1:7890`
+- `curl http://127.0.0.1:8080/api/health` 重启后 7 秒恢复
+- 后端 `/api/github-projects` 返回 `200`，约 5.9 秒
+- 后端 `/api/github-projects/Shimmersss/DroneInspect-AI/readme` 返回 `200`，约 2.9 秒，大小 14737 字节
+- 后端 `/api/zotero/items` 返回 `200`，命中缓存约 15 ms
+
 ### chore: 安全移除 OpenClaw 网页对话并准备上线
 
 **目标**：按要求把 OpenClaw 相关入口、接口、配置、脚本和部署依赖全部下线，保留当前站点最小可用功能：文献库、PDF 翻译、PPT 生成和 GitHub 项目展示。

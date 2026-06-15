@@ -16,6 +16,8 @@
 
 GitHub 开源项目也一样：浏览器只请求 `/api/github-projects*`，由后端 `GithubProjectService` 去请求 GitHub API / raw README。**前端不要直接 fetch `api.github.com` 或 `raw.githubusercontent.com`**。
 
+生产服务器上游出站代理已显式接入 Clash Verge / Mihomo：`verge-mihomo` 使用 `/home/admin/mihomo-local.yaml`，`mixed-port: 7890`，实际监听 `*:7890`；`web-backen.service` 通过 systemd drop-in `/etc/systemd/system/web-backen.service.d/10-outbound-proxy.conf` 设置 `JAVA_TOOL_OPTIONS=-Xms128m -Xmx768m -XX:+UseG1GC -Dhttp.proxyHost=127.0.0.1 -Dhttp.proxyPort=7890 -Dhttps.proxyHost=127.0.0.1 -Dhttps.proxyPort=7890`。这让 Spring Boot 对 Zotero/S3、GitHub API 和 raw README 的 HTTPS 出站请求走本机代理。发布脚本重装 service 模板后要确认 drop-in 仍存在并执行 `systemctl daemon-reload && systemctl restart web-backen`；不要只依赖 shell 里的 `HTTP_PROXY/HTTPS_PROXY`，Java 进程未必读取。
+
 ## 服务器资源基线
 
 当前生产服务器配置为 **2 核 CPU / 4 GB 内存**。以后本地测试、功能迭代和性能评估都要以这个资源上限为基线，不要默认生产环境有更多 CPU、内存或并发余量。

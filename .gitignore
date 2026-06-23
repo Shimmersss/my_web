@@ -34,6 +34,9 @@ Thumbs.db
 
 # tmp
 .tmp/
+__pycache__/
+*.py[cod]
+*$py.class
 
 # md
 AGENTS.md
@@ -53,4 +56,4 @@ backen/**/.env*
 .review/
 
 
-# Root Markdown docs stay trackable for deployment handoff.
+# Root README.md stays trackable for public project overview.

@@ -62,10 +62,8 @@ The browser only talks to `/api/*`. External services, local CLIs, file download
 ```text
 backen/                  Spring Boot backend (package: com.web.backen)
 front/                   Vue 3 frontend
-deploy/                  release build, install and server templates
 project.sh               local start / stop / status helper
-.env.local.example       local environment template
-.deploy.local.example    deployment parameter template
+README.md                public project overview
 ```
 
 > The backend directory is intentionally named `backen`; the Java package is `com.web.backen`.
@@ -79,7 +77,7 @@ Requirements:
 - `uv` for BabelDOC / Python helper commands
 
 ```bash
-cp .env.local.example .env.local
+# create .env.local locally, using the variables listed below
 ./project.sh start
 ```
 
@@ -99,7 +97,7 @@ Useful commands:
 
 ## Configuration
 
-Secrets are loaded from `.env.local`, which is intentionally ignored by Git.
+Secrets are loaded from root `.env.local`, which is intentionally ignored by Git. The previously committed frontend Vite `.env*` files have been removed from Git tracking; they are not required for the current build or runtime flow.
 
 Important groups:
 
@@ -109,7 +107,7 @@ Important groups:
 - `BABELDOC_*`
 - `PPT_GENERATION_*`
 
-Use `.env.local.example` as the public template and keep real API keys outside the repository.
+Keep real API keys outside the repository. Public templates for local env files are intentionally not tracked in this public branch.
 
 ## Resource Baseline
 
@@ -117,30 +115,25 @@ The production target is intentionally modest: **2 CPU cores / 4 GB RAM**. Long-
 
 ## Deployment
 
-Build a Linux release archive:
+This public branch currently keeps deployment credentials, local release outputs and one-off deployment helpers out of Git. The repository still contains the application source needed to build the frontend and backend, but it does not currently publish the previous `deploy/` scripts.
 
-```bash
-./deploy/build-release.sh
-```
-
-Run the improved deploy flow after local verification:
-
-```bash
-./deploy/deploy-server-improved.sh
-```
-
-Deployment-specific host, SSH and remote path values belong in `.deploy.local`.
+For server deployment, build the frontend with npm, package the Spring Boot backend with Maven, and provide runtime secrets from the server environment or a local root `.env.local` file. Host, SSH and remote path values must stay outside the repository.
 
 ## Git Hygiene
 
-Only `README.md` is intended to be published as a root-level Markdown document. Internal maintenance notes, worklogs, local release folders, generated outputs, runtime state and secrets are ignored.
+Only root `README.md` is intended to be published as project documentation. Internal maintenance notes, worklogs, local release folders, generated outputs, runtime state, frontend/backend local docs, frontend/backend env files and secrets are ignored.
 
 Ignored local/generated paths include:
 
-- root-level Markdown except `README.md`
+- root-level internal Markdown such as `AGENTS.md`, `WORKLOG.md`, `MAINTENANCE.md`
+- `front/**/*.md`, `backen/**/*.md`
+- `front/**/.env*`, `backen/**/.env*`
 - `.run/`
 - `.release/`
 - `server-upload/`
 - `outputs/`
 - `.env.local`
 - `.deploy.local`
+- Python `__pycache__/` and `*.pyc`
+
+Removing these files from Git tracking does not affect the current application build: the active frontend and backend code do not import `front/README.md`, `backen/README.md`, `front/CHECKLIST.md`, `front/DEVELOPMENT.md`, `front/PROJECT_SUMMARY.md`, `front/QUICKSTART.md`, or the removed frontend `.env*` files.

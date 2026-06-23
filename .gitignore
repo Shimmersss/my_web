@@ -40,6 +40,14 @@ AGENTS.md
 WORKLOG.md
 MAINTENANCE.md
 design-qa.md
+front/*.md
+front/**/*.md
+front/.env*
+front/**/.env*
+backen/*.md
+backen/**/*.md
+backen/.env*
+backen/**/.env*
 
 # review
 .review/

@@ -47,6 +47,7 @@ front/*.md
 front/**/*.md
 front/.env*
 front/**/.env*
+front/部分页面截图/
 backen/*.md
 backen/**/*.md
 backen/.env*

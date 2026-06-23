@@ -1,16 +1,25 @@
 #!/usr/bin/env python3
 import argparse
 import asyncio
+import copy
 import json
 import os
 import re
+import statistics
 
 from babeldoc.docvision.doclayout import DocLayoutModel
 from babeldoc.format.pdf import high_level
+from babeldoc.format.pdf.document_il import Box
+from babeldoc.format.pdf.document_il import PdfParagraph
+from babeldoc.format.pdf.document_il.midend.paragraph_finder import ParagraphFinder
+from babeldoc.format.pdf.document_il.midend.paragraph_finder import generate_base58_id
+from babeldoc.format.pdf.document_il.midend.typesetting import Typesetting
 from babeldoc.format.pdf.translation_config import TranslationConfig
 from babeldoc.format.pdf.translation_config import WatermarkOutputMode
 from babeldoc.translator.translator import OpenAITranslator
 from babeldoc.translator.translator import set_translate_rate_limiter
+from reference_layout import is_numbered_reference
+from reference_layout import reference_split_points
 
 
 COMMON_ENGLISH_WORDS = {
@@ -57,6 +66,106 @@ COMMON_ENGLISH_WORDS = {
 
 def emit(event):
     print(json.dumps(event, ensure_ascii=False), flush=True)
+
+
+def line_text(composition):
+    line = getattr(composition, "pdf_line", None)
+    if not line:
+        return ""
+    return "".join(char.char_unicode or "" for char in line.pdf_character).strip()
+
+
+def split_merged_reference_paragraphs(paragraph_finder, paragraphs):
+    """Split BabelDOC paragraphs when source reference entries have been merged."""
+    index = 0
+    while index < len(paragraphs):
+        paragraph = paragraphs[index]
+        compositions = paragraph.pdf_paragraph_composition or []
+        split_points = reference_split_points(
+            [line_text(composition) for composition in compositions]
+        )
+        if not split_points:
+            index += 1
+            continue
+
+        if split_points[0] != 0:
+            split_points.insert(0, 0)
+        split_points.append(len(compositions))
+        replacement = []
+        for start, end in zip(split_points, split_points[1:]):
+            if start == end:
+                continue
+            item = PdfParagraph(
+                box=Box(0, 0, 0, 0),
+                pdf_paragraph_composition=compositions[start:end],
+                unicode="",
+                debug_id=generate_base58_id(),
+                layout_label=paragraph.layout_label,
+                layout_id=paragraph.layout_id,
+            )
+            paragraph_finder.update_paragraph_data(item)
+            replacement.append(item)
+        paragraphs[index : index + 1] = replacement
+        index += len(replacement)
+
+
+def install_reference_layout_patches():
+    """Add reference splitting and a two-CJK-character hanging indent to BabelDOC."""
+    if getattr(ParagraphFinder, "_web_reference_layout_patch", False):
+        return
+
+    original_process = ParagraphFinder.process_independent_paragraphs
+    original_layout = Typesetting._layout_typesetting_units
+
+    def process_independent_paragraphs(self, paragraphs, median_width):
+        split_merged_reference_paragraphs(self, paragraphs)
+        return original_process(self, paragraphs, median_width)
+
+    def layout_typesetting_units(
+        self, typesetting_units, box, scale, line_skip, paragraph, use_english_line_break=True
+    ):
+        if not is_numbered_reference(paragraph.unicode or "") or not typesetting_units:
+            return original_layout(
+                self, typesetting_units, box, scale, line_skip, paragraph, use_english_line_break
+            )
+
+        font_sizes = [unit.font_size for unit in typesetting_units if unit.font_size]
+        if not font_sizes:
+            return original_layout(
+                self, typesetting_units, box, scale, line_skip, paragraph, use_english_line_break
+            )
+        hanging_width = statistics.mode(font_sizes) * scale * 2
+        if box.x + hanging_width >= box.x2:
+            return original_layout(
+                self, typesetting_units, box, scale, line_skip, paragraph, use_english_line_break
+            )
+
+        hanging_box = copy.deepcopy(box)
+        hanging_box.x += hanging_width
+        laid_out, all_fit = original_layout(
+            self,
+            typesetting_units,
+            hanging_box,
+            scale,
+            line_skip,
+            paragraph,
+            use_english_line_break,
+        )
+        if not laid_out:
+            return laid_out, all_fit
+
+        first_line_y = max(unit.box.y for unit in laid_out)
+        laid_out = [
+            unit.relocate(unit.box.x - hanging_width, unit.box.y, 1)
+            if abs(unit.box.y - first_line_y) < 0.1
+            else unit
+            for unit in laid_out
+        ]
+        return laid_out, all_fit
+
+    ParagraphFinder.process_independent_paragraphs = process_independent_paragraphs
+    Typesetting._layout_typesetting_units = layout_typesetting_units
+    ParagraphFinder._web_reference_layout_patch = True
 
 
 def repair_pdf_font_text(text):
@@ -126,6 +235,7 @@ class RepairingOpenAITranslator(OpenAITranslator):
 
 
 async def run(args):
+    install_reference_layout_patches()
     high_level.init()
     translator = RepairingOpenAITranslator(
         lang_in="en",

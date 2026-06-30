@@ -5,6 +5,7 @@
         <div>
           <h1>PPT 生成</h1>
           <p>描述生成目标，可选上传论文或模板，后台直接生成可编辑 PPTX。</p>
+          <p class="quota-line">余额：{{ auth.isLoggedIn ? `${auth.credits} credits` : '未登录' }} · 本次预计 {{ pptEstimatedCredits }} credits</p>
         </div>
         <n-tag type="info">公开入口</n-tag>
       </div>
@@ -169,12 +170,15 @@ import {
 import {
   createPptGenerationTask,
   downloadGeneratedPpt,
+  getQuotaSettings,
   getPptGenerationStatus,
   getPptTemplates,
   getRecentPptGenerations
 } from '@/api'
+import { useAuthStore } from '@/stores/auth'
 
 const message = useMessage()
+const auth = useAuthStore()
 const step = ref('form')
 const prompt = ref('')
 const templateKey = ref('academic-blue')
@@ -197,6 +201,8 @@ const queuePosition = ref(0)
 let eventSource = null
 let pollTimer = null
 const PPT_TASK_TOKENS_KEY = 'ppt-generation-task-tokens'
+const pptCreditPerTask = ref(10)
+const pptEstimatedCredits = computed(() => pptCreditPerTask.value)
 
 const stageItems = [
   { key: 'queued', label: '排队', icon: TimeOutline },
@@ -208,7 +214,8 @@ const stageItems = [
 const runningTitle = computed(() => activeTask.value?.paperFileName || activeTask.value?.templateFileName || 'PPT 生成任务')
 
 onMounted(async () => {
-  await Promise.all([loadTemplates(), loadRecent()])
+  await auth.refresh().catch(() => {})
+  await Promise.all([loadTemplates(), loadRecent(), loadQuotaSettings()])
 })
 
 onBeforeUnmount(() => {
@@ -230,6 +237,14 @@ async function submitTask() {
     errorMsg.value = '请输入 PPT 生成提示词'
     return
   }
+  if (!auth.isLoggedIn) {
+    errorMsg.value = '请先登录账号'
+    return
+  }
+  if (!auth.isRoot && auth.credits < pptEstimatedCredits.value) {
+    errorMsg.value = `额度不足，预计需要 ${pptEstimatedCredits.value} credits`
+    return
+  }
   isSubmitting.value = true
   try {
     const res = await createPptGenerationTask({
@@ -240,6 +255,7 @@ async function submitTask() {
       paperFile: paperFile.value
     })
     rememberTaskToken(res.data.taskId, res.data.accessToken)
+    if (typeof res.data.credits !== 'undefined') auth.updateCredits(res.data.credits)
     setActiveTask(res.data)
     step.value = 'running'
     openStream(taskId.value)
@@ -324,6 +340,15 @@ async function loadTemplates() {
     if (Array.isArray(res.data) && res.data.length) templates.value = res.data
   } catch {
     templates.value = defaultTemplates()
+  }
+}
+
+async function loadQuotaSettings() {
+  try {
+    const res = await getQuotaSettings()
+    pptCreditPerTask.value = Number(res.data?.pptCreditPerTask || 10)
+  } catch {
+    pptCreditPerTask.value = 10
   }
 }
 
@@ -469,6 +494,12 @@ function formatTime(ts) {
 <style scoped lang="scss">
 .ppt-page {
   background: #eee9df;
+}
+
+.quota-line {
+  margin-top: 6px;
+  color: #8f2a22;
+  font-size: 14px;
 }
 
 .container {

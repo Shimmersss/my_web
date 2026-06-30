@@ -194,6 +194,44 @@ export function saveGithubProjects(projects, adminKey) {
   })
 }
 
+// ==================== 账号与额度 API ====================
+
+export function getCurrentUser() {
+  return get('/auth/me')
+}
+
+export function loginAccount(username, password) {
+  return post('/auth/login', { username, password })
+}
+
+export function registerAccount(username, password, inviteCode) {
+  return post('/auth/register', { username, password, inviteCode })
+}
+
+export function logoutAccount() {
+  return post('/auth/logout', {})
+}
+
+export function getQuotaSettings() {
+  return get('/auth/quota-settings')
+}
+
+export function getAdminAccounts() {
+  return get('/admin/accounts')
+}
+
+export function createInviteCode({ code, credits, maxUses }) {
+  return post('/admin/accounts/invites', { code, credits, maxUses })
+}
+
+export function adjustUserCredits({ userId, amount, note }) {
+  return post('/admin/accounts/credits', { userId, amount, note })
+}
+
+export function updateQuotaSettings({ translationCreditPerPage, pptCreditPerTask }) {
+  return put('/admin/accounts/settings', { translationCreditPerPage, pptCreditPerTask })
+}
+
 export async function getGithubProjectReadme(fullName) {
   const res = await fetch(`/api/github-projects/${fullName}/readme`)
   if (!res.ok) throw new Error(await res.text())
@@ -210,8 +248,11 @@ export async function getGithubProjectReadme(fullName) {
 export async function uploadPdf(file) {
   const formData = new FormData()
   formData.append('file', file)
+  const csrfToken = localStorage.getItem('csrfToken')
   const res = await fetch('/api/translate/upload', {
     method: 'POST',
+    credentials: 'same-origin',
+    headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
     body: formData
   })
   return res.json()
@@ -225,8 +266,11 @@ export async function uploadPdf(file) {
  * @returns {Promise}
  */
 export async function startTranslation(taskId, startPage, endPage, fontFamily = 'auto', qps = 4) {
+  const csrfToken = localStorage.getItem('csrfToken')
   const res = await fetch(`/api/translate/start/${taskId}?startPage=${startPage}&endPage=${endPage}&fontFamily=${encodeURIComponent(fontFamily)}&qps=${qps}`, {
-    method: 'POST'
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {}
   })
   return res.json()
 }
@@ -265,7 +309,9 @@ export function downloadTranslation(taskId) {
  * @returns {Promise<Blob>}
  */
 export async function getTranslatedPdfBlob(taskId, mode = 'translated') {
-  const res = await fetch(`/api/translate/download-pdf/${taskId}?mode=${encodeURIComponent(mode)}`)
+  const res = await fetch(`/api/translate/download-pdf/${taskId}?mode=${encodeURIComponent(mode)}`, {
+    credentials: 'same-origin'
+  })
   if (!res.ok) {
     let message = '生成翻译 PDF 失败'
     try {
@@ -295,8 +341,11 @@ export async function createPptGenerationTask({ prompt, templateKey, extractionP
   if (templateFile) formData.append('templateFile', templateFile)
   if (paperFile) formData.append('paperFile', paperFile)
 
+  const csrfToken = localStorage.getItem('csrfToken')
   const res = await fetch('/api/ppt-generate/tasks', {
     method: 'POST',
+    credentials: 'same-origin',
+    headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
     body: formData
   })
   const data = await res.json().catch(() => ({}))

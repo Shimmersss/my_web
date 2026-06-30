@@ -30,6 +30,10 @@ public class TranslationSession {
     private volatile long updatedAt;
     private volatile long completedAt;
     private volatile int queuePosition;
+    private long userId;
+    private int creditCost;
+    private Long creditTransactionId;
+    private boolean creditRefunded;
 
     @JsonIgnore
     private Path taskDir;
@@ -65,6 +69,10 @@ public class TranslationSession {
     public long getUpdatedAt() { return updatedAt; }
     public long getCompletedAt() { return completedAt; }
     public int getQueuePosition() { return queuePosition; }
+    public long getUserId() { return userId; }
+    public int getCreditCost() { return creditCost; }
+    public Long getCreditTransactionId() { return creditTransactionId; }
+    public boolean isCreditRefunded() { return creditRefunded; }
     @JsonIgnore
     public Path getTaskDir() { return taskDir; }
     @JsonIgnore
@@ -101,6 +109,10 @@ public class TranslationSession {
     public void setQueuePosition(int queuePosition) { this.queuePosition = queuePosition; }
     public void setCreatedAt(long createdAt) { this.createdAt = createdAt; }
     public void setUpdatedAt(long updatedAt) { this.updatedAt = updatedAt; }
+    public void setUserId(long userId) { this.userId = userId; touch(); }
+    public void setCreditCost(int creditCost) { this.creditCost = creditCost; touch(); }
+    public void setCreditTransactionId(Long creditTransactionId) { this.creditTransactionId = creditTransactionId; touch(); }
+    public void setCreditRefunded(boolean creditRefunded) { this.creditRefunded = creditRefunded; touch(); }
 
     private void touch() {
         this.updatedAt = System.currentTimeMillis();

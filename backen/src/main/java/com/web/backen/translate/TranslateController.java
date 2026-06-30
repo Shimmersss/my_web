@@ -1,5 +1,10 @@
 package com.web.backen.translate;
 
+import com.web.backen.auth.AuthException;
+import com.web.backen.auth.AuthService;
+import com.web.backen.auth.AuthUser;
+import com.web.backen.auth.QuotaService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
@@ -24,16 +29,27 @@ public class TranslateController {
     private static final Logger log = LoggerFactory.getLogger(TranslateController.class);
 
     private final TranslationService translationService;
+    private final AuthService authService;
+    private final QuotaService quotaService;
 
-    public TranslateController(TranslationService translationService) {
+    public TranslateController(TranslationService translationService, AuthService authService, QuotaService quotaService) {
         this.translationService = translationService;
+        this.authService = authService;
+        this.quotaService = quotaService;
     }
 
     /**
      * 上传 PDF 文件，获取页数信息（不立即翻译）
      */
     @PostMapping("/upload")
-    public ResponseEntity<?> upload(@RequestParam("file") MultipartFile file) {
+    public ResponseEntity<?> upload(HttpServletRequest request, @RequestParam("file") MultipartFile file) {
+        AuthUser user;
+        try {
+            authService.requireCsrf(request);
+            user = authService.requireUser(request);
+        } catch (AuthException e) {
+            return authError(e);
+        }
         if (file == null || file.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "请上传 PDF 文件"));
         }
@@ -48,7 +64,7 @@ public class TranslateController {
         }
 
         try {
-            TranslationSession session = translationService.createSessionPreview(fileName, file.getInputStream());
+            TranslationSession session = translationService.createSessionPreview(fileName, file.getInputStream(), user.id());
 
             return ResponseEntity.ok(Map.of(
                     "code", 200,
@@ -77,10 +93,18 @@ public class TranslateController {
                                     @RequestParam(defaultValue = "1") int startPage,
                                     @RequestParam(required = false) Integer endPage,
                                     @RequestParam(defaultValue = "auto") String fontFamily,
-                                    @RequestParam(defaultValue = "4") int qps) {
+                                    @RequestParam(defaultValue = "4") int qps,
+                                    HttpServletRequest request) {
+        AuthUser user;
+        try {
+            authService.requireCsrf(request);
+            user = authService.requireUser(request);
+        } catch (AuthException e) {
+            return authError(e);
+        }
         try {
             TranslationSession session = translationService.startTranslation(
-                    taskId, startPage, endPage != null ? endPage : Integer.MAX_VALUE, fontFamily, qps);
+                    taskId, startPage, endPage != null ? endPage : Integer.MAX_VALUE, fontFamily, qps, user);
 
             return ResponseEntity.ok(Map.of(
                     "code", 200,
@@ -90,6 +114,8 @@ public class TranslateController {
                             "status", session.getStatus(),
                             "qps", session.getQps(),
                             "requestedQps", session.getRequestedQps(),
+                            "creditCost", session.getCreditCost(),
+                            "credits", quotaService.balance(user.id()),
                             "resourceDowngraded", session.isResourceDowngraded(),
                             "queuePosition", session.getQueuePosition()
                     )
@@ -98,6 +124,8 @@ public class TranslateController {
             return ResponseEntity.badRequest().body(Map.of("code", 400, "message", e.getMessage()));
         } catch (IllegalStateException e) {
             return ResponseEntity.status(429).body(Map.of("code", 429, "message", e.getMessage()));
+        } catch (AuthException e) {
+            return authError(e);
         } catch (Exception e) {
             log.error("开始翻译失败: taskId={}", taskId, e);
             return ResponseEntity.internalServerError().body(Map.of("code", 500, "message", "处理失败: " + e.getMessage()));
@@ -108,8 +136,17 @@ public class TranslateController {
      * SSE 流式推送翻译进度
      */
     @GetMapping(value = "/stream/{taskId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter stream(@PathVariable String taskId) {
+    public SseEmitter stream(@PathVariable String taskId, HttpServletRequest request) {
         SseEmitter emitter = new SseEmitter(6 * 60 * 60 * 1000L); // 长篇论文翻译可能持续数小时
+        AuthUser user = authService.currentUser(request).orElse(null);
+        TranslationSession session = translationService.getSession(taskId);
+        if (!translationService.canAccess(session, user)) {
+            try {
+                emitter.send(SseEmitter.event().name("task-error").data(Map.of("message", "任务不存在")));
+            } catch (Exception ignored) {}
+            emitter.complete();
+            return emitter;
+        }
 
         emitter.onTimeout(() -> {
             log.warn("SSE 超时: taskId={}", taskId);
@@ -128,9 +165,15 @@ public class TranslateController {
      * 查询翻译任务状态（用于断线重连）
      */
     @GetMapping("/status/{taskId}")
-    public ResponseEntity<?> status(@PathVariable String taskId) {
+    public ResponseEntity<?> status(@PathVariable String taskId, HttpServletRequest request) {
+        AuthUser user;
+        try {
+            user = authService.requireUser(request);
+        } catch (AuthException e) {
+            return authError(e);
+        }
         TranslationSession session = translationService.getSession(taskId);
-        if (session == null) {
+        if (!translationService.canAccess(session, user)) {
             return ResponseEntity.status(404).body(Map.of("code", 404, "message", "任务不存在"));
         }
 
@@ -154,6 +197,8 @@ public class TranslateController {
         data.put("progressStageLabel", translationService.stageLabel(session.getProgressStage()));
         data.put("errorMessage", session.getErrorMessage() != null ? session.getErrorMessage() : "");
         data.put("queuePosition", session.getQueuePosition());
+        data.put("creditCost", session.getCreditCost());
+        data.put("credits", quotaService.balance(user.id()));
         data.put("createdAt", session.getCreatedAt());
         data.put("updatedAt", session.getUpdatedAt());
         data.put("completedAt", session.getCompletedAt());
@@ -164,8 +209,14 @@ public class TranslateController {
      * 最近翻译任务。只返回轻量元数据，PDF 文件通过下载接口按需读取。
      */
     @GetMapping("/recent")
-    public ResponseEntity<?> recent() {
-        List<Map<String, Object>> data = translationService.getRecentSessions().stream()
+    public ResponseEntity<?> recent(HttpServletRequest request) {
+        AuthUser user;
+        try {
+            user = authService.requireUser(request);
+        } catch (AuthException e) {
+            return authError(e);
+        }
+        List<Map<String, Object>> data = translationService.getRecentSessions(user).stream()
                 .map(this::toSummary)
                 .toList();
         return ResponseEntity.ok(Map.of("code", 200, "data", data));
@@ -175,8 +226,13 @@ public class TranslateController {
      * 下载翻译结果（TXT）
      */
     @GetMapping("/download/{taskId}")
-    public ResponseEntity<?> download(@PathVariable String taskId) {
+    public ResponseEntity<?> download(@PathVariable String taskId, HttpServletRequest request) {
         try {
+            AuthUser user = authService.requireUser(request);
+            TranslationSession session = translationService.getSession(taskId);
+            if (!translationService.canAccess(session, user)) {
+                return ResponseEntity.status(404).body(Map.of("code", 404, "message", "任务不存在"));
+            }
             String content = translationService.buildDownloadContent(taskId);
             String encodedFileName = URLEncoder.encode(
                     translationService.buildTextDownloadFileName(taskId),
@@ -190,6 +246,8 @@ public class TranslateController {
             return ResponseEntity.status(404).body(Map.of("code", 404, "message", e.getMessage()));
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of("code", 400, "message", e.getMessage()));
+        } catch (AuthException e) {
+            return authError(e);
         }
     }
 
@@ -198,8 +256,14 @@ public class TranslateController {
      */
     @GetMapping("/download-pdf/{taskId}")
     public ResponseEntity<?> downloadPdf(@PathVariable String taskId,
-                                         @RequestParam(defaultValue = "translated") String mode) {
+                                         @RequestParam(defaultValue = "translated") String mode,
+                                         HttpServletRequest request) {
         try {
+            AuthUser user = authService.requireUser(request);
+            TranslationSession session = translationService.getSession(taskId);
+            if (!translationService.canAccess(session, user)) {
+                return ResponseEntity.status(404).body(Map.of("code", 404, "message", "任务不存在"));
+            }
             Path pdf = translationService.getTranslatedPdf(taskId, mode);
             String encodedFileName = URLEncoder.encode(
                     translationService.buildPdfDownloadFileName(taskId, mode),
@@ -213,6 +277,8 @@ public class TranslateController {
             return ResponseEntity.status(404).body(Map.of("code", 404, "message", e.getMessage()));
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of("code", 400, "message", e.getMessage()));
+        } catch (AuthException e) {
+            return authError(e);
         } catch (Exception e) {
             log.error("生成翻译 PDF 失败: taskId={}", taskId, e);
             return ResponseEntity.internalServerError().body(Map.of("code", 500, "message", "生成翻译 PDF 失败: " + e.getMessage()));
@@ -236,9 +302,14 @@ public class TranslateController {
         data.put("resourceDowngraded", session.isResourceDowngraded());
         data.put("resourceDowngradeReason", session.getResourceDowngradeReason() != null ? session.getResourceDowngradeReason() : "");
         data.put("queuePosition", session.getQueuePosition());
+        data.put("creditCost", session.getCreditCost());
         data.put("createdAt", session.getCreatedAt());
         data.put("completedAt", session.getCompletedAt());
         data.put("errorMessage", session.getErrorMessage() != null ? session.getErrorMessage() : "");
         return data;
+    }
+
+    private ResponseEntity<?> authError(AuthException e) {
+        return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus(), "message", e.getMessage()));
     }
 }

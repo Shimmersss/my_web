@@ -4,6 +4,7 @@
       <div class="tool-page__header">
         <h1>论文翻译</h1>
         <p>上传英文 PDF，配置页面范围后进入后台队列，并生成中文或双语 PDF。</p>
+        <p class="quota-line">余额：{{ auth.isLoggedIn ? `${auth.credits} credits` : '未登录' }} · 预计 {{ estimatedCredits }} credits</p>
       </div>
 
       <!-- 上传态 -->
@@ -273,6 +274,7 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import { computed } from 'vue'
 import { useMessage } from 'naive-ui'
 import {
   CloudUploadOutline,
@@ -286,12 +288,15 @@ import {
   startTranslation,
   getTranslationStatus,
   getRecentTranslations,
+  getQuotaSettings,
   downloadTranslation,
   downloadTranslatedPdf,
   getTranslatedPdfBlob
 } from '@/api'
+import { useAuthStore } from '@/stores/auth'
 
 const message = useMessage()
+const auth = useAuthStore()
 
 // 状态
 const step = ref('upload') // 'upload' | 'config' | 'translating' | 'result'
@@ -332,6 +337,8 @@ const pdfPreviewUrl = ref('')
 const pdfPreviewError = ref('')
 let eventSource = null
 let recentRefreshTimer = null
+const translationCreditPerPage = ref(1)
+const estimatedCredits = computed(() => Math.max(1, Number(endPage.value || 1) - Number(startPage.value || 1) + 1) * translationCreditPerPage.value)
 
 // 触发文件选择
 function triggerFileInput() {
@@ -359,6 +366,10 @@ function handleFileSelect(e) {
 // 处理文件上传（只获取页数，不开始翻译）
 async function processFile(file) {
   errorMsg.value = ''
+  if (!auth.isLoggedIn) {
+    errorMsg.value = '请先登录账号再上传 PDF'
+    return
+  }
 
   if (!file.name.toLowerCase().endsWith('.pdf')) {
     errorMsg.value = '仅支持 PDF 文件格式'
@@ -415,6 +426,16 @@ function selectAll() {
 async function handleStartTranslate() {
   isStarting.value = true
   errorMsg.value = ''
+  if (!auth.isLoggedIn) {
+    errorMsg.value = '请先登录账号'
+    isStarting.value = false
+    return
+  }
+  if (!auth.isRoot && auth.credits < estimatedCredits.value) {
+    errorMsg.value = `额度不足，预计需要 ${estimatedCredits.value} credits`
+    isStarting.value = false
+    return
+  }
 
   try {
     const res = await startTranslation(taskId.value, startPage.value, endPage.value, fontFamily.value, translationQps.value)
@@ -430,6 +451,7 @@ async function handleStartTranslate() {
     translationProgress.value = 0
     progressStageLabel.value = '正在启动 BabelDOC...'
     queuePosition.value = res.data.queuePosition || 0
+    if (typeof res.data.credits !== 'undefined') auth.updateCredits(res.data.credits)
 
     // 进入翻译态并开始 SSE
     step.value = 'translating'
@@ -707,6 +729,8 @@ async function restoreTask(savedTaskId, notify = false) {
 
 // 页面加载时检查是否有进行中的任务
 onMounted(async () => {
+  await auth.refresh().catch(() => {})
+  await loadQuotaSettings()
   await loadRecentTranslations()
   recentRefreshTimer = window.setInterval(loadRecentTranslations, 5000)
   const savedTaskId = sessionStorage.getItem('translateTaskId')
@@ -718,6 +742,15 @@ onMounted(async () => {
     }
   }
 })
+
+async function loadQuotaSettings() {
+  try {
+    const res = await getQuotaSettings()
+    translationCreditPerPage.value = Number(res.data?.translationCreditPerPage || 1)
+  } catch {
+    translationCreditPerPage.value = 1
+  }
+}
 
 onBeforeUnmount(() => {
   eventSource?.close()
@@ -743,6 +776,12 @@ onBeforeUnmount(() => {
   margin: 0 auto;
   padding: 0 $spacing-lg;
   min-width: 0;
+}
+
+.quota-line {
+  margin-top: 6px;
+  color: #8f2a22;
+  font-size: 14px;
 }
 
 .recent-section {

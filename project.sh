@@ -26,7 +26,7 @@ FRONTEND_PORT=3000
 BACKEND_TIMEOUT="${BACKEND_TIMEOUT:-120}"
 FRONTEND_TIMEOUT="${FRONTEND_TIMEOUT:-60}"
 # Maven 打包超时（秒）
-MVN_TIMEOUT="${MVN_TIMEOUT:-180}"
+MVN_TIMEOUT="${MVN_TIMEOUT:-300}"
 
 # Zotero 凭证：从 .env.local 读取，避免提交到 git
 if [[ -f "$ROOT/.env.local" ]]; then
@@ -35,6 +35,8 @@ fi
 export ZOTERO_API_KEY="${ZOTERO_API_KEY:-}"
 export ZOTERO_USER_ID="${ZOTERO_USER_ID:-}"
 export ADMIN_KEY="${ADMIN_KEY:-change-me}"
+export ROOT_USERNAME="${ROOT_USERNAME:-root}"
+export ROOT_PASSWORD="${ROOT_PASSWORD:-}"
 export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}"
 export PATH="$JAVA_HOME/bin:$PATH"
 
@@ -43,6 +45,10 @@ if [[ -z "$ZOTERO_API_KEY" || -z "$ZOTERO_USER_ID" ]]; then
 fi
 if [[ "$ADMIN_KEY" == "change-me" ]]; then
   echo "[!] ADMIN_KEY 仍为开发默认值，请在 $ROOT/.env.local 中设置 ADMIN_KEY"
+fi
+if [[ -z "$ROOT_PASSWORD" || ${#ROOT_PASSWORD} -lt 6 ]]; then
+  echo "[!] ROOT_PASSWORD 未配置或长度不足 6 位。由于当前后端会在首次启动时自动初始化 root，project.sh start backend 会直接失败，而不是等到健康检查超时。"
+  echo "[!] 请先在 $ROOT/.env.local 中设置 ROOT_PASSWORD（建议同时设置 ROOT_USERNAME），再重试。"
 fi
 
 # 颜色
@@ -87,6 +93,11 @@ start_backend() {
   if is_running "$BACKEND_PID"; then
     warn "后端已在运行 (pid=$(cat "$BACKEND_PID"))"
     return 0
+  fi
+  if [[ -z "$ROOT_PASSWORD" || ${#ROOT_PASSWORD} -lt 6 ]]; then
+    err "后端首次启动需要 ROOT_PASSWORD 至少 6 位；当前未配置或过短，无法完成 root 初始化。"
+    err "请先在 $ROOT/.env.local 中设置 ROOT_PASSWORD 后再执行 ./project.sh start backend"
+    return 1
   fi
   info "启动后端 ..."
   kill_port "$BACKEND_PORT"

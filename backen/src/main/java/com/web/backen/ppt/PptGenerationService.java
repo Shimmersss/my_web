@@ -2,10 +2,13 @@ package com.web.backen.ppt;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.web.backen.auth.AuthUser;
+import com.web.backen.auth.QuotaService;
 import com.web.backen.config.PptGenerationConfig;
 import com.web.backen.translate.LlmService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -276,6 +279,7 @@ public class PptGenerationService {
     private final PptInputExtractor inputExtractor;
     private final LlmService llmService;
     private final ObjectMapper objectMapper;
+    private final QuotaService quotaService;
     private final ConcurrentHashMap<String, PptGenerationSession> sessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
     private final ThreadPoolExecutor executor;
@@ -286,10 +290,17 @@ public class PptGenerationService {
 
     public PptGenerationService(PptGenerationConfig config, PptInputExtractor inputExtractor,
                                 LlmService llmService, ObjectMapper objectMapper) {
+        this(config, inputExtractor, llmService, objectMapper, null);
+    }
+
+    @Autowired
+    public PptGenerationService(PptGenerationConfig config, PptInputExtractor inputExtractor,
+                                LlmService llmService, ObjectMapper objectMapper, QuotaService quotaService) {
         this.config = config;
         this.inputExtractor = inputExtractor;
         this.llmService = llmService;
         this.objectMapper = objectMapper;
+        this.quotaService = quotaService;
         this.executor = new ThreadPoolExecutor(
                 1, 1, 0L, TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(Math.max(1, config.getQueueCapacity())),
@@ -327,10 +338,16 @@ public class PptGenerationService {
 
     public PptGenerationSession createTask(String prompt, String templateKey, int extractionPercent,
                                            MultipartFile templateFile, MultipartFile paperFile) throws IOException {
+        return createTask(prompt, templateKey, extractionPercent, templateFile, paperFile, null);
+    }
+
+    public PptGenerationSession createTask(String prompt, String templateKey, int extractionPercent,
+                                           MultipartFile templateFile, MultipartFile paperFile, AuthUser user) throws IOException {
         String cleanPrompt = validatePrompt(prompt);
         String taskId = UUID.randomUUID().toString().substring(0, 8);
         Path taskDir = Files.createDirectories(storageDir.resolve(taskId));
         PptGenerationSession session = new PptGenerationSession(taskId, cleanPrompt, taskDir);
+        if (user != null) session.setUserId(user.id());
         session.setAccessToken(newAccessToken());
         session.setTemplateKey(normalizeTemplateKey(templateKey));
         session.setExtractionPercent(clamp(extractionPercent, 10, 100));
@@ -346,6 +363,13 @@ public class PptGenerationService {
                 session.setPaperFileName(paperFile.getOriginalFilename());
                 copyUpload(paperFile, session.getPaperPath());
             }
+            if (user != null && quotaService != null && !user.isRoot()) {
+                int cost = quotaService.pptCreditPerTask();
+                long tx = quotaService.spend(user.id(), cost, "PPT", taskId, "PPT 生成任务");
+                session.setCreditCost(cost);
+                session.setCreditTransactionId(tx);
+                session.setCreditRefunded(false);
+            }
             session.setOutputFileName("AI生成PPT-" + taskId + ".pptx");
             session.setStatus("queued");
             session.setProgressStage("queued");
@@ -356,10 +380,12 @@ public class PptGenerationService {
             emit(session, "queued", Map.of("message", "任务已进入 PPT 生成队列", "queuePosition", session.getQueuePosition()));
             return session;
         } catch (RejectedExecutionException e) {
+            refundIfNeeded(session, "PPT 队列已满自动退回额度");
             sessions.remove(taskId);
             deleteRecursively(taskDir);
             throw new IllegalStateException("PPT 生成队列已满，请稍后再试");
         } catch (Exception e) {
+            refundIfNeeded(session, "PPT 任务创建失败自动退回额度");
             sessions.remove(taskId);
             deleteRecursively(taskDir);
             if (e instanceof IOException io) throw io;
@@ -373,6 +399,10 @@ public class PptGenerationService {
         return sessions.get(taskId);
     }
 
+    public boolean canAccess(PptGenerationSession session, AuthUser user) {
+        return session != null && user != null && (user.isRoot() || session.getUserId() == user.id());
+    }
+
     public PptGenerationSession getAuthorizedSession(String taskId, String accessToken) {
         updateQueuePositions();
         return requireAuthorizedSession(taskId, accessToken);
@@ -384,6 +414,18 @@ public class PptGenerationService {
         if (allowedTokens.isEmpty()) return List.of();
         return sessions.values().stream()
                 .filter(session -> allowedTokens.contains(session.getAccessToken()))
+                .sorted(Comparator.comparingLong(PptGenerationSession::getCreatedAt).reversed())
+                .limit(Math.max(1, config.getMaxHistory()))
+                .toList();
+    }
+
+    public List<PptGenerationSession> getRecentSessions(AuthUser user, String accessTokens) {
+        updateQueuePositions();
+        Set<String> allowedTokens = parseAccessTokens(accessTokens);
+        return sessions.values().stream()
+                .filter(session -> Set.of("completed", "error").contains(session.getStatus()))
+                .filter(session -> (user != null && (user.isRoot() || session.getUserId() == user.id()))
+                        || allowedTokens.contains(session.getAccessToken()))
                 .sorted(Comparator.comparingLong(PptGenerationSession::getCreatedAt).reversed())
                 .limit(Math.max(1, config.getMaxHistory()))
                 .toList();
@@ -417,6 +459,15 @@ public class PptGenerationService {
             sendAndComplete(emitter, "task-error", Map.of("message", "任务不存在"));
             return;
         }
+        subscribe(session, emitter);
+    }
+
+    public void subscribe(PptGenerationSession session, SseEmitter emitter) {
+        if (session == null) {
+            sendAndComplete(emitter, "task-error", Map.of("message", "任务不存在"));
+            return;
+        }
+        String taskId = session.getTaskId();
         emitters.computeIfAbsent(taskId, ignored -> new CopyOnWriteArrayList<>()).add(emitter);
         Runnable remove = () -> removeEmitter(taskId, emitter);
         emitter.onCompletion(remove);
@@ -2231,12 +2282,20 @@ public class PptGenerationService {
 
     private void failTask(PptGenerationSession session, Exception e) {
         log.error("PPT 生成任务失败: taskId={}", session.getTaskId(), e);
+        refundIfNeeded(session, "PPT 生成失败自动退回额度");
         session.setStatus("error");
         session.setProgressStage("error");
         session.setErrorMessage(e.getMessage() == null ? "PPT 生成失败" : e.getMessage());
         saveMetadata(session);
         emit(session, "task-error", Map.of("message", session.getErrorMessage()));
         completeEmitters(session.getTaskId());
+    }
+
+    private void refundIfNeeded(PptGenerationSession session, String reason) {
+        if (quotaService == null || session.getCreditTransactionId() == null || session.isCreditRefunded()) return;
+        quotaService.refund(session.getCreditTransactionId(), reason);
+        session.setCreditRefunded(true);
+        saveMetadata(session);
     }
 
     private String validatePrompt(String prompt) {

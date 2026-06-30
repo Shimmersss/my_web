@@ -11,25 +11,31 @@ const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
  * @returns {Promise}
  */
 async function request(url, options = {}) {
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers
+  }
+  const csrfToken = localStorage.getItem('csrfToken')
+  const method = (options.method || 'GET').toUpperCase()
+  if (csrfToken && !['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    headers['X-CSRF-Token'] = csrfToken
+  }
   const config = {
     ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers
-    }
-  }
-
-  // 添加 token（如果有）
-  const token = localStorage.getItem('token')
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+    credentials: 'same-origin',
+    headers
   }
 
   try {
     const response = await fetch(`${BASE_URL}${url}`, config)
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`)
+      let message = `HTTP error! status: ${response.status}`
+      try {
+        const data = await response.json()
+        message = data.message || message
+      } catch {}
+      throw new Error(message)
     }
 
     const data = await response.json()

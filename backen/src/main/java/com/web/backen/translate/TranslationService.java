@@ -1,9 +1,12 @@
 package com.web.backen.translate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.web.backen.auth.AuthUser;
+import com.web.backen.auth.QuotaService;
 import com.web.backen.config.TranslationConfig;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
@@ -28,6 +31,7 @@ public class TranslationService {
     private final BabelDocService babelDocService;
     private final TranslationConfig config;
     private final ObjectMapper objectMapper;
+    private final QuotaService quotaService;
     private final ConcurrentHashMap<String, TranslationSession> sessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
     private final ThreadPoolExecutor executor;
@@ -35,10 +39,17 @@ public class TranslationService {
 
     public TranslationService(PdfParseService pdfParseService, BabelDocService babelDocService,
                               TranslationConfig config, ObjectMapper objectMapper) {
+        this(pdfParseService, babelDocService, config, objectMapper, null);
+    }
+
+    @Autowired
+    public TranslationService(PdfParseService pdfParseService, BabelDocService babelDocService,
+                              TranslationConfig config, ObjectMapper objectMapper, QuotaService quotaService) {
         this.pdfParseService = pdfParseService;
         this.babelDocService = babelDocService;
         this.config = config;
         this.objectMapper = objectMapper;
+        this.quotaService = quotaService;
         this.executor = new ThreadPoolExecutor(
                 1, 1, 0L, TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(Math.max(1, config.getQueueCapacity())),
@@ -67,6 +78,10 @@ public class TranslationService {
     }
 
     public TranslationSession createSessionPreview(String fileName, InputStream pdfStream) throws Exception {
+        return createSessionPreview(fileName, pdfStream, 0);
+    }
+
+    public TranslationSession createSessionPreview(String fileName, InputStream pdfStream, long userId) throws Exception {
         String taskId = UUID.randomUUID().toString().substring(0, 8);
         Path taskDir = Files.createDirectories(storageDir.resolve(taskId));
         Path inputPdf = taskDir.resolve("input.pdf");
@@ -77,6 +92,7 @@ public class TranslationService {
         try {
             int totalPages = pdfParseService.getTotalPages(inputPdf);
             TranslationSession session = new TranslationSession(taskId, fileName, taskDir);
+            session.setUserId(userId);
             session.setTotalPages(totalPages);
             session.setPageRange(1, totalPages);
             PdfParseService.PdfTextQuality textQuality = pdfParseService.analyzeTextQuality(inputPdf);
@@ -97,8 +113,16 @@ public class TranslationService {
 
     public TranslationSession startTranslation(String taskId, int startPage, int endPage, String fontFamily,
                                                int qps) {
+        return startTranslation(taskId, startPage, endPage, fontFamily, qps, null);
+    }
+
+    public TranslationSession startTranslation(String taskId, int startPage, int endPage, String fontFamily,
+                                               int qps, AuthUser user) {
         TranslationSession session = requireSession(taskId);
         synchronized (session) {
+            if (user != null && !user.isRoot() && session.getUserId() != user.id()) {
+                throw new IllegalArgumentException("任务不存在");
+            }
             if (Set.of("queued", "translating", "completed").contains(session.getStatus())) {
                 return session;
             }
@@ -115,6 +139,14 @@ public class TranslationService {
             session.setResourceDowngraded(false);
             session.setResourceDowngradeReason(null);
             session.setResourceDowngradeCount(0);
+            if (user != null && quotaService != null && !user.isRoot()) {
+                int cost = (effectiveEnd - effectiveStart + 1) * quotaService.translationCreditPerPage();
+                long tx = quotaService.spend(user.id(), cost, "TRANSLATION", taskId, "翻译 " + (effectiveEnd - effectiveStart + 1) + " 页");
+                session.setUserId(user.id());
+                session.setCreditCost(cost);
+                session.setCreditTransactionId(tx);
+                session.setCreditRefunded(false);
+            }
             session.setErrorMessage(null);
             session.setProgress(0);
             session.setProgressStage("queued");
@@ -125,6 +157,7 @@ public class TranslationService {
         try {
             executor.execute(() -> runTranslation(session));
         } catch (RejectedExecutionException e) {
+            refundIfNeeded(session, "翻译队列已满自动退回额度");
             session.setStatus("preview");
             session.setProgressStage("");
             saveMetadata(session);
@@ -146,10 +179,24 @@ public class TranslationService {
         return sessions.get(taskId);
     }
 
+    public boolean canAccess(TranslationSession session, AuthUser user) {
+        return session != null && user != null && (user.isRoot() || session.getUserId() == user.id());
+    }
+
     public List<TranslationSession> getRecentSessions() {
         updateQueuePositions();
         return sessions.values().stream()
                 .filter(session -> !"preview".equals(session.getStatus()))
+                .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt).reversed())
+                .limit(Math.max(1, config.getMaxHistory()))
+                .toList();
+    }
+
+    public List<TranslationSession> getRecentSessions(AuthUser user) {
+        updateQueuePositions();
+        return sessions.values().stream()
+                .filter(session -> !"preview".equals(session.getStatus()))
+                .filter(session -> user != null && (user.isRoot() || session.getUserId() == user.id()))
                 .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt).reversed())
                 .limit(Math.max(1, config.getMaxHistory()))
                 .toList();
@@ -275,6 +322,7 @@ public class TranslationService {
 
     private void failTranslation(TranslationSession session, Exception e) {
         log.error("翻译任务失败: taskId={}", session.getTaskId(), e);
+        refundIfNeeded(session, "翻译任务失败自动退回额度");
         session.setStatus("error");
         session.setErrorMessage(e.getMessage());
         session.setProgressStage("error");
@@ -282,6 +330,13 @@ public class TranslationService {
         emit(session, "task-error", Map.of(
                 "message", e.getMessage() != null ? e.getMessage() : "翻译过程中发生未知错误"));
         completeEmitters(session.getTaskId());
+    }
+
+    private void refundIfNeeded(TranslationSession session, String reason) {
+        if (quotaService == null || session.getCreditTransactionId() == null || session.isCreditRefunded()) return;
+        quotaService.refund(session.getCreditTransactionId(), reason);
+        session.setCreditRefunded(true);
+        saveMetadata(session);
     }
 
     private String safeBaseName(String fileName) {

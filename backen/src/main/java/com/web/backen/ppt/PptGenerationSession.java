@@ -24,6 +24,10 @@ public class PptGenerationSession {
     private long createdAt = System.currentTimeMillis();
     private long updatedAt = System.currentTimeMillis();
     private long completedAt;
+    private long userId;
+    private int creditCost;
+    private Long creditTransactionId;
+    private boolean creditRefunded;
 
     @JsonIgnore
     private Path taskDir;
@@ -68,6 +72,14 @@ public class PptGenerationSession {
     public void setUpdatedAt(long updatedAt) { this.updatedAt = updatedAt; }
     public long getCompletedAt() { return completedAt; }
     public void setCompletedAt(long completedAt) { this.completedAt = completedAt; touch(); }
+    public long getUserId() { return userId; }
+    public void setUserId(long userId) { this.userId = userId; touch(); }
+    public int getCreditCost() { return creditCost; }
+    public void setCreditCost(int creditCost) { this.creditCost = creditCost; touch(); }
+    public Long getCreditTransactionId() { return creditTransactionId; }
+    public void setCreditTransactionId(Long creditTransactionId) { this.creditTransactionId = creditTransactionId; touch(); }
+    public boolean isCreditRefunded() { return creditRefunded; }
+    public void setCreditRefunded(boolean creditRefunded) { this.creditRefunded = creditRefunded; touch(); }
 
     @JsonIgnore
     public Path getTaskDir() { return taskDir; }

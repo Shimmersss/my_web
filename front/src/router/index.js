@@ -60,6 +60,12 @@ const routes = [
     name: 'Translate',
     component: () => import('@/views/Translate/index.vue'),
     meta: { title: '论文翻译' }
+  },
+  {
+    path: '/admin',
+    name: 'Admin',
+    component: () => import('@/views/Admin/index.vue'),
+    meta: { title: '账号后台' }
   }
 ]
 

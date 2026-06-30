@@ -1,5 +1,10 @@
 package com.web.backen.ppt;
 
+import com.web.backen.auth.AuthException;
+import com.web.backen.auth.AuthService;
+import com.web.backen.auth.AuthUser;
+import com.web.backen.auth.QuotaService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.io.FileSystemResource;
@@ -24,9 +29,13 @@ public class PptGenerationController {
     private static final Logger log = LoggerFactory.getLogger(PptGenerationController.class);
 
     private final PptGenerationService pptGenerationService;
+    private final AuthService authService;
+    private final QuotaService quotaService;
 
-    public PptGenerationController(PptGenerationService pptGenerationService) {
+    public PptGenerationController(PptGenerationService pptGenerationService, AuthService authService, QuotaService quotaService) {
         this.pptGenerationService = pptGenerationService;
+        this.authService = authService;
+        this.quotaService = quotaService;
     }
 
     @PostMapping("/tasks")
@@ -34,16 +43,27 @@ public class PptGenerationController {
                                         @RequestParam(value = "templateKey", required = false) String templateKey,
                                         @RequestParam(value = "extractionPercent", required = false, defaultValue = "50") int extractionPercent,
                                         @RequestParam(value = "templateFile", required = false) MultipartFile templateFile,
-                                        @RequestParam(value = "paperFile", required = false) MultipartFile paperFile) {
+                                        @RequestParam(value = "paperFile", required = false) MultipartFile paperFile,
+                                        HttpServletRequest request) {
+        AuthUser user;
         try {
-            PptGenerationSession session = pptGenerationService.createTask(prompt, templateKey, extractionPercent, templateFile, paperFile);
+            authService.requireCsrf(request);
+            user = authService.requireUser(request);
+        } catch (AuthException e) {
+            return authError(e);
+        }
+        try {
+            PptGenerationSession session = pptGenerationService.createTask(prompt, templateKey, extractionPercent, templateFile, paperFile, user);
             Map<String, Object> data = toSummary(session);
             data.put("accessToken", session.getAccessToken());
+            data.put("credits", quotaService.balance(user.id()));
             return ResponseEntity.ok(Map.of("code", 200, "data", data));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("code", 400, "message", e.getMessage()));
         } catch (IllegalStateException e) {
             return ResponseEntity.status(429).body(Map.of("code", 429, "message", e.getMessage()));
+        } catch (AuthException e) {
+            return authError(e);
         } catch (Exception e) {
             log.error("创建 PPT 生成任务失败", e);
             return ResponseEntity.internalServerError().body(Map.of("code", 500, "message", "PPT 生成任务创建失败: " + e.getMessage()));
@@ -57,22 +77,41 @@ public class PptGenerationController {
 
     @GetMapping(value = "/stream/{taskId}", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public SseEmitter stream(@PathVariable String taskId,
-                             @RequestParam(value = "accessToken", required = false) String accessToken) {
+                             @RequestParam(value = "accessToken", required = false) String accessToken,
+                             HttpServletRequest request) {
         SseEmitter emitter = new SseEmitter(30L * 60L * 1000L);
+        AuthUser user = authService.currentUser(request).orElse(null);
+        PptGenerationSession session = pptGenerationService.getSession(taskId);
+        if (!pptGenerationService.canAccess(session, user)) {
+            try {
+                session = pptGenerationService.getAuthorizedSession(taskId, accessToken);
+            } catch (Exception e) {
+                try {
+                    emitter.send(SseEmitter.event().name("task-error").data(Map.of("message", "任务不存在")));
+                } catch (Exception ignored) {}
+                emitter.complete();
+                return emitter;
+            }
+        }
         emitter.onTimeout(() -> {
             log.warn("PPT SSE 超时: taskId={}", taskId);
             emitter.complete();
         });
         emitter.onError(e -> log.warn("PPT SSE 错误: taskId={}", taskId, e));
-        pptGenerationService.subscribe(taskId, accessToken, emitter);
+        pptGenerationService.subscribe(session, emitter);
         return emitter;
     }
 
     @GetMapping("/status/{taskId}")
     public ResponseEntity<?> status(@PathVariable String taskId,
-                                    @RequestHeader(value = "X-Ppt-Task-Token", required = false) String accessToken) {
+                                    @RequestHeader(value = "X-Ppt-Task-Token", required = false) String accessToken,
+                                    HttpServletRequest request) {
         try {
-            PptGenerationSession session = pptGenerationService.getAuthorizedSession(taskId, accessToken);
+            AuthUser user = authService.currentUser(request).orElse(null);
+            PptGenerationSession session = pptGenerationService.getSession(taskId);
+            if (!pptGenerationService.canAccess(session, user)) {
+                session = pptGenerationService.getAuthorizedSession(taskId, accessToken);
+            }
             return ResponseEntity.ok(Map.of("code", 200, "data", toSummary(session)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).body(Map.of("code", 404, "message", "任务不存在"));
@@ -80,8 +119,10 @@ public class PptGenerationController {
     }
 
     @GetMapping("/recent")
-    public ResponseEntity<?> recent(@RequestHeader(value = "X-Ppt-Task-Tokens", required = false) String accessTokens) {
-        List<Map<String, Object>> data = pptGenerationService.getRecentSessions(accessTokens).stream()
+    public ResponseEntity<?> recent(@RequestHeader(value = "X-Ppt-Task-Tokens", required = false) String accessTokens,
+                                    HttpServletRequest request) {
+        AuthUser user = authService.currentUser(request).orElse(null);
+        List<Map<String, Object>> data = pptGenerationService.getRecentSessions(user, accessTokens).stream()
                 .map(this::toSummary)
                 .toList();
         return ResponseEntity.ok(Map.of("code", 200, "data", data));
@@ -89,10 +130,18 @@ public class PptGenerationController {
 
     @GetMapping("/download/{taskId}")
     public ResponseEntity<?> download(@PathVariable String taskId,
-                                      @RequestParam(value = "accessToken", required = false) String accessToken) {
+                                      @RequestParam(value = "accessToken", required = false) String accessToken,
+                                      HttpServletRequest request) {
         try {
-            PptGenerationSession session = pptGenerationService.getAuthorizedSession(taskId, accessToken);
-            Path output = pptGenerationService.getOutput(taskId, accessToken);
+            AuthUser user = authService.currentUser(request).orElse(null);
+            PptGenerationSession session = pptGenerationService.getSession(taskId);
+            Path output;
+            if (pptGenerationService.canAccess(session, user)) {
+                output = pptGenerationService.getOutput(taskId);
+            } else {
+                session = pptGenerationService.getAuthorizedSession(taskId, accessToken);
+                output = pptGenerationService.getOutput(taskId, accessToken);
+            }
             String fileName = session != null && session.getOutputFileName() != null
                     ? session.getOutputFileName()
                     : "AI生成PPT-" + taskId + ".pptx";
@@ -126,9 +175,14 @@ public class PptGenerationController {
         data.put("progressStageLabel", pptGenerationService.stageLabel(session.getProgressStage()));
         data.put("errorMessage", session.getErrorMessage() == null ? "" : session.getErrorMessage());
         data.put("queuePosition", session.getQueuePosition());
+        data.put("creditCost", session.getCreditCost());
         data.put("createdAt", session.getCreatedAt());
         data.put("updatedAt", session.getUpdatedAt());
         data.put("completedAt", session.getCompletedAt());
         return data;
+    }
+
+    private ResponseEntity<?> authError(AuthException e) {
+        return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus(), "message", e.getMessage()));
     }
 }

@@ -121,10 +121,12 @@ Important groups / 主要配置组：
 - `LLM_*`
 - `BABELDOC_*`
 - `PPT_GENERATION_*`
+- `ROOT_USERNAME`, `ROOT_PASSWORD`
+- `DB_URL`, `DB_DRIVER`, `DB_USERNAME`, `DB_PASSWORD` for production MySQL
 
-真实 API key 和部署参数必须放在仓库外。这个公开分支不跟踪本地 env 模板。
+真实 API key 和部署参数必须放在仓库外。根目录 `.env.local.example` 只保留空值/占位符，可作为部署配置清单；不要提交真实 `.env.local`。
 
-Keep real API keys and deployment parameters outside the repository. This public branch intentionally does not track local env templates.
+Keep real API keys and deployment parameters outside the repository. The root `.env.local.example` only contains blank placeholders and can be used as a deployment checklist; never commit a real `.env.local`.
 
 ## 资源基线 / Resource Baseline
 
@@ -133,6 +135,8 @@ Keep real API keys and deployment parameters outside the repository. This public
 The production target is modest: **2 CPU cores / 4 GB RAM**. Long-running work uses bounded queues, single-worker document generation, disk-backed task files, streaming attachment transfer and conservative concurrency defaults.
 
 ## 部署 / Deployment
+
+For practical deployment steps, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
 这个公开分支把部署凭证、本地发布产物和一次性部署辅助脚本排除在 Git 外。仓库仍包含构建前端和后端所需的应用源码，但不发布旧的 `deploy/` 脚本。
 

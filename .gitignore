@@ -6,7 +6,9 @@ target/
 .release/
 server-upload/
 outputs/
-deploy/
+deploy/*
+!deploy/
+!deploy/deploy-server-improved.sh
 
 # IDE
 .idea/
@@ -23,7 +25,6 @@ deploy/
 .env.local
 .env.*.local
 .deploy.local
-.env.local.example
 .deploy.local.example
 # os
 .DS_Store

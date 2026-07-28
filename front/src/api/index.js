@@ -3,7 +3,7 @@
  * 实际项目中，请替换为真实的API调用
  */
 
-import { get, post, put, del, requestWithOptions } from '@/utils/request'
+import { apiUrl, get, post, put, del, requestWithOptions } from '@/utils/request'
 
 // 模拟延迟
 const delay = (ms = 500) => new Promise(resolve => setTimeout(resolve, ms))
@@ -170,8 +170,8 @@ export function getZoteroItems(limit = 50) {
 /**
  * 获取 Zotero 文献集合（folder）
  */
-export function getZoteroCollections() {
-  return get('/zotero/collections')
+export function getZoteroCollections(refresh = false) {
+  return get('/zotero/collections', refresh ? { refresh: true } : {})
 }
 
 // ==================== GitHub 开源项目 API ====================
@@ -216,12 +216,16 @@ export function getQuotaSettings() {
   return get('/auth/quota-settings')
 }
 
+export function getSiteSettings() {
+  return get('/auth/site-settings')
+}
+
 export function getAdminAccounts() {
   return get('/admin/accounts')
 }
 
-export function createInviteCode({ code, credits, maxUses }) {
-  return post('/admin/accounts/invites', { code, credits, maxUses })
+export function createInviteCode({ code, credits, maxUses, expiresAt = '' }) {
+  return post('/admin/accounts/invites', { code, credits, maxUses, expiresAt })
 }
 
 export function adjustUserCredits({ userId, amount, note }) {
@@ -230,6 +234,24 @@ export function adjustUserCredits({ userId, amount, note }) {
 
 export function updateQuotaSettings({ translationCreditPerPage, pptCreditPerTask }) {
   return put('/admin/accounts/settings', { translationCreditPerPage, pptCreditPerTask })
+}
+
+export function updateAdminApiSettings(settings) {
+  return put('/admin/accounts/api-settings', settings)
+}
+
+export function updateInviteStatus(id, enabled, expiresAt = '') {
+  return requestWithOptions(`/admin/accounts/invites/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled, expiresAt })
+  })
+}
+
+export function updateAdminUserStatus(id, enabled) {
+  return requestWithOptions(`/admin/accounts/users/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ enabled })
+  })
 }
 
 export async function getGithubProjectReadme(fullName) {
@@ -333,19 +355,22 @@ export function downloadTranslatedPdf(taskId, mode = 'translated') {
 
 // ==================== PPT 生成 API ====================
 
-export async function createPptGenerationTask({ prompt, templateKey, extractionPercent, templateFile, paperFile }) {
+export async function createPptGenerationTask({ prompt, templateKey, outputFormat = 'pptx', templateFile, sourceFile, paperFile, idempotencyKey }) {
   const formData = new FormData()
-  formData.append('prompt', prompt)
+  if (prompt?.trim()) formData.append('prompt', prompt.trim())
   if (templateKey) formData.append('templateKey', templateKey)
-  if (extractionPercent) formData.append('extractionPercent', String(extractionPercent))
+  if (outputFormat) formData.append('outputFormat', outputFormat)
   if (templateFile) formData.append('templateFile', templateFile)
-  if (paperFile) formData.append('paperFile', paperFile)
+  if (sourceFile || paperFile) formData.append('sourceFile', sourceFile || paperFile)
 
   const csrfToken = localStorage.getItem('csrfToken')
-  const res = await fetch('/api/ppt-generate/tasks', {
+  const res = await fetch(apiUrl('/ppt-generate/tasks'), {
     method: 'POST',
-    credentials: 'same-origin',
-    headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
+    credentials: /^https?:\/\//i.test(apiUrl('')) ? 'include' : 'same-origin',
+    headers: {
+      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...(idempotencyKey ? { 'X-Ppt-Idempotency-Key': idempotencyKey } : {})
+    },
     body: formData
   })
   const data = await res.json().catch(() => ({}))
@@ -359,6 +384,30 @@ export function getPptTemplates() {
   return get('/ppt-generate/templates')
 }
 
+export function getPptPreview(taskId, accessToken, options = {}) {
+  return requestWithOptions(`/ppt-generate/preview/${encodeURIComponent(taskId)}`, {
+    ...options,
+    method: 'GET',
+    headers: pptTaskHeaders(accessToken),
+    cache: 'no-store'
+  })
+}
+
+export async function getPptPreviewImage(taskId, fileName, accessToken, options = {}) {
+  const res = await fetch(apiUrl(`/ppt-generate/preview/${encodeURIComponent(taskId)}/images/${encodeURIComponent(fileName)}`), {
+    ...options,
+    method: 'GET',
+    credentials: /^https?:\/\//i.test(apiUrl('')) ? 'include' : 'same-origin',
+    headers: pptTaskHeaders(accessToken),
+    cache: 'no-store'
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.message || `预览素材加载失败（HTTP ${res.status}）`)
+  }
+  return URL.createObjectURL(await res.blob())
+}
+
 function pptTaskHeaders(accessToken) {
   return accessToken ? { 'X-Ppt-Task-Token': accessToken } : {}
 }
@@ -370,6 +419,24 @@ export function getPptGenerationStatus(taskId, accessToken) {
   })
 }
 
+export async function revisePptGenerationTask(taskId, accessToken, { prompt = '', slides = [], idempotencyKey } = {}) {
+  const csrfToken = localStorage.getItem('csrfToken')
+  const res = await fetch(apiUrl(`/ppt-generate/tasks/${encodeURIComponent(taskId)}/revise`), {
+    method: 'POST',
+    credentials: /^https?:\/\//i.test(apiUrl('')) ? 'include' : 'same-origin',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(accessToken ? { 'X-Ppt-Task-Token': accessToken } : {}),
+      ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+      ...(idempotencyKey ? { 'X-Ppt-Idempotency-Key': idempotencyKey } : {})
+    },
+    body: JSON.stringify({ prompt: prompt.trim(), slides })
+  })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) throw new Error(data.message || `二次修改提交失败（HTTP ${res.status}）`)
+  return data
+}
+
 export function getRecentPptGenerations(accessTokens = []) {
   return requestWithOptions('/ppt-generate/recent', {
     method: 'GET',
@@ -378,6 +445,31 @@ export function getRecentPptGenerations(accessTokens = []) {
   })
 }
 
-export function downloadGeneratedPpt(taskId, accessToken) {
-  window.open(`/api/ppt-generate/download/${taskId}?accessToken=${encodeURIComponent(accessToken || '')}`)
+export async function downloadGeneratedPpt(taskId, accessToken, outputFormat = 'pptx') {
+  const csrfToken = localStorage.getItem('csrfToken')
+  const headers = {
+    ...(accessToken ? { 'X-Ppt-Task-Token': accessToken } : {}),
+    ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {})
+  }
+  const res = await fetch(apiUrl(`/ppt-generate/download/${encodeURIComponent(taskId)}`), {
+    method: 'GET',
+    credentials: /^https?:\/\//i.test(apiUrl('')) ? 'include' : 'same-origin',
+    headers
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.message || `下载失败（HTTP ${res.status}）`)
+  }
+  const blob = await res.blob()
+  const disposition = res.headers.get('Content-Disposition') || ''
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+  const filename = encoded ? decodeURIComponent(encoded) : `AI生成PPT-${taskId}.${String(outputFormat).toLowerCase() === 'html' ? 'html' : 'pptx'}`
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000)
 }

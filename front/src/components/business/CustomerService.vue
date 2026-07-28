@@ -181,4 +181,18 @@ const copyEmail = async () => {
     }
   }
 }
+
+@media (max-width: 420px) {
+  .customer-service {
+    .mail-address,
+    .mail-actions {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .mail-actions :deep(.n-button) {
+      width: 100%;
+    }
+  }
+}
 </style>

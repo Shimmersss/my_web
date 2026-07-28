@@ -367,6 +367,60 @@ function formatNumber(value) {
   .current-work::before { display: none; }
   .current-work h1 { font-size: 34px; }
   .quick-actions { grid-template-columns: 1fr 1fr; margin-top: 26px; }
-  .quick-actions a { padding: 15px 8px; border-bottom: 1px solid #ded7ca; }
+  .quick-actions a {
+    padding: 15px 8px;
+    border-bottom: 1px solid #ded7ca;
+    min-width: 0;
+  }
+
+  .panel-heading {
+    gap: 12px;
+  }
+}
+
+@media (max-width: 360px) {
+  .desk-hero {
+    padding-top: 12px;
+  }
+
+  .paper-panel {
+    padding: 16px;
+  }
+
+  .current-work {
+    padding-left: 16px;
+  }
+
+  .current-work h1 {
+    font-size: 30px;
+    line-height: 1.18;
+    letter-spacing: 0;
+  }
+
+  .current-work .lead {
+    margin: 16px 0;
+    font-size: 14px;
+  }
+
+  .quick-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-actions a {
+    padding: 13px 0;
+    border-right: 0;
+  }
+
+  .panel-heading {
+    display: grid;
+  }
+
+  .workflow-list a {
+    grid-template-columns: 28px 24px minmax(0, 1fr);
+  }
+
+  .row-arrow {
+    display: none;
+  }
 }
 </style>

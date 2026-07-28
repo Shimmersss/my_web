@@ -46,7 +46,8 @@ ADMIN_KEY=...
 ROOT_USERNAME=root
 ROOT_PASSWORD=replace-with-a-strong-password
 
-# Production MySQL. Local development can omit these and use the default H2 database.
+# MySQL. Local project.sh will start the Homebrew `mysql` service when these are set;
+# leave them unset for explicit local H2 mode.
 DB_URL=jdbc:mysql://127.0.0.1:3306/web?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
 DB_DRIVER=com.mysql.cj.jdbc.Driver
 DB_USERNAME=webuser
@@ -68,6 +69,11 @@ PPT_GENERATION_QUEUE_CAPACITY=3
 PPT_GENERATION_LLM_MAX_TOKENS=16384
 PPT_GENERATION_VISION_MODEL=...
 PPT_GENERATION_VISION_MAX_TOKENS=4096
+PPT_GENERATION_MAX_ARCHIVE_ENTRIES=2000
+PPT_GENERATION_MAX_ARCHIVE_UNCOMPRESSED_BYTES=125829120
+PPT_GENERATION_MAX_ARCHIVE_ENTRY_BYTES=33554432
+PPT_GENERATION_MAX_ARCHIVE_COMPRESSION_RATIO=120
+PPT_GENERATION_MAX_TEMPLATE_WARNINGS=0
 PPT_GENERATION_TIMEOUT_SECONDS=900
 PPT_GENERATION_RENDERER_COMMAND="uv run --with python-pptx --with pillow python"
 PPT_GENERATION_RENDERER_SCRIPT=./scripts/ppt_renderer.py
@@ -78,6 +84,10 @@ PPT_GENERATION_PAPER_PARSER_SCRIPT=./scripts/ppt_document_parser.py
 ```
 
 `project.sh` sources `.env.local` automatically for local development. For production systemd, put equivalent values in an environment file or in the service unit.
+
+The PPT generator accepts `outputFormat=pptx|html`. The HTML output is a standalone file with embedded preview data and images; native uploaded-template previews are intentionally marked approximate because the downloadable PPTX remains the source of truth for complex master/layout features. When the frontend and API are hosted on different origins, set `VITE_API_BASE_URL` to the API base including `/api` and configure CORS with credentials; PPT requests and SSE use that same base.
+
+When local MySQL is configured, `./project.sh start` starts Homebrew's `mysql` service and waits for port 3306 before launching Spring Boot. `./project.sh stop` stops only the MySQL instance started by that project invocation; use `./project.sh mysql stop` when you explicitly want to stop the service. Set `PROJECT_MYSQL_SERVICE` for a formula such as `mysql@8.4`, or set `PROJECT_DB_MODE=h2` to bypass MySQL locally.
 
 `ROOT_PASSWORD` is required on first startup when no `ROOT` user exists. The backend intentionally fails fast if it is missing or shorter than 6 characters.
 
@@ -148,6 +158,15 @@ Run tests when changing behavior:
 cd backen
 mvn test
 ```
+
+Before publishing renderer/template changes, run the deterministic visual smoke across all built-in styles. It uses the bundled `python-pptx` runtime and LibreOffice to open every five-slide fixture:
+
+```bash
+cd backen
+uv run --with python-pptx --with pillow python scripts/ppt_visual_smoke.py
+```
+
+The smoke command must finish with `{"ok":true}` and `pdf:true` for every style. It is intentionally bounded to 23 styles × 5 slides so it remains practical on the production 2 CPU / 4 GB baseline.
 
 ## Production Layout
 

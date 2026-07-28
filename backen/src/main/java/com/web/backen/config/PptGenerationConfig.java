@@ -16,6 +16,11 @@ public class PptGenerationConfig {
     private int maxPaperTextChars = 28000;
     private int maxExtractedImages = 24;
     private int maxVisionImages = 24;
+    private int maxArchiveEntries = 2000;
+    private long maxArchiveUncompressedBytes = 120L * 1024 * 1024;
+    private long maxArchiveEntryBytes = 32L * 1024 * 1024;
+    private int maxArchiveCompressionRatio = 120;
+    private int maxTemplateWarnings = 0;
     private int llmMaxTokens = 16384;
     private int visionMaxTokens = 4096;
     private String visionModel = "mimo-v2.5";
@@ -45,6 +50,16 @@ public class PptGenerationConfig {
     public void setMaxExtractedImages(int maxExtractedImages) { this.maxExtractedImages = maxExtractedImages; }
     public int getMaxVisionImages() { return maxVisionImages; }
     public void setMaxVisionImages(int maxVisionImages) { this.maxVisionImages = maxVisionImages; }
+    public int getMaxArchiveEntries() { return maxArchiveEntries; }
+    public void setMaxArchiveEntries(int maxArchiveEntries) { this.maxArchiveEntries = maxArchiveEntries; }
+    public long getMaxArchiveUncompressedBytes() { return maxArchiveUncompressedBytes; }
+    public void setMaxArchiveUncompressedBytes(long maxArchiveUncompressedBytes) { this.maxArchiveUncompressedBytes = maxArchiveUncompressedBytes; }
+    public long getMaxArchiveEntryBytes() { return maxArchiveEntryBytes; }
+    public void setMaxArchiveEntryBytes(long maxArchiveEntryBytes) { this.maxArchiveEntryBytes = maxArchiveEntryBytes; }
+    public int getMaxArchiveCompressionRatio() { return maxArchiveCompressionRatio; }
+    public void setMaxArchiveCompressionRatio(int maxArchiveCompressionRatio) { this.maxArchiveCompressionRatio = maxArchiveCompressionRatio; }
+    public int getMaxTemplateWarnings() { return maxTemplateWarnings; }
+    public void setMaxTemplateWarnings(int maxTemplateWarnings) { this.maxTemplateWarnings = maxTemplateWarnings; }
     public int getLlmMaxTokens() { return llmMaxTokens; }
     public void setLlmMaxTokens(int llmMaxTokens) { this.llmMaxTokens = llmMaxTokens; }
     public int getVisionMaxTokens() { return visionMaxTokens; }

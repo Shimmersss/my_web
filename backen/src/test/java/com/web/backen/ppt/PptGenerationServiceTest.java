@@ -9,6 +9,7 @@ import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockMultipartFile;
 
 import java.io.IOException;
+import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,11 +17,14 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.zip.ZipFile;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.junit.jupiter.api.Assertions.*;
@@ -42,7 +46,7 @@ class PptGenerationServiceTest {
         config.setQueueCapacity(1);
         config.setMaxHistory(10);
         Path renderer = createRendererStub();
-        config.setRendererCommand("python3");
+        config.setRendererCommand("uv run --with python-pptx python");
         config.setRendererScript(renderer.toString());
 
         PptInputExtractor inputExtractor = mock(PptInputExtractor.class);
@@ -74,6 +78,8 @@ class PptGenerationServiceTest {
             awaitStatus(service, target.getTaskId(), "completed");
 
             assertTrue(Files.isRegularFile(service.getOutput(target.getTaskId(), target.getAccessToken())));
+            assertTrue(Files.isRegularFile(target.getPreviewPath()));
+            assertFalse(((Map<?, ?>) service.preview(target)).get("slides") == null);
             assertThrows(IllegalArgumentException.class,
                     () -> service.getAuthorizedSession(target.getTaskId(), "wrong-token"));
             assertTrue(service.getRecentSessions("wrong-token").isEmpty());
@@ -95,13 +101,87 @@ class PptGenerationServiceTest {
     }
 
     @Test
+    void htmlOutputCreatesStandalonePreviewAlongsidePptxQualityGate() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        PptGenerationConfig config = new PptGenerationConfig();
+        config.setStorageDir(tempDir.toString());
+        config.setQueueCapacity(1);
+        config.setMaxHistory(10);
+        config.setRendererCommand("uv run --with python-pptx python");
+        config.setRendererScript(createRendererStub().toString());
+        PptInputExtractor inputExtractor = mock(PptInputExtractor.class);
+        LlmService llmService = mock(LlmService.class);
+        when(inputExtractor.extractPaperText(isNull(), isNull(), any(Path.class), anyInt(), anyInt(), anyInt())).thenReturn("");
+        doAnswer(invocation -> {
+            Path taskDir = invocation.getArgument(1);
+            objectMapper.writeValue(taskDir.resolve("style.json").toFile(), objectMapper.readTree(
+                    "{\"palette\":[\"38BDF8\",\"0F172A\",\"FBBF24\",\"111827\",\"E2E8F0\"],\"builtInTemplateName\":\"Data Journalism\",\"builtInTemplateDesign\":\"data-journalism\"}"));
+            return null;
+        }).when(inputExtractor).extractTemplateStyle(isNull(), any(Path.class), anyInt());
+        when(inputExtractor.listImagePaths(any())).thenReturn(List.of());
+        when(llmService.complete(anyString(), anyString(), anyInt())).thenReturn(validDeck("html"));
+
+        PptGenerationService service = new PptGenerationService(config, inputExtractor, llmService, objectMapper);
+        service.initialize();
+        try {
+            PptGenerationSession session = service.createTask("生成 HTML 演示", "ppt-master-data-journalism", 100,
+                    null, null, null, null, "html");
+            awaitStatus(service, session.getTaskId(), "completed");
+            assertEquals("html", session.getOutputFormat());
+            assertTrue(session.getOutputFileName().endsWith(".html"));
+            assertTrue(Files.isRegularFile(session.getPptxOutputPath()));
+            assertTrue(Files.isRegularFile(session.getHtmlOutputPath()));
+            assertTrue(Files.readString(session.getHtmlOutputPath()).contains("<!doctype html>"));
+            assertEquals(session.getHtmlOutputPath(), service.getOutput(session.getTaskId(), session.getAccessToken()));
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void completedDeckCanCreateRevisionWithPreviousDeckContext() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        PptGenerationConfig config = new PptGenerationConfig();
+        config.setStorageDir(tempDir.toString());
+        config.setQueueCapacity(1);
+        config.setMaxHistory(10);
+        config.setRendererCommand("uv run --with python-pptx python");
+        config.setRendererScript(createRendererStub().toString());
+        PptInputExtractor inputExtractor = mock(PptInputExtractor.class);
+        LlmService llmService = mock(LlmService.class);
+        when(inputExtractor.extractPaperText(isNull(), isNull(), any(Path.class), anyInt(), anyInt(), anyInt())).thenReturn("");
+        doAnswer(invocation -> {
+            Path taskDir = invocation.getArgument(1);
+            objectMapper.writeValue(taskDir.resolve("style.json").toFile(), objectMapper.readTree("{\"palette\":[],\"frameworkMode\":false,\"templateFramework\":[]}"));
+            return null;
+        }).when(inputExtractor).extractTemplateStyle(isNull(), any(Path.class), anyInt());
+        when(inputExtractor.listImagePaths(any())).thenReturn(List.of());
+        when(llmService.complete(anyString(), anyString(), anyInt())).thenReturn(validDeck("revision"));
+
+        PptGenerationService service = new PptGenerationService(config, inputExtractor, llmService, objectMapper);
+        service.initialize();
+        try {
+            com.web.backen.auth.AuthUser root = new com.web.backen.auth.AuthUser(1, "root", "ROOT", 0, true);
+            PptGenerationSession original = service.createTask("生成 3 页 PPT", "dracula-night", 100, null, null, root);
+            awaitStatus(service, original.getTaskId(), "completed");
+            PptGenerationSession revision = service.createRevisionTask(original, "把第 2 页改成客户价值", List.of(), root, "revision-test-1");
+            awaitStatus(service, revision.getTaskId(), "completed");
+            assertEquals(original.getTaskId(), revision.getRevisionOfTaskId());
+            assertTrue(Files.isRegularFile(revision.getTaskDir().resolve("revision-base-deck.json")));
+            assertTrue(Files.isRegularFile(revision.getPreviewPath()));
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void templateUploadUsesNativeTemplateFillPath() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         PptGenerationConfig config = new PptGenerationConfig();
         config.setStorageDir(tempDir.toString());
         config.setQueueCapacity(1);
         config.setMaxHistory(10);
-        config.setRendererCommand("python3");
+        config.setRendererCommand("uv run --with python-pptx python");
         config.setRendererScript(createFailingRendererStub().toString());
         config.setTemplateFillCommand("python3");
         config.setTemplateFillScript(createTemplateFillStub().toString());
@@ -136,13 +216,13 @@ class PptGenerationServiceTest {
                     "templateFile",
                     "template.pptx",
                     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    "template-bytes".getBytes(StandardCharsets.UTF_8));
+                    validTemplateBytes());
 
             PptGenerationSession session = service.createTask("按上传模板生成 1 页 PPT", "academic-blue", 50, template, null);
             awaitStatus(service, session.getTaskId(), "completed");
 
             Path output = service.getOutput(session.getTaskId(), session.getAccessToken());
-            assertEquals("native-template-fill", Files.readString(output, StandardCharsets.UTF_8));
+            assertTrue(Files.size(output) > 512, "native template fill should produce a valid PPTX package");
             JsonNode fillPlan = objectMapper.readTree(session.getDeckJsonPath().toFile());
             assertEquals("template_fill_pptx_plan.v1", fillPlan.path("schema").asText());
             assertEquals("template.pptx", fillPlan.path("source_pptx").asText());
@@ -167,7 +247,7 @@ class PptGenerationServiceTest {
         config.setStorageDir(tempDir.toString());
         config.setQueueCapacity(1);
         config.setMaxHistory(10);
-        config.setRendererCommand("python3");
+        config.setRendererCommand("uv run --with python-pptx python");
         config.setRendererScript(createFailingRendererStub().toString());
         config.setTemplateFillCommand("python3");
         config.setTemplateFillScript(createTemplateFillPptxStub().toString());
@@ -191,7 +271,7 @@ class PptGenerationServiceTest {
                     "templateFile",
                     "template.pptx",
                     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    "template-bytes".getBytes(StandardCharsets.UTF_8));
+                    validTemplateBytes());
 
             PptGenerationSession session = service.createTask("按上传模板生成 1 页 PPT", "academic-blue", 50, template, null);
             awaitStatus(service, session.getTaskId(), "completed");
@@ -220,7 +300,7 @@ class PptGenerationServiceTest {
         config.setStorageDir(tempDir.toString());
         config.setQueueCapacity(1);
         config.setMaxHistory(10);
-        config.setRendererCommand("python3");
+        config.setRendererCommand("uv run --with python-pptx python");
         config.setRendererScript(createRendererStub().toString());
 
         PptInputExtractor inputExtractor = mock(PptInputExtractor.class);
@@ -332,7 +412,7 @@ class PptGenerationServiceTest {
         config.setStorageDir(tempDir.toString());
         config.setQueueCapacity(1);
         config.setMaxHistory(10);
-        config.setRendererCommand("python3");
+        config.setRendererCommand("uv run --with python-pptx python");
         config.setRendererScript(createRendererStub().toString());
 
         PptInputExtractor inputExtractor = mock(PptInputExtractor.class);
@@ -413,7 +493,7 @@ class PptGenerationServiceTest {
         config.setStorageDir(tempDir.toString());
         config.setQueueCapacity(1);
         config.setMaxHistory(10);
-        config.setRendererCommand("python3");
+        config.setRendererCommand("uv run --with python-pptx python");
         config.setRendererScript(createRendererStub().toString());
 
         PptInputExtractor inputExtractor = mock(PptInputExtractor.class);
@@ -449,6 +529,42 @@ class PptGenerationServiceTest {
     }
 
     @Test
+    void sourceFileCanBeSubmittedWithoutPrompt() throws Exception {
+        ObjectMapper objectMapper = new ObjectMapper();
+        PptGenerationConfig config = new PptGenerationConfig();
+        config.setStorageDir(tempDir.toString());
+        config.setQueueCapacity(1);
+        config.setMaxHistory(10);
+        config.setRendererCommand("uv run --with python-pptx python");
+        config.setRendererScript(createRendererStub().toString());
+
+        PptInputExtractor inputExtractor = mock(PptInputExtractor.class);
+        LlmService llmService = mock(LlmService.class);
+        when(inputExtractor.extractPaperText(any(Path.class), eq("brief.md"), any(Path.class), anyInt(), anyInt(), anyInt()))
+                .thenReturn("Product brief and launch milestones");
+        doAnswer(invocation -> {
+            Path taskDir = invocation.getArgument(1);
+            objectMapper.writeValue(taskDir.resolve("style.json").toFile(),
+                    objectMapper.readTree("{\"palette\":[],\"frameworkMode\":false,\"templateFramework\":[]}"));
+            return null;
+        }).when(inputExtractor).extractTemplateStyle(isNull(), any(Path.class), anyInt());
+        when(inputExtractor.listImagePaths(any())).thenReturn(List.of());
+        when(llmService.complete(anyString(), anyString(), anyInt())).thenReturn(validDeck("资料摘要"));
+
+        PptGenerationService service = new PptGenerationService(config, inputExtractor, llmService, objectMapper);
+        service.initialize();
+        try {
+            MockMultipartFile source = new MockMultipartFile("sourceFile", "brief.md", "text/markdown",
+                    "# Product brief\nLaunch milestones".getBytes(StandardCharsets.UTF_8));
+            PptGenerationSession session = service.createTask("", "academic-blue", 50, null, source);
+            awaitStatus(service, session.getTaskId(), "completed");
+            assertEquals("brief.md", session.getPaperFileName());
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void ordinaryTemplatePromptWithoutPaperDoesNotBatchAsTwentyTwoSlides() throws Exception {
         ObjectMapper objectMapper = new ObjectMapper();
         Path templateFillScript = createTemplateFillStub();
@@ -456,7 +572,7 @@ class PptGenerationServiceTest {
         config.setStorageDir(tempDir.toString());
         config.setQueueCapacity(1);
         config.setMaxHistory(10);
-        config.setRendererCommand("python3");
+        config.setRendererCommand("uv run --with python-pptx python");
         config.setRendererScript(createFailingRendererStub().toString());
         config.setTemplateFillCommand("python3");
         config.setTemplateFillScript(templateFillScript.toString());
@@ -480,7 +596,7 @@ class PptGenerationServiceTest {
                     "templateFile",
                     "template.pptx",
                     "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                    "template-bytes".getBytes(StandardCharsets.UTF_8));
+                    validTemplateBytes());
             PptGenerationSession session = service.createTask("公司介绍 PPT", "academic-blue", 50, template, null);
             awaitStatus(service, session.getTaskId(), "completed");
 
@@ -502,7 +618,7 @@ class PptGenerationServiceTest {
         config.setStorageDir(tempDir.toString());
         config.setQueueCapacity(1);
         config.setMaxHistory(10);
-        config.setRendererCommand("python3");
+        config.setRendererCommand("uv run --with python-pptx python");
         config.setRendererScript(createRendererStub().toString());
         config.setMaxVisionImages(10);
 
@@ -570,7 +686,7 @@ class PptGenerationServiceTest {
         config.setStorageDir(tempDir.toString());
         config.setQueueCapacity(1);
         config.setMaxHistory(10);
-        config.setRendererCommand("python3");
+        config.setRendererCommand("uv run --with python-pptx python");
         config.setRendererScript(createRendererStub().toString());
 
         PptInputExtractor inputExtractor = mock(PptInputExtractor.class);
@@ -788,13 +904,35 @@ class PptGenerationServiceTest {
     private Path createRendererStub() throws Exception {
         Path script = tempDir.resolve("renderer_stub.py");
         Files.writeString(script, """
-                import pathlib, sys
+                import json, pathlib, sys, zipfile
                 out = pathlib.Path(sys.argv[sys.argv.index('--out') + 1])
                 out.parent.mkdir(parents=True, exist_ok=True)
-                out.write_bytes(b'pptx')
+                slide_count = len(json.loads(pathlib.Path(sys.argv[sys.argv.index('--deck') + 1]).read_text()).get('slides', [])) or 1
+                P = 'http://schemas.openxmlformats.org/presentationml/2006/main'
+                R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+                REL = 'http://schemas.openxmlformats.org/package/2006/relationships'
+                ids = ''.join(f'<p:sldId id="{256 + i}" r:id="rId{i + 1}"/>' for i in range(slide_count))
+                rels = ''.join(f'<Relationship Id="rId{i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide{i + 1}.xml"/>' for i in range(slide_count))
+                with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as archive:
+                    archive.writestr('[Content_Types].xml', '<Types/>')
+                    archive.writestr('_rels/.rels', f'<Relationships xmlns="{REL}"/>')
+                    archive.writestr('ppt/presentation.xml', f'<p:presentation xmlns:p="{P}" xmlns:r="{R}"><p:sldIdLst>{ids}</p:sldIdLst></p:presentation>')
+                    archive.writestr('ppt/_rels/presentation.xml.rels', f'<Relationships xmlns="{REL}">{rels}</Relationships>')
+                    for i in range(slide_count):
+                        archive.writestr(f'ppt/slides/slide{i + 1}.xml', f'<p:sld xmlns:p="{P}"><p:cSld><p:spTree/></p:cSld></p:sld>')
                 print('{\"ok\": true}')
                 """, StandardCharsets.UTF_8);
         return script;
+    }
+
+    private byte[] validTemplateBytes() throws IOException {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
+            zip.putNextEntry(new ZipEntry("[Content_Types].xml"));
+            zip.write("<Types/>".getBytes(StandardCharsets.UTF_8));
+            zip.closeEntry();
+        }
+        return bytes.toByteArray();
     }
 
     private Path createFailingRendererStub() throws Exception {
@@ -921,7 +1059,7 @@ class PptGenerationServiceTest {
     private Path createTemplateFillStub(String slideLibrarySlidesPython) throws Exception {
         Path script = tempDir.resolve("template_fill_stub.py");
         Files.writeString(script, """
-                import json, pathlib, sys
+                import html, json, pathlib, sys, zipfile
 
                 slides = None
                 command = sys.argv[1]
@@ -944,8 +1082,23 @@ class PptGenerationServiceTest {
                     if '--strip-source-content' not in sys.argv:
                         print('missing --strip-source-content')
                         sys.exit(9)
+                    plan = json.loads(pathlib.Path(sys.argv[3]).read_text(encoding='utf-8'))
+                    text = html.escape(plan.get('slides', [{}])[0].get('replacements', [{}])[0].get('text', 'native-template-fill'))
+                    slide_count = max(1, len(plan.get('slides', [])))
                     out = pathlib.Path(sys.argv[sys.argv.index('-o') + 1])
-                    out.write_text('native-template-fill', encoding='utf-8')
+                    P = 'http://schemas.openxmlformats.org/presentationml/2006/main'
+                    R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships'
+                    REL = 'http://schemas.openxmlformats.org/package/2006/relationships'
+                    ids = ''.join(f'<p:sldId id="{256 + i}" r:id="rId{i + 1}"/>' for i in range(slide_count))
+                    rels = ''.join(f'<Relationship Id="rId{i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide{i + 1}.xml"/>' for i in range(slide_count))
+                    with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as archive:
+                        overrides = ''.join(f'<Override PartName="/ppt/slides/slide{i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>' for i in range(slide_count))
+                        archive.writestr('[Content_Types].xml', f'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/>{overrides}</Types>')
+                        archive.writestr('_rels/.rels', f'<Relationships xmlns="{REL}"><Relationship Id="rIdOffice" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>')
+                        archive.writestr('ppt/presentation.xml', f'<p:presentation xmlns:p="{P}" xmlns:r="{R}"><p:sldIdLst>{ids}</p:sldIdLst></p:presentation>')
+                        archive.writestr('ppt/_rels/presentation.xml.rels', f'<Relationships xmlns="{REL}">{rels}</Relationships>')
+                        for i in range(slide_count):
+                            archive.writestr(f'ppt/slides/slide{i + 1}.xml', f'<p:sld xmlns:p="{P}"><p:cSld><p:spTree><p:sp><p:txBody><a:p xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:r><a:t>{text}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>')
                     sys.exit(0)
 
                 print('unknown command', command)
@@ -967,7 +1120,7 @@ class PptGenerationServiceTest {
         config.setStorageDir(tempDir.toString());
         config.setQueueCapacity(1);
         config.setMaxHistory(10);
-        config.setRendererCommand("python3");
+        config.setRendererCommand("uv run --with python-pptx python");
         config.setRendererScript(createFailingRendererStub().toString());
         config.setTemplateFillCommand("python3");
         config.setTemplateFillScript(templateFillScript.toString());
@@ -999,7 +1152,7 @@ class PptGenerationServiceTest {
                 "templateFile",
                 "template.pptx",
                 "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                "template-bytes".getBytes(StandardCharsets.UTF_8));
+                validTemplateBytes());
 
         PptGenerationSession session = service.createTask(prompt, "academic-blue", 50, template, null);
         awaitStatus(service, session.getTaskId(), "completed");

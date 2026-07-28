@@ -8,7 +8,7 @@ from typing import Any
 
 from pptx import Presentation
 from pptx.dml.color import RGBColor
-from pptx.enum.text import PP_ALIGN
+from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE, MSO_ANCHOR
 from PIL import Image
 from pptx.util import Inches, Pt
 
@@ -82,6 +82,12 @@ def add_text(slide, text: str, x: float, y: float, w: float, h: float, size: int
     frame = box.text_frame
     frame.clear()
     frame.word_wrap = True
+    frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+    frame.vertical_anchor = MSO_ANCHOR.MIDDLE
+    frame.margin_left = Inches(0.06)
+    frame.margin_right = Inches(0.06)
+    frame.margin_top = Inches(0.03)
+    frame.margin_bottom = Inches(0.03)
     p = frame.paragraphs[0]
     p.alignment = align
     run = p.add_run()
@@ -99,6 +105,12 @@ def add_bullets(slide, bullets: list[Any], x: float, y: float, w: float, h: floa
     frame = box.text_frame
     frame.clear()
     frame.word_wrap = True
+    frame.auto_size = MSO_AUTO_SIZE.TEXT_TO_FIT_SHAPE
+    frame.vertical_anchor = MSO_ANCHOR.TOP
+    frame.margin_left = Inches(0.08)
+    frame.margin_right = Inches(0.08)
+    frame.margin_top = Inches(0.05)
+    frame.margin_bottom = Inches(0.05)
     values = [fit_text(item, 42) for item in bullets if clean(item)][:5]
     if not values:
         values = ["围绕主题提炼核心信息"]
@@ -254,19 +266,64 @@ def add_footer(slide, deck: dict[str, Any], index: int, total: int, muted: RGBCo
     add_text(slide, f"{index + 1:02d}/{total:02d}", 11.9, 7.05, 0.8, 0.24, 8, muted, False, PP_ALIGN.RIGHT)
 
 
+def design_is_dark(design: str) -> bool:
+    return design in {"dark-tech", "contrast", "data-journalism", "glass-saas", "gradient-pitch", "primer"}
+
+
+def render_design_decorations(slide, design: str, accent: RGBColor, deep: RGBColor, pale: RGBColor) -> None:
+    """Add restrained native shapes so the richer style packs have real visual rhythm."""
+    if design == "editorial":
+        rule = slide.shapes.add_shape(1, Inches(0.72), Inches(6.65), Inches(2.15), Inches(0.08))
+        rule.fill.solid(); rule.fill.fore_color.rgb = accent; rule.line.fill.background()
+        block = slide.shapes.add_shape(1, Inches(10.95), Inches(0), Inches(2.38), Inches(0.18))
+        block.fill.solid(); block.fill.fore_color.rgb = accent; block.line.fill.background()
+    elif design == "memphis":
+        circle = slide.shapes.add_shape(9, Inches(10.65), Inches(0.45), Inches(1.1), Inches(1.1))
+        circle.fill.solid(); circle.fill.fore_color.rgb = accent; circle.line.fill.background()
+        triangle = slide.shapes.add_shape(5, Inches(10.85), Inches(5.95), Inches(1.18), Inches(0.82))
+        triangle.fill.solid(); triangle.fill.fore_color.rgb = deep; triangle.line.fill.background()
+        dot = slide.shapes.add_shape(9, Inches(11.95), Inches(5.78), Inches(0.23), Inches(0.23))
+        dot.fill.solid(); dot.fill.fore_color.rgb = accent; dot.line.fill.background()
+    elif design == "swiss-grid":
+        for x in (3.35, 6.65, 9.95):
+            line = slide.shapes.add_shape(1, Inches(x), Inches(0.3), Inches(0.012), Inches(6.35))
+            line.fill.solid(); line.fill.fore_color.rgb = RGBColor(226, 232, 240); line.line.fill.background()
+        top = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(0.22), Inches(0.95))
+        top.fill.solid(); top.fill.fore_color.rgb = accent; top.line.fill.background()
+    elif design in {"data-journalism", "glass-saas", "gradient-pitch", "primer"}:
+        orb = slide.shapes.add_shape(9, Inches(10.7), Inches(-0.55), Inches(3.0), Inches(3.0))
+        orb.fill.solid(); orb.fill.fore_color.rgb = accent; orb.line.fill.background()
+        glow = slide.shapes.add_shape(9, Inches(-0.9), Inches(5.65), Inches(2.1), Inches(2.1))
+        glow.fill.solid(); glow.fill.fore_color.rgb = pale; glow.line.fill.background()
+        rail = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(13.333), Inches(0.11))
+        rail.fill.solid(); rail.fill.fore_color.rgb = accent; rail.line.fill.background()
+
+
 def render_cover(slide, deck: dict[str, Any], slide_data: dict[str, Any], palette: list[str]) -> None:
     accent = color(palette[0])
     deep = color(palette[1])
     pale = color(palette[3], "EFF6FF")
+    design = clean(deck.get("templateDesign"), "academic")
     bg = slide.background.fill
     bg.solid()
-    bg.fore_color.rgb = pale
-    rail = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(0.28), Inches(SLIDE_H))
+    dark_design = design_is_dark(design)
+    if design in {"dark-tech", "contrast", "data-journalism", "glass-saas", "gradient-pitch", "primer"}:
+        bg.fore_color.rgb = deep
+        rail = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(SLIDE_W), Inches(0.16))
+    elif design in {"product", "pitch", "product-studio"}:
+        bg.fore_color.rgb = deep
+        rail = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(0.42), Inches(SLIDE_H))
+    else:
+        bg.fore_color.rgb = pale
+        rail = slide.shapes.add_shape(1, Inches(0), Inches(0), Inches(0.28), Inches(SLIDE_H))
     rail.fill.solid()
     rail.fill.fore_color.rgb = accent
-    add_text(slide, fit_text(slide_data.get("title") or deck.get("title") or "AI 生成 PPT", 34), 0.9, 1.6, 10.6, 1.1, 34, deep, True)
-    add_text(slide, fit_text(slide_data.get("headline") or deck.get("subtitle") or deck.get("audience") or "", 62), 0.94, 2.9, 9.7, 0.62, 17, color(palette[4]))
-    add_text(slide, fit_text(deck.get("theme") or "Generated presentation", 42), 0.96, 5.72, 5.8, 0.32, 11, color(palette[4]))
+    render_design_decorations(slide, design, accent, deep, pale)
+    title_color = RGBColor(255, 255, 255) if dark_design or design in {"product", "pitch", "product-studio"} else deep
+    subtitle_color = RGBColor(226, 232, 240) if dark_design or design in {"product", "pitch", "product-studio"} else color(palette[4])
+    add_text(slide, fit_text(slide_data.get("title") or deck.get("title") or "AI 生成 PPT", 34), 0.9, 1.6, 10.6, 1.1, 34, title_color, True)
+    add_text(slide, fit_text(slide_data.get("headline") or deck.get("subtitle") or deck.get("audience") or "", 62), 0.94, 2.9, 9.7, 0.62, 17, subtitle_color)
+    add_text(slide, fit_text(deck.get("theme") or "Generated presentation", 42), 0.96, 5.72, 5.8, 0.32, 11, subtitle_color)
 
 
 def render_section(slide, deck: dict[str, Any], slide_data: dict[str, Any], palette: list[str], index: int, total: int) -> None:
@@ -275,6 +332,7 @@ def render_section(slide, deck: dict[str, Any], slide_data: dict[str, Any], pale
     bg = slide.background.fill
     bg.solid()
     bg.fore_color.rgb = deep
+    render_design_decorations(slide, clean(deck.get("templateDesign"), "academic"), accent, deep, color(palette[3], "EFF6FF"))
     add_text(slide, clean(slide_data.get("section"), "SECTION"), 0.82, 1.38, 3.6, 0.35, 13, color(palette[2], "D9A441"), True)
     add_text(slide, fit_text(slide_data.get("title"), 24), 0.82, 2.22, 9.8, 0.92, 34, RGBColor(255, 255, 255), True)
     add_text(slide, fit_text(slide_data.get("headline"), 60), 0.86, 3.34, 8.4, 0.48, 15, RGBColor(226, 232, 240))
@@ -288,10 +346,18 @@ def render_content(slide, deck: dict[str, Any], slide_data: dict[str, Any], pale
                    index: int, total: int, image_path: str | None) -> None:
     accent = color(palette[0])
     deep = color(palette[1])
-    text = color(palette[4])
+    pale = color(palette[3], "EFF6FF")
+    design = clean(deck.get("templateDesign"), "academic")
+    dark = design_is_dark(design)
+    bg = slide.background.fill
+    bg.solid()
+    bg.fore_color.rgb = deep if dark else pale
+    text = RGBColor(248, 250, 252) if dark else color(palette[4])
+    title_color = RGBColor(255, 255, 255) if dark else deep
+    render_design_decorations(slide, design, accent, deep, pale)
     layout = clean(slide_data.get("layout"), "auto")
     add_text(slide, clean(slide_data.get("section"), clean(slide_data.get("type"), "SLIDE")).upper(), 0.72, 0.48, 3.4, 0.26, 9, accent, True)
-    add_text(slide, fit_text(slide_data.get("title"), 34), 0.72, 0.82, 8.4, 0.55, 24, deep, True)
+    add_text(slide, fit_text(slide_data.get("title"), 34), 0.72, 0.82, 8.4, 0.55, 24, title_color, True)
     if clean(slide_data.get("headline")):
         add_text(slide, fit_text(slide_data.get("headline"), 64), 0.74, 1.34, 9.2, 0.36, 12, text)
     if layout == "metric-hero":

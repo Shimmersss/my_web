@@ -1,6 +1,7 @@
 package com.web.backen.translate;
 
 import com.web.backen.config.BabelDocConfig;
+import com.web.backen.auth.RuntimeConfigService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -30,10 +31,12 @@ public class BabelDocService {
     private static final long MONITOR_INTERVAL_MILLIS = 2000;
 
     private final BabelDocConfig config;
+    private final RuntimeConfigService runtimeConfig;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public BabelDocService(BabelDocConfig config) {
+    public BabelDocService(BabelDocConfig config, RuntimeConfigService runtimeConfig) {
         this.config = config;
+        this.runtimeConfig = runtimeConfig;
     }
 
     public TranslationResult translatePdf(Path inputPdf, Path resultDir, String fileName, int startPage, int endPage,
@@ -41,7 +44,7 @@ public class BabelDocService {
         if (!config.isEnabled()) {
             throw new IllegalStateException("BabelDOC 未启用，请设置 BABELDOC_ENABLED=true");
         }
-        if (config.getOpenaiApiKey() == null || config.getOpenaiApiKey().isBlank()) {
+        if (runtimeConfig.babelKey().isBlank()) {
             throw new IllegalStateException("BabelDOC API Key 未配置，请在 .env.local 中设置 BABELDOC_OPENAI_API_KEY");
         }
 
@@ -59,7 +62,7 @@ public class BabelDocService {
             ProcessBuilder processBuilder = new ProcessBuilder(command)
                     .directory(workDir.toFile())
                     .redirectErrorStream(true);
-            processBuilder.environment().put("BABELDOC_OPENAI_API_KEY", config.getOpenaiApiKey());
+            processBuilder.environment().put("BABELDOC_OPENAI_API_KEY", runtimeConfig.babelKey());
             Process process = processBuilder.start();
             StringBuilder output = new StringBuilder();
             Thread outputReader = new Thread(() -> readOutput(process, output, progressConsumer), "babeldoc-output-reader");
@@ -111,9 +114,9 @@ public class BabelDocService {
         command.add("--pages");
         command.add(startPage + "-" + endPage);
         command.add("--base-url");
-        command.add(config.getOpenaiBaseUrl());
+        command.add(runtimeConfig.babelUrl());
         command.add("--model");
-        command.add(config.getOpenaiModel());
+        command.add(runtimeConfig.babelModel());
         command.add("--qps");
         command.add(String.valueOf(qps));
         command.add("--font-family");

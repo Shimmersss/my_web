@@ -95,7 +95,27 @@
 
     h1 {
       font-size: 28px;
+      line-height: 1.22;
+      overflow-wrap: anywhere;
     }
+
+    p {
+      font-size: 14px;
+    }
+  }
+}
+
+@media (max-width: 360px) {
+  .container {
+    padding: 0 12px;
+  }
+
+  .tool-page {
+    padding-top: 16px;
+  }
+
+  .tool-page__header h1 {
+    font-size: 26px;
   }
 }
 

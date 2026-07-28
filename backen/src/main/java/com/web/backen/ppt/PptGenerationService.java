@@ -42,10 +42,14 @@ import java.util.stream.StreamSupport;
 public class PptGenerationService {
 
     private static final Logger log = LoggerFactory.getLogger(PptGenerationService.class);
+    private static final String AUTO_PROMPT = "请根据上传的资料自动提炼重点，判断合适的受众和叙事方式，生成一份结构清晰、视觉专业、可编辑的演示文稿。保留关键事实、数据和结论，必要时补充目录、图表解读、行动建议或下一步。";
     private static final Pattern JSON_IMAGE_OBJECT = Pattern.compile("\\{\\s*\"index\"\\s*:\\s*\\d+[\\s\\S]*?\\n\\s*\\}");
     private static final Pattern ARABIC_SLIDE_COUNT = Pattern.compile("(?:生成|做|制作|输出|整理|压缩|控制|限制)?\\s*(\\d{1,2})(?:\\s*[-~到至]\\s*(\\d{1,2}))?\\s*(?:页|張|张|slides?|PPT)", Pattern.CASE_INSENSITIVE);
     private static final Pattern CHINESE_SLIDE_COUNT = Pattern.compile("([一二两三四五六七八九十]{1,3})\\s*(?:页|張|张)");
     private static final Set<String> IMAGE_LAYOUTS = Set.of("full-image", "image-left", "image-right", "image-top", "evidence-strip");
+    private static final Set<String> SAFE_SLIDE_TYPES = Set.of(
+            "cover", "contents", "section", "content", "image", "conclusion", "thanks", "chapter");
+    private static final Pattern HEX_COLOR = Pattern.compile("#?[0-9A-Fa-f]{6}");
     private static final Set<String> DECORATIVE_SHAPE_TOKENS = Set.of("bg", "line", "shape");
     private static final Set<String> GENERIC_IMAGE_TERMS = Set.of(
             "paper", "image", "figure", "table", "chart", "other", "素材", "论文", "图片", "图", "表", "使用", "用途");
@@ -56,7 +60,7 @@ public class PptGenerationService {
             "方法", "路线", "模型", "结构", "架构", "流程", "结果", "结论", "数据", "实验", "评估", "对比", "性能",
             "特征", "算法", "系统", "训练", "数据集", "热力图", "管线", "基线", "时间线", "在线", "表格");
     private static final String SYSTEM_PROMPT = """
-            You are an expert presentation designer. Create a concise, editable presentation deck.
+            You are an expert presentation designer. Create a concise, editable presentation deck for any topic: business, product, project, teaching, training, marketing, research, or personal sharing.
             Return ONLY valid JSON. Do not wrap it in Markdown.
             JSON shape:
             {
@@ -84,30 +88,31 @@ public class PptGenerationService {
             - Use Simplified Chinese unless the user's prompt explicitly requests another language.
             - If targetSlideCount is provided, return exactly that many slides including cover and thanks. Compress and merge content to fit the requested count; never satisfy a page limit by only keeping the first chapters.
             - If targetSlideCount is empty, infer a natural length from the request and available material.
-            - For defenseMode=true, use a formal undergraduate/master thesis defense rhythm and, when targetSlideCount is empty, normally create about 22 slides.
-            - When the requested page count is small, preserve the complete story arc by merging adjacent details into denser synthesis slides: background, method, data/experiment, result, conclusion.
-            - Prefer short, academic, presentation-ready phrasing over paragraphs. Each content slide should have 3 to 6 bullets, each bullet 1 to 2 short lines.
-            - Do not copy long paper paragraphs. Extract, summarize, and structure the content for oral defense.
-            - Avoid marketing language, flashy tech-show styling, over-decoration, and animation-like wording.
-            - Preserve important technical terms, numbers, model names, datasets, and metrics.
-            - Do not invent specific metrics if the paper text does not contain them.
+            - For defenseMode=true, use a formal thesis defense rhythm and, when targetSlideCount is empty, normally create about 22 slides. For all other tasks, infer a natural story arc from the request and source material.
+            - When the requested page count is small, preserve the complete story arc by merging adjacent details into denser synthesis slides: context, audience need, approach, evidence, implications, and conclusion or next steps.
+            - Prefer short, audience-ready phrasing over paragraphs. Each content slide should have 3 to 6 bullets, each bullet 1 to 2 short lines.
+            - Do not copy long source paragraphs. Extract, summarize, and structure the material for a live presentation.
+            - Match the tone to the request: persuasive for a pitch, practical for training, clear for teaching, rigorous for research, and executive-friendly for a business report. Avoid generic filler and unsupported hype.
+            - Preserve important facts, numbers, names, definitions, product terms, metrics, dates, and decisions.
+            - Do not invent specific facts or metrics if the source material does not contain them. Clearly label recommendations or proposed next steps.
             - Use section as a semantic uppercase label such as BACKGROUND, ROUTE, DATA, FEATURES, MODELS, RESULT, SCALE, CONCLUSION, OUTLOOK. Do not use numeric labels like 1.1 or 2.3.
-            - Use the builtInTemplate palette as the single visual color source. Do not infer or invent another palette from uploaded PPTX text samples or paper images.
+            - Use the builtInTemplate palette as the single visual color source. Do not infer or invent another palette from uploaded PPTX text samples or source images.
             - If templateStyle.frameworkMode is true, follow templateStyle.templateFramework as the preferred slide rhythm and layout skeleton. Map cover/contents/section/content/image/conclusion/thanks slides onto the closest framework roles while replacing all original wording with the new deck content.
-            - If imageManifest is provided, choose relevant imageId values deliberately. For defenseMode, make most body slides visual: use extracted paper figures or request visualSpec for generated academic diagrams when no extracted image fits.
+            - If imageManifest is provided, choose relevant imageId values deliberately. Use extracted charts, screenshots, photos, diagrams, tables, or document pages when they directly support the slide. Request visualSpec for a clear editable diagram when no extracted image fits.
             - Never pair a slide with an image unless the slide title/headline directly matches that image's title, summary, or bestUse. If no image matches but a visual would improve the slide, leave imageId empty and provide visualSpec.
             - Do not assign image layouts when both imageId and visualSpec are empty. Use content, metrics, comparison, conclusion, or auto layout instead.
             - Ignore imageManifest items where useful is false or importance is below 3.
             - Use varied slide composition. Across adjacent content slides, alternate between text synthesis, metric-hero, comparison, matrix/timeline, image-top, image-left/right, evidence-strip, and full-image. Avoid using the same image placement more than twice in a row.
             - Use image-top for a wide chart/workflow with short interpretation bullets below; evidence-strip for multiple result/evidence slides that need an image plus compact takeaways; metric-hero when one number or metric is the slide's anchor; comparison/matrix/timeline for text-heavy synthesis.
-            - Use image/full-image layouts for technical routes, charts, tables, model/result figures, and important screenshots. Use text, metrics, comparison, matrix, timeline, metric-hero, or conclusion layouts for synthesis slides.
+            - Use image/full-image layouts for important charts, tables, product screenshots, workflows, architecture figures, and visual evidence. Use text, metrics, comparison, matrix, timeline, metric-hero, or conclusion layouts for synthesis slides.
             - Use layout image-left, image-right, image-top, evidence-strip, or full-image based on the chosen image's layoutHint and slide role. Prefer full-image for dense charts/tables/workflows/architecture, image-top/evidence-strip for wide evidence, and side image only when text needs equal weight.
-            - Use metrics when the paper contains strong numeric results; put the numeric values in metrics.
+            - Use metrics when the source material contains strong numeric evidence; put the numeric values in metrics.
             - Use section slides as chapter dividers and keep them visually sparse.
-            - When defenseMode=true, prefer the rhythm: cover, contents, section, background, significance, route, section, data, framework, model, section, experiment design, 4-6 result/comparison/ablation slides, section, conclusion, outlook, thanks.
+            - If revisionInstruction or existingDeck is provided, treat the previous deck as the editing baseline: preserve correct content and slide order where possible, then apply every requested change precisely.
+            - When defenseMode=true, prefer the rhythm: cover, contents, section, background, significance, route, section, data, framework, model, section, experiment design, 4-6 result/comparison/ablation slides, section, conclusion, outlook, thanks. For other topics, choose a topic-appropriate arc instead of forcing a research structure.
             """;
     private static final String VISION_PROMPT = """
-            You are helping build a thesis defense PPT. Inspect the attached paper images in order.
+            You are helping build a professional PPT for an arbitrary topic. Inspect the attached source-material images in order.
             Return compact JSON only:
             {
               "images": [
@@ -126,9 +131,9 @@ public class PptGenerationService {
             Rules:
             - Use the provided order number as index.
             - Keep every field short to avoid truncation.
-            - Be concrete: mention visible chart/table/workflow/model/result content.
-            - Prefer captioned figures, workflows, system architecture, network/model structure, experiment result charts, comparisons, visualizations, and clear tables.
-            - Mark useful=false for logos, decorative screenshots, blurred screenshots, blank/mostly text pages, repeated pages, tiny formulas, unreadable crops, or images that do not provide slide evidence.
+            - Be concrete: mention visible chart/table/workflow/product/screenshot/result content.
+            - Prefer charts, tables, workflows, architecture, product screenshots, photos, timelines, comparisons, visualizations, and clear document pages with a presentation purpose.
+            - Mark useful=false for logos, decorative assets, blurred screenshots, blank/mostly text pages, repeated pages, tiny formulas, unreadable crops, or images that do not provide useful slide evidence.
             - importance is 1 to 5, where 5 means highly useful for the deck.
             - layoutHint: full-image for dense charts/tables/workflows/architecture; image-top or evidence-strip for wide evidence/result images with short takeaways; image-left or image-right for simple figures that can sit beside text; none for useless images.
             """;
@@ -167,7 +172,7 @@ public class PptGenerationService {
                     {"slot_id": "s01_sh5", "text": "replacement text"}
                   ],
                   "image_edits": [
-                    {"image_id": "paper-figure-1", "region_id": "s03_img8", "caption": "why this image belongs here"}
+                    {"image_id": "source-image-1", "region_id": "s03_img8", "caption": "why this image belongs here"}
                   ],
                   "generated_visual": {"type":"workflow|architecture|comparison|matrix|timeline|chart","title":"optional generated visual title","items":["short labels"]},
                   "table_edits": [],
@@ -187,12 +192,13 @@ public class PptGenerationService {
             - Each slide should replace at most 4 text slots. Cover and contents slides may use up to 6 slots.
             - Replacement text must be concise: titles at most 34 Chinese characters, body slots at most 26 Chinese characters, labels at most 12 Chinese characters.
             - When imageManifest contains useful evidence, assign important figures/tables to image_edits on template slides with image_regions. Match image_id to the slide message; do not use decorative or low-importance images.
-            - Prefer image_regions with large geometry for charts, tables, workflows, and architecture figures. If no extracted image matches but the slide needs visuals, provide generated_visual so the backend can create a clean academic diagram.
-            - Preserve the complete story arc across the requested slide count. Do not keep only early paper sections.
+            - Prefer image_regions with large geometry for charts, tables, workflows, screenshots, and architecture figures. If no extracted image matches but the slide needs visuals, provide generated_visual so the backend can create a clean editable diagram.
+            - Preserve the complete story arc across the requested slide count. Do not keep only early source sections.
             - If targetSlideCount is provided, return exactly that many slides.
             - Use table_edits/chart_edits only for existing native tables/charts from slideLibrary.
             - Speaker notes must be prose, not bullet lists, and must not merely repeat slide text. Keep notes under 55 Chinese characters.
-            - All substantive claims must come from paperText, imageManifest, or the user request.
+            - All substantive claims must come from sourceText, imageManifest, or the user request.
+            - If revisionInstruction or existingDeck is provided, preserve the useful parts of the previous deck and apply the requested text/layout changes instead of restarting with generic filler.
             - Prefer valid complete JSON over exhaustive detail. Do not output extra keys.
             """;
     private static final String TEMPLATE_FILL_REPAIR_PROMPT = TEMPLATE_FILL_PROMPT + """
@@ -281,9 +287,12 @@ public class PptGenerationService {
     private final ObjectMapper objectMapper;
     private final QuotaService quotaService;
     private final ConcurrentHashMap<String, PptGenerationSession> sessions = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, String> idempotencyClaims = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
+    private final Set<Process> activeProcesses = ConcurrentHashMap.newKeySet();
     private final ThreadPoolExecutor executor;
     private final SecureRandom secureRandom = new SecureRandom();
+    private final PptxQualityGate qualityGate = new PptxQualityGate();
     private Path storageDir;
 
     private record ProcessResult(int exitCode, String output) {}
@@ -317,6 +326,7 @@ public class PptGenerationService {
         storageDir = Path.of(config.getStorageDir()).toAbsolutePath().normalize();
         Files.createDirectories(storageDir);
         loadRecentSessions();
+        reconcilePendingRefunds();
         cleanupHistory();
         log.info("PPT 生成队列已启动: workers=1, queueCapacity={}, maxHistory={}, storage={}",
                 config.getQueueCapacity(), config.getMaxHistory(), storageDir);
@@ -325,15 +335,118 @@ public class PptGenerationService {
     @PreDestroy
     public void shutdown() {
         executor.shutdownNow();
+        activeProcesses.forEach(this::terminateProcessTree);
+        activeProcesses.clear();
+        inputExtractor.shutdown();
     }
 
     public List<Map<String, Object>> templates() {
         return List.of(
-                Map.of("key", "academic-blue", "name", "学术蓝", "description", "正式、清爽，适合论文答辩", "palette", List.of("005BAC", "063A78", "D9A441", "EFF6FF", "1F2937")),
-                Map.of("key", "minimal-ink", "name", "极简黑白", "description", "高对比、少装饰，适合技术分享", "palette", List.of("111827", "374151", "0EA5E9", "F8FAFC", "1F2937")),
-                Map.of("key", "emerald-report", "name", "数据绿", "description", "沉稳、偏报告感，适合项目汇报", "palette", List.of("047857", "064E3B", "F59E0B", "ECFDF5", "1F2937")),
-                Map.of("key", "warm-defense", "name", "暖色答辩", "description", "温和醒目，适合毕业答辩", "palette", List.of("B45309", "7C2D12", "2563EB", "FFF7ED", "1F2937"))
+                template("academic-blue", "学术蓝", "清晰克制，适合研究、课程和正式汇报", List.of("005BAC", "063A78", "D9A441", "EFF6FF", "1F2937"), "Marp Core · default", "MIT", "https://github.com/marp-team/marp-core", "academic"),
+                template("minimal-ink", "极简黑白", "高对比、留白充足，适合技术分享和决策简报", List.of("111827", "374151", "0EA5E9", "F8FAFC", "1F2937"), "Marp Core · uncover", "MIT", "https://github.com/marp-team/marp-core", "minimal"),
+                template("emerald-report", "数据绿", "沉稳、偏报告感，适合项目复盘和经营数据", List.of("047857", "064E3B", "F59E0B", "ECFDF5", "1F2937"), "Marp Core · gaia", "MIT", "https://github.com/marp-team/marp-core", "report"),
+                template("warm-defense", "暖色演讲", "温和醒目，适合培训、主题分享和答辩", List.of("B45309", "7C2D12", "2563EB", "FFF7ED", "1F2937"), "Marp Core · gaia", "MIT", "https://github.com/marp-team/marp-core", "warm"),
+                template("gaia-editorial", "Gaia 编辑感", "杂志式标题和强章节节奏，适合品牌故事、趋势与案例", List.of("9A3412", "431407", "0F766E", "FFF7ED", "292524"), "Marp Core · gaia", "MIT", "https://github.com/marp-team/marp-core", "editorial"),
+                template("uncover-contrast", "Uncover 高对比", "大字号、强聚焦、演讲现场识别度高", List.of("0F172A", "020617", "F97316", "F8FAFC", "E2E8F0"), "Marp Core · uncover", "MIT", "https://github.com/marp-team/marp-core", "contrast"),
+                template("dracula-night", "Dracula 夜色", "深色科技感，适合开发者、AI、产品和发布会", List.of("BD93F9", "282A36", "50FA7B", "282A36", "F8F8F2"), "Dracula Marp", "MIT", "https://github.com/dracula/marp", "dark-tech"),
+                template("slidev-seriph", "Seriph 叙事", "优雅的衬线标题和细腻层次，适合长文档与知识分享", List.of("2563EB", "172554", "F59E0B", "F8FAFC", "334155"), "Slidev official theme", "MIT", "https://github.com/slidevjs/themes", "seriph"),
+                template("slidev-apple-basic", "Apple Basic", "黑白极简和大面积留白，适合产品发布和创意提案", List.of("111827", "000000", "3B82F6", "FFFFFF", "374151"), "Slidev official theme", "MIT", "https://github.com/slidevjs/themes", "apple-basic"),
+                template("startup-pitch", "Startup Pitch", "问题—方案—证据—行动，适合融资、产品和商业计划", List.of("7C3AED", "312E81", "F59E0B", "F5F3FF", "1F2937"), "Marp ecosystem", "MIT", "https://github.com/marp-team/awesome-marp", "pitch"),
+                template("product-launch", "Product Launch", "大图、指标和场景切换，适合产品发布与增长复盘", List.of("0E7490", "164E63", "F43F5E", "ECFEFF", "164E63"), "Marp ecosystem", "MIT", "https://github.com/marp-team/awesome-marp", "product"),
+                template("training-canvas", "Training Canvas", "清楚的模块化教学节奏，适合课程、培训和工作坊", List.of("2563EB", "1E3A8A", "F97316", "EFF6FF", "1E293B"), "Slidev", "MIT", "https://github.com/slidevjs/slidev", "training"),
+
+                // PPT Master: complex native-PPT-inspired editorial, data and grid families.
+                template("ppt-master-editorial", "Editorial Magazine", "杂志式图文叙事，适合品牌故事、案例和趋势洞察", List.of("C2410C", "431407", "F59E0B", "FFF7ED", "292524"), "PPT Master", "MIT", "https://github.com/hugohe3/ppt-master", "editorial", "editorial"),
+                template("ppt-master-memphis", "Memphis Pop", "几何图形、强色块和活泼节奏，适合活动、教育和创意提案", List.of("F43F5E", "312E81", "FACC15", "FFF1F2", "1E1B4B"), "PPT Master", "MIT", "https://github.com/hugohe3/ppt-master", "memphis", "editorial"),
+                template("ppt-master-data-journalism", "Data Journalism", "深色数据新闻风，适合经营分析、行业报告和复杂指标", List.of("38BDF8", "0F172A", "FBBF24", "111827", "E2E8F0"), "PPT Master", "MIT", "https://github.com/hugohe3/ppt-master", "data-journalism", "data"),
+                template("ppt-master-swiss-grid", "Swiss Grid", "严格网格、红色强调和咨询感结构，适合策略与方案汇报", List.of("DC2626", "111827", "FDE047", "F8FAFC", "1F2937"), "PPT Master", "MIT", "https://github.com/hugohe3/ppt-master", "swiss-grid", "data"),
+                template("ppt-master-glassmorphism", "Glassmorphism SaaS", "半透明层次、渐变深度和产品界面感，适合 SaaS 与 AI 产品", List.of("A78BFA", "111827", "22D3EE", "111827", "F8FAFC"), "PPT Master", "MIT", "https://github.com/hugohe3/ppt-master", "glass-saas", "product"),
+
+                // Presenton: product-oriented open-source theme families.
+                template("presenton-glass-saas", "Presenton Glass SaaS", "大图、渐变卡片和场景化产品页，适合商业发布与增长复盘", List.of("8B5CF6", "1E1B4B", "2DD4BF", "F5F3FF", "EDE9FE"), "Presenton", "Apache-2.0", "https://github.com/presenton/presenton", "glass-saas", "product"),
+                template("presenton-gradient-pitch", "Presenton Gradient Pitch", "高对比渐变和路演节奏，适合融资、商业计划和产品策略", List.of("F97316", "4C1D95", "FDE68A", "F5F3FF", "312E81"), "Presenton", "Apache-2.0", "https://github.com/presenton/presenton", "gradient-pitch", "product"),
+                template("presenton-product-studio", "Presenton Product Studio", "产品截图、指标和双栏证据页，适合产品方案和客户案例", List.of("06B6D4", "164E63", "FB7185", "ECFEFF", "164E63"), "Presenton", "Apache-2.0", "https://github.com/presenton/presenton", "product-studio", "product"),
+
+                // Primer: GitHub-style design-system family, included as a style reference pack.
+                template("primer-github-blueprint", "Primer Blueprint", "开源项目蓝图风，适合技术架构、开发者和项目路线图", List.of("0969DA", "1F2328", "54AEFF", "F6F8FA", "1F2328"), "GitHub Primer", "Design system", "https://primer.style/presentations/presentation-formats/powerpoint/", "primer", "corporate"),
+                template("primer-data-report", "Primer Data Report", "清晰的企业报告结构，适合季度经营、项目复盘和数据说明", List.of("8250DF", "24292F", "BF8700", "FFFFFF", "24292F"), "GitHub Primer", "Design system", "https://primer.style/presentations/presentation-formats/powerpoint/", "primer-report", "data"),
+                template("primer-open-source", "Primer Open Source", "社区与开源项目叙事，适合技术社区、产品生态和发布说明", List.of("1A7F37", "24292F", "9A6700", "F6F8FA", "24292F"), "GitHub Primer", "Design system", "https://primer.style/presentations/presentation-formats/powerpoint/", "primer-open-source", "corporate")
         );
+    }
+
+    private Map<String, Object> template(String key, String name, String description, List<String> palette,
+                                         String source, String license, String sourceUrl, String design) {
+        return template(key, name, description, palette, source, license, sourceUrl, design, categoryForDesign(design));
+    }
+
+    private Map<String, Object> template(String key, String name, String description, List<String> palette,
+                                         String source, String license, String sourceUrl, String design,
+                                         String category) {
+        String categoryLabel = switch (category) {
+            case "editorial" -> "杂志与创意";
+            case "data" -> "数据与咨询";
+            case "product" -> "产品与 SaaS";
+            case "corporate" -> "企业与开源";
+            case "training" -> "课程与培训";
+            default -> "基础风格";
+        };
+        return Map.ofEntries(
+                Map.entry("key", key),
+                Map.entry("name", name),
+                Map.entry("description", description),
+                Map.entry("palette", palette),
+                Map.entry("source", source),
+                Map.entry("license", license),
+                Map.entry("sourceUrl", sourceUrl),
+                Map.entry("design", design),
+                Map.entry("category", category),
+                Map.entry("categoryLabel", categoryLabel),
+                Map.entry("complexity", Set.of("editorial", "data", "product", "corporate").contains(category) ? "rich" : "standard"),
+                Map.entry("supports", List.of("text", "image", "metrics", "charts")),
+                Map.entry("recommendedFor", templateRecommendations(design)),
+                Map.entry("openSource", !"GitHub Primer".equals(source)),
+                Map.entry("usageNote", "GitHub Primer".equals(source)
+                        ? "Primer-inspired 风格参考，非官方模板；本项目未分发 Primer 模板文件"
+                        : "基于开源项目的风格与布局参考")
+        );
+    }
+
+    private String categoryForDesign(String design) {
+        return switch (design) {
+            case "editorial", "memphis" -> "editorial";
+            case "report", "data-journalism", "swiss-grid", "primer-report" -> "data";
+            case "product", "pitch", "glass-saas", "gradient-pitch", "product-studio", "apple-basic" -> "product";
+            case "training" -> "training";
+            case "primer", "primer-open-source" -> "corporate";
+            default -> "core";
+        };
+    }
+
+    private List<String> templateRecommendations(String design) {
+        return switch (design) {
+            case "academic" -> List.of("研究汇报", "课程", "正式报告");
+            case "minimal" -> List.of("技术分享", "决策简报", "架构说明");
+            case "report" -> List.of("经营数据", "项目复盘", "季度报告");
+            case "warm" -> List.of("培训", "答辩", "主题演讲");
+            case "editorial" -> List.of("品牌故事", "趋势洞察", "案例研究");
+            case "contrast" -> List.of("演讲", "发布会", "大会分享");
+            case "dark-tech" -> List.of("AI", "开发者", "产品发布");
+            case "seriph" -> List.of("知识分享", "长文档", "读书会");
+            case "apple-basic" -> List.of("产品提案", "创意方案", "发布会");
+            case "pitch" -> List.of("融资路演", "商业计划", "产品策略");
+            case "product" -> List.of("产品发布", "增长复盘", "客户案例");
+            case "training" -> List.of("课程", "工作坊", "企业培训");
+            case "data-journalism" -> List.of("经营分析", "行业报告", "数据新闻");
+            case "swiss-grid" -> List.of("战略咨询", "方案汇报", "复杂结构");
+            case "glass-saas" -> List.of("SaaS", "AI 产品", "产品发布");
+            case "memphis" -> List.of("创意提案", "活动", "教育内容");
+            case "gradient-pitch" -> List.of("融资路演", "商业计划", "产品策略");
+            case "product-studio" -> List.of("产品方案", "客户案例", "增长复盘");
+            case "primer" -> List.of("技术架构", "开源项目", "路线图");
+            case "primer-report" -> List.of("季度报告", "项目复盘", "经营数据");
+            case "primer-open-source" -> List.of("技术社区", "产品生态", "开源发布");
+            default -> List.of("通用汇报");
+        };
     }
 
     public PptGenerationSession createTask(String prompt, String templateKey, int extractionPercent,
@@ -343,25 +456,73 @@ public class PptGenerationService {
 
     public PptGenerationSession createTask(String prompt, String templateKey, int extractionPercent,
                                            MultipartFile templateFile, MultipartFile paperFile, AuthUser user) throws IOException {
+        return createTask(prompt, templateKey, extractionPercent, templateFile, paperFile, user, null);
+    }
+
+    public PptGenerationSession createTask(String prompt, String templateKey, int extractionPercent,
+                                           MultipartFile templateFile, MultipartFile paperFile, AuthUser user,
+                                           String clientRequestId) throws IOException {
+        return createTask(prompt, templateKey, extractionPercent, templateFile, paperFile, user, clientRequestId, "pptx");
+    }
+
+    public PptGenerationSession createTask(String prompt, String templateKey, int extractionPercent,
+                                           MultipartFile templateFile, MultipartFile paperFile, AuthUser user,
+                                           String clientRequestId, String outputFormat) throws IOException {
         String cleanPrompt = validatePrompt(prompt);
+        if (cleanPrompt.isBlank() && (paperFile == null || paperFile.isEmpty())) {
+            throw new IllegalArgumentException("请输入提示词，或上传一份资料");
+        }
+        if (cleanPrompt.isBlank()) cleanPrompt = AUTO_PROMPT;
+        String normalizedRequestId = normalizeClientRequestId(clientRequestId);
+        String claimKey = null;
+        if (user != null && !normalizedRequestId.isBlank()) {
+            claimKey = user.id() + ":" + normalizedRequestId;
+            String claimedTaskId = idempotencyClaims.get(claimKey);
+            PptGenerationSession claimedSession = claimedTaskId == null || "__creating__".equals(claimedTaskId)
+                    ? null : sessions.get(claimedTaskId);
+            if (claimedSession != null && !"error".equals(claimedSession.getStatus())) return claimedSession;
+            if (claimedSession != null && claimedSession.isRefundPending()) {
+                throw new IllegalStateException("上一次任务正在补偿额度，请稍后再试");
+            }
+            if (claimedTaskId != null && !"__creating__".equals(claimedTaskId)) {
+                idempotencyClaims.remove(claimKey, claimedTaskId);
+            }
+            PptGenerationSession existing = findIdempotentTask(user.id(), normalizedRequestId);
+            if (existing != null) return existing;
+            if (idempotencyClaims.putIfAbsent(claimKey, "__creating__") != null) {
+                throw new IllegalStateException("任务正在创建，请稍后再试");
+            }
+        }
         String taskId = UUID.randomUUID().toString().substring(0, 8);
         Path taskDir = Files.createDirectories(storageDir.resolve(taskId));
         PptGenerationSession session = new PptGenerationSession(taskId, cleanPrompt, taskDir);
         if (user != null) session.setUserId(user.id());
+        session.setClientRequestId(normalizedRequestId.isBlank() ? null : normalizedRequestId);
         session.setAccessToken(newAccessToken());
         session.setTemplateKey(normalizeTemplateKey(templateKey));
-        session.setExtractionPercent(clamp(extractionPercent, 10, 100));
+        session.setOutputFormat(normalizeOutputFormat(outputFormat));
+        // Extraction is automatic. Keep the legacy field at 100 for old task metadata compatibility.
+        session.setExtractionPercent(100);
 
         try {
             if (templateFile != null && !templateFile.isEmpty()) {
                 validateFile(templateFile, ".pptx", config.getMaxTemplateBytes(), "PPT 模板");
                 session.setTemplateFileName(templateFile.getOriginalFilename());
                 copyUpload(templateFile, session.getTemplatePath());
+                PptArchiveGuard.validate(session.getTemplatePath(), config.getMaxArchiveEntries(),
+                        config.getMaxArchiveUncompressedBytes(), config.getMaxArchiveEntryBytes(),
+                        config.getMaxArchiveCompressionRatio());
             }
             if (paperFile != null && !paperFile.isEmpty()) {
-                validatePaperFile(paperFile);
+                validateSourceFile(paperFile);
                 session.setPaperFileName(paperFile.getOriginalFilename());
                 copyUpload(paperFile, session.getPaperPath());
+                String sourceName = session.getPaperFileName().toLowerCase(Locale.ROOT);
+                if (sourceName.endsWith(".docx") || sourceName.endsWith(".pptx") || sourceName.endsWith(".xlsx")) {
+                    PptArchiveGuard.validate(session.getPaperPath(), config.getMaxArchiveEntries(),
+                            config.getMaxArchiveUncompressedBytes(), config.getMaxArchiveEntryBytes(),
+                            config.getMaxArchiveCompressionRatio());
+                }
             }
             if (user != null && quotaService != null && !user.isRoot()) {
                 int cost = quotaService.pptCreditPerTask();
@@ -370,28 +531,333 @@ public class PptGenerationService {
                 session.setCreditTransactionId(tx);
                 session.setCreditRefunded(false);
             }
-            session.setOutputFileName("AI生成PPT-" + taskId + ".pptx");
+            session.setOutputFileName(outputFileName(session));
             session.setStatus("queued");
             session.setProgressStage("queued");
             sessions.put(taskId, session);
+            if (claimKey != null) idempotencyClaims.put(claimKey, taskId);
             saveMetadata(session);
             executor.execute(() -> runGenerationTask(session));
             updateQueuePositions();
             emit(session, "queued", Map.of("message", "任务已进入 PPT 生成队列", "queuePosition", session.getQueuePosition()));
             return session;
         } catch (RejectedExecutionException e) {
-            refundIfNeeded(session, "PPT 队列已满自动退回额度");
-            sessions.remove(taskId);
-            deleteRecursively(taskDir);
+            boolean keepForRefund = persistCreationFailure(session, e, "PPT 队列已满自动退回额度");
+            if (!keepForRefund) sessions.remove(taskId);
+            if (claimKey != null) {
+                if (keepForRefund) idempotencyClaims.put(claimKey, taskId);
+                else {
+                    idempotencyClaims.remove(claimKey, taskId);
+                    idempotencyClaims.remove(claimKey, "__creating__");
+                }
+            }
+            if (!keepForRefund) deleteRecursively(taskDir);
             throw new IllegalStateException("PPT 生成队列已满，请稍后再试");
         } catch (Exception e) {
-            refundIfNeeded(session, "PPT 任务创建失败自动退回额度");
-            sessions.remove(taskId);
-            deleteRecursively(taskDir);
+            boolean keepForRefund = persistCreationFailure(session, e, "PPT 任务创建失败自动退回额度");
+            if (!keepForRefund) sessions.remove(taskId);
+            if (claimKey != null) {
+                if (keepForRefund) idempotencyClaims.put(claimKey, taskId);
+                else {
+                    idempotencyClaims.remove(claimKey, taskId);
+                    idempotencyClaims.remove(claimKey, "__creating__");
+                }
+            }
+            if (!keepForRefund) deleteRecursively(taskDir);
             if (e instanceof IOException io) throw io;
             if (e instanceof RuntimeException re) throw re;
             throw new IllegalStateException(e.getMessage(), e);
         }
+    }
+
+    /**
+     * Create a new generation task from a completed deck. The original source/template/assets stay
+     * immutable; the new task receives the revision request and the previous deck/plan as context.
+     */
+    public PptGenerationSession createRevisionTask(PptGenerationSession original, String revisionPrompt,
+                                                   List<Map<String, Object>> slideEdits, AuthUser user,
+                                                   String clientRequestId) throws IOException {
+        if (original == null || !"completed".equals(original.getStatus())) {
+            throw new IllegalArgumentException("只有已生成完成的 PPT 才能二次修改");
+        }
+        if (user == null || (!user.isRoot() && original.getUserId() != user.id())) {
+            throw new IllegalArgumentException("无权修改该 PPT 任务");
+        }
+        String cleanRevision = validateRevisionPrompt(revisionPrompt);
+        String editInstruction = formatSlideEdits(slideEdits);
+        if (cleanRevision.isBlank() && editInstruction.isBlank()) {
+            throw new IllegalArgumentException("请输入二次修改要求，或编辑至少一页内容");
+        }
+        String revisionInstruction = String.join("\n\n", Stream.of(cleanRevision, editInstruction)
+                .filter(value -> value != null && !value.isBlank()).toList());
+        String basePrompt = original.getPrompt() == null ? "" : original.getPrompt();
+        String combinedPrompt = validatePrompt(trimForPrompt(basePrompt, 4200)
+                + "\n\n【二次修改要求】\n" + trimForPrompt(revisionInstruction, 3600));
+        String normalizedRequestId = normalizeClientRequestId(clientRequestId);
+        String claimKey = null;
+        if (user != null && !normalizedRequestId.isBlank()) {
+            claimKey = user.id() + ":" + normalizedRequestId;
+            PptGenerationSession existing = findIdempotentTask(user.id(), normalizedRequestId);
+            if (existing != null) return existing;
+            String claimedTaskId = idempotencyClaims.get(claimKey);
+            PptGenerationSession claimedSession = claimedTaskId == null || "__creating__".equals(claimedTaskId)
+                    ? null : sessions.get(claimedTaskId);
+            if (claimedSession != null && claimedSession.isRefundPending()) {
+                throw new IllegalStateException("上一次任务正在补偿额度，请稍后再试");
+            }
+            if (idempotencyClaims.putIfAbsent(claimKey, "__creating__") != null) {
+                throw new IllegalStateException("任务正在创建，请稍后再试");
+            }
+        }
+
+        String taskId = UUID.randomUUID().toString().substring(0, 8);
+        Path taskDir = Files.createDirectories(storageDir.resolve(taskId));
+        PptGenerationSession session = new PptGenerationSession(taskId, combinedPrompt, taskDir);
+        session.setUserId(user.id());
+        session.setClientRequestId(normalizedRequestId.isBlank() ? null : normalizedRequestId);
+        session.setAccessToken(newAccessToken());
+        session.setTemplateKey(normalizeTemplateKey(original.getTemplateKey()));
+        session.setOutputFormat(normalizeOutputFormat(original.getOutputFormat()));
+        session.setTemplateFileName(original.getTemplateFileName());
+        session.setPaperFileName(original.getPaperFileName());
+        session.setRevisionOfTaskId(original.getTaskId());
+        session.setRevisionPrompt(revisionInstruction);
+        session.setExtractionPercent(100);
+
+        try {
+            if (hasTemplate(original)) {
+                Files.copy(original.getTemplatePath(), session.getTemplatePath(), StandardCopyOption.REPLACE_EXISTING);
+                PptArchiveGuard.validate(session.getTemplatePath(), config.getMaxArchiveEntries(),
+                        config.getMaxArchiveUncompressedBytes(), config.getMaxArchiveEntryBytes(),
+                        config.getMaxArchiveCompressionRatio());
+            }
+            if (hasPaper(original)) {
+                Files.copy(original.getPaperPath(), session.getPaperPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+            copyDirectoryContents(original.getImagesDir(), session.getImagesDir());
+            copyOptional(original.getDeckJsonPath(), taskDir.resolve("revision-base-deck.json"));
+            copyOptional(original.getTaskDir().resolve("fill-plan.json"), taskDir.resolve("revision-base-fill-plan.json"));
+            copyOptional(original.getStyleJsonPath(), taskDir.resolve("revision-base-style.json"));
+            copyOptional(original.getImageManifestPath(), taskDir.resolve("revision-base-image-manifest.json"));
+            if (quotaService != null && !user.isRoot()) {
+                int cost = quotaService.pptCreditPerTask();
+                long tx = quotaService.spend(user.id(), cost, "PPT_REVISION", taskId, "PPT 二次修改");
+                session.setCreditCost(cost);
+                session.setCreditTransactionId(tx);
+                session.setCreditRefunded(false);
+            }
+            session.setOutputFileName(outputFileName(session));
+            session.setStatus("queued");
+            session.setProgressStage("queued");
+            sessions.put(taskId, session);
+            if (claimKey != null) idempotencyClaims.put(claimKey, taskId);
+            saveMetadata(session);
+            executor.execute(() -> runGenerationTask(session));
+            updateQueuePositions();
+            emit(session, "queued", Map.of("message", "二次修改任务已进入 PPT 生成队列", "queuePosition", session.getQueuePosition()));
+            return session;
+        } catch (RejectedExecutionException e) {
+            boolean keepForRefund = persistCreationFailure(session, e, "PPT 二次修改队列已满自动退回额度");
+            if (!keepForRefund) sessions.remove(taskId);
+            if (claimKey != null) {
+                if (keepForRefund) idempotencyClaims.put(claimKey, taskId);
+                else {
+                    idempotencyClaims.remove(claimKey, taskId);
+                    idempotencyClaims.remove(claimKey, "__creating__");
+                }
+            }
+            if (!keepForRefund) deleteRecursively(taskDir);
+            throw new IllegalStateException("PPT 生成队列已满，请稍后再试");
+        } catch (Exception e) {
+            boolean keepForRefund = persistCreationFailure(session, e, "PPT 二次修改创建失败自动退回额度");
+            if (!keepForRefund) sessions.remove(taskId);
+            if (claimKey != null) {
+                if (keepForRefund) idempotencyClaims.put(claimKey, taskId);
+                else {
+                    idempotencyClaims.remove(claimKey, taskId);
+                    idempotencyClaims.remove(claimKey, "__creating__");
+                }
+            }
+            if (!keepForRefund) deleteRecursively(taskDir);
+            if (e instanceof IOException io) throw io;
+            if (e instanceof RuntimeException re) throw re;
+            throw new IllegalStateException(e.getMessage(), e);
+        }
+    }
+
+    public Map<String, Object> preview(PptGenerationSession session) throws IOException {
+        if (session == null || !"completed".equals(session.getStatus())) {
+            throw new IllegalArgumentException("PPT 尚未生成完成，暂时无法预览");
+        }
+        Path previewPath = session.getPreviewPath();
+        if (Files.isRegularFile(previewPath)) {
+            try {
+                return objectMapper.readValue(previewPath.toFile(), Map.class);
+            } catch (Exception ignored) {
+                // Rebuild a stale/partially written preview below.
+            }
+        }
+        Map<String, Object> preview = buildPreview(session);
+        objectMapper.writerWithDefaultPrettyPrinter().writeValue(previewPath.toFile(), preview);
+        return preview;
+    }
+
+    private void renderHtmlOutput(PptGenerationSession session, Map<String, Object> preview) throws IOException {
+        new PptHtmlRenderer(objectMapper).render(session.getHtmlOutputPath(), preview, session.getImagesDir());
+        if (!Files.isRegularFile(session.getHtmlOutputPath()) || Files.size(session.getHtmlOutputPath()) < 256) {
+            throw new IllegalStateException("HTML 输出文件不存在");
+        }
+        String html = Files.readString(session.getHtmlOutputPath(), StandardCharsets.UTF_8);
+        if (!html.contains("<!doctype html>") || !html.contains("id=\"ppt-data\"")
+                || !html.contains("id=\"deck\"") || !html.contains("<script>")) {
+            throw new IllegalStateException("HTML 输出结构不完整");
+        }
+    }
+
+    public Path previewImage(PptGenerationSession session, String fileName) {
+        if (session == null || !"completed".equals(session.getStatus())) {
+            throw new IllegalArgumentException("PPT 尚未生成完成");
+        }
+        String safeName = fileName == null ? "" : fileName.trim();
+        if (safeName.isBlank() || safeName.contains("/") || safeName.contains("\\") || !safeName.equals(Path.of(safeName).getFileName().toString())) {
+            throw new IllegalArgumentException("预览素材不存在");
+        }
+        Path imagesDir = session.getImagesDir().toAbsolutePath().normalize();
+        Path image = imagesDir.resolve(safeName).normalize();
+        if (!image.startsWith(imagesDir) || !Files.isRegularFile(image)) {
+            throw new IllegalArgumentException("预览素材不存在");
+        }
+        return image;
+    }
+
+    private Map<String, Object> buildPreview(PptGenerationSession session) throws IOException {
+        JsonNode style = Files.isRegularFile(session.getStyleJsonPath())
+                ? objectMapper.readTree(session.getStyleJsonPath().toFile()) : objectMapper.createObjectNode();
+        JsonNode manifest = Files.isRegularFile(session.getImageManifestPath())
+                ? objectMapper.readTree(session.getImageManifestPath().toFile()) : objectMapper.createObjectNode();
+        JsonNode deck = Files.isRegularFile(session.getDeckJsonPath())
+                ? objectMapper.readTree(session.getDeckJsonPath().toFile()) : null;
+        List<Map<String, Object>> slides = new ArrayList<>();
+        String source = "deck";
+        if (deck != null && deck.path("slides").isArray()) {
+            for (JsonNode slide : deck.path("slides")) slides.add(previewSlide(slide, manifest));
+        } else {
+            source = "template-plan";
+            Path planPath = session.getTaskDir().resolve("fill-plan.json");
+            JsonNode plan = Files.isRegularFile(planPath) ? objectMapper.readTree(planPath.toFile()) : null;
+            if (plan != null && plan.path("slides").isArray()) {
+                for (JsonNode slide : plan.path("slides")) slides.add(previewTemplateSlide(slide, manifest));
+            }
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("taskId", session.getTaskId());
+        result.put("source", source);
+        result.put("title", deck == null ? "AI 生成 PPT" : textOr(deck, "title", "AI 生成 PPT"));
+        result.put("theme", deck == null ? textOr(style, "builtInTemplateName", "专业演示") : textOr(deck, "theme", "专业演示"));
+        result.put("palette", safePalette(style.path("palette")));
+        result.put("templateKey", session.getTemplateKey());
+        result.put("outputFormat", session.getOutputFormat());
+        result.put("templateDesign", textOr(style, "builtInTemplateDesign", "academic"));
+        result.put("templateName", textOr(style, "builtInTemplateName", session.getTemplateFileName() == null ? "" : session.getTemplateFileName()));
+        result.put("templateSource", textOr(style, "builtInTemplateSource", ""));
+        result.put("templateLicense", textOr(style, "builtInTemplateLicense", ""));
+        result.put("templateUrl", textOr(style, "builtInTemplateUrl", ""));
+        String previewRoute = textOr(style, "templateRoute", hasTemplate(session) ? "template-fill" : "framework");
+        result.put("templateRoute", previewRoute);
+        result.put("previewFidelity", Set.of("template-fill", "native-fill").contains(previewRoute.toLowerCase(Locale.ROOT))
+                ? "approximate-native-template" : "renderer-preview");
+        result.put("slides", slides);
+        return result;
+    }
+
+    private Map<String, Object> previewSlide(JsonNode slide, JsonNode manifest) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("type", safeSlideType(textOr(slide, "type", "content")));
+        result.put("section", textOr(slide, "section", ""));
+        result.put("title", textOr(slide, "title", "未命名页面"));
+        result.put("headline", textOr(slide, "headline", ""));
+        result.put("bullets", compactStringList(slide.path("bullets"), 6, 100));
+        result.put("metrics", compactMetrics(slide.path("metrics")));
+        result.put("layout", textOr(slide, "layout", "auto"));
+        String imageId = textOr(slide, "imageId", "");
+        result.put("imageId", imageId);
+        result.put("imageFile", imageFileForId(manifest, imageId));
+        return result;
+    }
+
+    private Map<String, Object> previewTemplateSlide(JsonNode slide, JsonNode manifest) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        String purpose = textOr(slide, "purpose", "content");
+        result.put("type", safeSlideType(purpose));
+        result.put("section", purpose.toUpperCase(Locale.ROOT));
+        List<String> replacements = new ArrayList<>();
+        JsonNode replacementNode = slide.path("replacements");
+        if (replacementNode.isArray()) {
+            replacementNode.forEach(item -> {
+                String text = textOr(item, "text", "");
+                if (!text.isBlank()) replacements.add(text);
+            });
+        }
+        String title = replacements.isEmpty() ? "模板页面" : replacements.get(0);
+        List<String> bullets = replacements.size() <= 1 ? List.of() : replacements.subList(1, Math.min(replacements.size(), 7));
+        result.put("title", title);
+        result.put("headline", textOr(slide, "layoutReason", ""));
+        result.put("bullets", bullets);
+        result.put("metrics", List.of());
+        result.put("layout", "auto");
+        JsonNode edits = slide.path("image_edits");
+        String imageId = edits.isArray() && edits.size() > 0 ? textOr(edits.get(0), "image_id", "") : "";
+        result.put("imageId", imageId);
+        result.put("imageFile", imageFileForId(manifest, imageId));
+        return result;
+    }
+
+    private List<String> compactStringList(JsonNode node, int maxItems, int maxChars) {
+        if (node == null || !node.isArray()) return List.of();
+        List<String> values = new ArrayList<>();
+        for (JsonNode item : node) {
+            String value = item.asText("").trim();
+            if (!value.isBlank()) values.add(trimForPrompt(value, maxChars));
+            if (values.size() >= maxItems) break;
+        }
+        return values;
+    }
+
+    private List<Map<String, Object>> compactMetrics(JsonNode node) {
+        if (node == null || !node.isArray()) return List.of();
+        List<Map<String, Object>> values = new ArrayList<>();
+        for (JsonNode item : node) {
+            if (!item.isObject()) continue;
+            values.add(Map.of("value", trimForPrompt(textOr(item, "value", ""), 24),
+                    "label", trimForPrompt(textOr(item, "label", ""), 30)));
+            if (values.size() >= 3) break;
+        }
+        return values;
+    }
+
+    private String safeSlideType(String value) {
+        String normalized = value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
+        return SAFE_SLIDE_TYPES.contains(normalized) ? normalized : "content";
+    }
+
+    private List<String> safePalette(JsonNode node) {
+        List<String> fallback = List.of("005BAC", "063A78", "D9A441", "EFF6FF", "1F2937");
+        if (node == null || !node.isArray()) return fallback;
+        List<String> result = new ArrayList<>();
+        for (int index = 0; index < fallback.size(); index++) {
+            String candidate = index < node.size() ? node.get(index).asText("").trim() : "";
+            result.add(HEX_COLOR.matcher(candidate).matches()
+                    ? candidate.replace("#", "") : fallback.get(index));
+        }
+        return result;
+    }
+
+    private String imageFileForId(JsonNode manifest, String imageId) {
+        if (imageId == null || imageId.isBlank() || manifest == null || !manifest.path("images").isArray()) return "";
+        for (JsonNode image : manifest.path("images")) {
+            if (imageId.equals(image.path("id").asText(""))) return image.path("filename").asText("");
+        }
+        return "";
     }
 
     PptGenerationSession getSession(String taskId) {
@@ -479,7 +945,7 @@ public class PptGenerationService {
     private void runGenerationTask(PptGenerationSession session) {
         session.setStatus("generating");
         session.setQueuePosition(0);
-        saveAndProgress(session, 8, "extracting", "正在读取论文和模板");
+        saveAndProgress(session, 8, "extracting", "正在读取资料和模板");
         updateQueuePositions();
 
         try {
@@ -491,17 +957,20 @@ public class PptGenerationService {
                     hasPaper(session) ? session.getPaperPath() : null,
                     session.getPaperFileName(),
                     session.getImagesDir(),
-                    session.getExtractionPercent(),
+                    100,
                     imageBudget,
                     minCandidateImages);
             inputExtractor.extractTemplateStyle(hasTemplate(session) ? session.getTemplatePath() : null,
-                    session.getTaskDir(), session.getExtractionPercent());
+                    session.getTaskDir(), 100);
             applyBuiltInTemplateStyle(session);
             List<String> imagePaths = new ArrayList<>(inputExtractor.listImagePaths(session.getImagesDir()));
             JsonNode imageManifest = buildImageManifest(session, imagePaths);
 
-            if (hasTemplate(session)) {
-                log.info("PPT 生成使用上传模板原生填充链路: taskId={}, template={}, paper={}",
+            String templateRoute = readStyleField(session, "templateRoute", "");
+            boolean useNativeTemplate = hasTemplate(session)
+                    && (templateRoute.isBlank() || Set.of("template-fill", "native-fill").contains(templateRoute.toLowerCase(Locale.ROOT)));
+            if (useNativeTemplate) {
+                log.info("PPT 生成使用上传模板原生填充链路: taskId={}, template={}, source={}",
                         session.getTaskId(), session.getTemplateFileName(), session.getPaperFileName());
                 saveAndProgress(session, 28, "template_analyzing", "正在分析上传 PPT 模板槽位");
                 JsonNode slideLibrary = analyzeTemplateLibrary(session);
@@ -523,8 +992,12 @@ public class PptGenerationService {
                 writeTemplateImageFillReport(session, fillPlan, imageManifest, slideLibrary);
                 saveAndProgress(session, 76, "rendering", "正在原生填充 PPT 模板");
                 runTemplateFillApply(session, fillPlan, imagePaths);
+                int removedParts = PptxPackageCleaner.clean(session.getPptxOutputPath());
+                if (removedParts > 0) {
+                    log.info("PPT 模板输出清理未引用资源: taskId={}, removedParts={}", session.getTaskId(), removedParts);
+                }
             } else {
-                log.info("PPT 生成使用自由 python renderer 链路: taskId={}, paper={}",
+                log.info("PPT 生成使用自由 python renderer 链路: taskId={}, source={}",
                         session.getTaskId(), session.getPaperFileName());
                 saveAndProgress(session, 36, "planning", "正在调用 mimo 规划 PPT 内容");
                 String deckJson = buildDeckJson(session, paperText, imageManifest);
@@ -542,6 +1015,26 @@ public class PptGenerationService {
                 runPythonRenderer(session, imagePaths);
             }
 
+            // Never expose a partially written or structurally broken package as a completed result.
+            qualityGate.validate(session.getPptxOutputPath(), targetSlideCount.orElse(null));
+            Files.writeString(session.getTaskDir().resolve("quality-report.json"),
+                    objectMapper.createObjectNode()
+                            .put("valid", true)
+                            .put("expectedSlideCount", targetSlideCount.orElse(-1))
+                            .put("checkedAt", System.currentTimeMillis())
+                            .toString(), StandardCharsets.UTF_8);
+            try {
+                Map<String, Object> preview = buildPreview(session);
+                objectMapper.writerWithDefaultPrettyPrinter().writeValue(session.getPreviewPath().toFile(), preview);
+                if ("html".equalsIgnoreCase(session.getOutputFormat())) {
+                    renderHtmlOutput(session, preview);
+                }
+            } catch (Exception previewError) {
+                if ("html".equalsIgnoreCase(session.getOutputFormat())) {
+                    throw new IllegalStateException("HTML 输出生成失败: " + previewError.getMessage(), previewError);
+                }
+                log.warn("PPT 网页预览数据生成失败，仍保留可下载 PPTX: taskId={}", session.getTaskId(), previewError);
+            }
             session.setStatus("completed");
             session.setProgress(100);
             session.setProgressStage("completed");
@@ -557,13 +1050,13 @@ public class PptGenerationService {
         }
     }
 
-    private String buildDeckJson(PptGenerationSession session, String paperText, JsonNode imageManifest) throws IOException {
+    private String buildDeckJson(PptGenerationSession session, String sourceText, JsonNode imageManifest) throws IOException {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("userPrompt", session.getPrompt());
-        payload.put("paperFileName", session.getPaperFileName() == null ? "" : session.getPaperFileName());
-        payload.put("paperText", paperText == null ? "" : paperText);
+        payload.put("sourceFileName", session.getPaperFileName() == null ? "" : session.getPaperFileName());
+        payload.put("sourceText", sourceText == null ? "" : sourceText);
         payload.put("templateFileName", session.getTemplateFileName() == null ? "" : session.getTemplateFileName());
-        payload.put("extractionPercent", session.getExtractionPercent());
+        payload.put("outputFormat", session.getOutputFormat());
         payload.put("templateStyle", objectMapper.readValue(session.getStyleJsonPath().toFile(), Map.class));
         payload.put("templateFit", readStyleField(session, "templateFit", "weak"));
         payload.put("templateRoute", readStyleField(session, "templateRoute", "framework"));
@@ -574,6 +1067,7 @@ public class PptGenerationService {
         payload.put("slideCountPolicy", slideCountPolicy(session, targetSlideCount));
         payload.put("visualPolicy", visualPolicy(session));
         payload.put("imageManifest", imageManifest == null || imageManifest.isNull() ? Map.of("images", List.of()) : imageManifest);
+        addRevisionContext(payload, session, "deck");
         String payloadJson = objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(payload);
         int maxTokens = deckMaxTokens(targetSlideCount);
         String response = llmService.complete(deckSystemPrompt(session), payloadJson, maxTokens);
@@ -598,10 +1092,24 @@ public class PptGenerationService {
         root = repairSlideCountIfNeeded(payload, root, targetSlideCount);
         root = ensureImageAssignments(root, imageManifest);
         root = attachTemplateMetadata(session, root, imageManifest);
+        validateDeck(root);
         if (!root.hasNonNull("slides") || !root.get("slides").isArray() || root.get("slides").isEmpty()) {
             throw new IllegalStateException("mimo 返回的 PPT 结构缺少 slides");
         }
         return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(root);
+    }
+
+    private void addRevisionContext(Map<String, Object> payload, PptGenerationSession session, String kind) {
+        if (session == null || session.getRevisionPrompt() == null || session.getRevisionPrompt().isBlank()) return;
+        payload.put("revisionInstruction", trimForPrompt(session.getRevisionPrompt(), 3600));
+        String fileName = "deck".equals(kind) ? "revision-base-deck.json" : "revision-base-fill-plan.json";
+        Path base = session.getTaskDir().resolve(fileName);
+        if (!Files.isRegularFile(base)) return;
+        try {
+            payload.put("existingDeck", objectMapper.readTree(base.toFile()));
+        } catch (IOException e) {
+            log.warn("读取 PPT 二次修改基线失败: taskId={}, file={}", session.getTaskId(), base, e);
+        }
     }
 
     private JsonNode repairSlideCountIfNeeded(Map<String, Object> originalPayload, JsonNode deck, Optional<Integer> targetSlideCount) throws IOException {
@@ -615,7 +1123,7 @@ public class PptGenerationService {
         repairPayload.put("requiredSlideCount", requiredCount);
         repairPayload.put("previousSlideCount", currentCount);
         repairPayload.put("currentDeck", deck);
-        repairPayload.put("repairInstruction", "Revise currentDeck to exactly requiredSlideCount slides. Merge, compress, or expand across the whole paper; do not truncate early sections.");
+        repairPayload.put("repairInstruction", "Revise currentDeck to exactly requiredSlideCount slides. Merge, compress, or expand across the whole source material; do not truncate early sections.");
         String response = llmService.complete(slideCountRepairPrompt(),
                 objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(repairPayload),
                 deckMaxTokens(targetSlideCount));
@@ -701,21 +1209,22 @@ public class PptGenerationService {
         return objectMapper.readTree(libraryPath.toFile());
     }
 
-    private JsonNode buildTemplateFillPlan(PptGenerationSession session, String paperText,
+    private JsonNode buildTemplateFillPlan(PptGenerationSession session, String sourceText,
                                            JsonNode imageManifest, JsonNode slideLibrary) throws IOException {
         Optional<Integer> targetSlideCount = effectiveTargetSlideCount(session);
         if (targetSlideCount.isPresent() && targetSlideCount.get() > 8) {
-            return buildTemplateFillPlanBatched(session, paperText, imageManifest, slideLibrary, targetSlideCount.get());
+            return buildTemplateFillPlanBatched(session, sourceText, imageManifest, slideLibrary, targetSlideCount.get());
         }
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("userPrompt", session.getPrompt());
-        payload.put("paperFileName", session.getPaperFileName() == null ? "" : session.getPaperFileName());
-        payload.put("paperText", paperText == null ? "" : paperText);
+        payload.put("sourceFileName", session.getPaperFileName() == null ? "" : session.getPaperFileName());
+        payload.put("sourceText", sourceText == null ? "" : sourceText);
         payload.put("templateFileName", session.getTemplateFileName() == null ? "" : session.getTemplateFileName());
         payload.put("targetSlideCount", targetSlideCount.orElse(null));
         payload.put("defenseMode", defenseMode(session));
         payload.put("imageManifest", imageManifest == null || imageManifest.isNull() ? Map.of("images", List.of()) : imageManifest);
         payload.put("slideLibrary", compactSlideLibrary(slideLibrary));
+        addRevisionContext(payload, session, "fill-plan");
         payload.put("planningInstruction", "Choose template slides by layout affordance. Reuse or skip source slides as needed. Use exact slot_id values only.");
         JsonNode plan = requestTemplateFillPlan(session, payload, "fill-plan");
         enforceTemplateSlideCount(plan, targetSlideCount);
@@ -723,7 +1232,7 @@ public class PptGenerationService {
         return plan;
     }
 
-    private JsonNode buildTemplateFillPlanBatched(PptGenerationSession session, String paperText,
+    private JsonNode buildTemplateFillPlanBatched(PptGenerationSession session, String sourceText,
                                                   JsonNode imageManifest, JsonNode slideLibrary,
                                                   int requestedSlides) throws IOException {
         int totalSlides = clamp(requestedSlides, 3, 40);
@@ -737,8 +1246,8 @@ public class PptGenerationService {
             int count = Math.min(batchSize, totalSlides - start);
             Map<String, Object> payload = new LinkedHashMap<>();
             payload.put("userPrompt", session.getPrompt());
-            payload.put("paperFileName", session.getPaperFileName() == null ? "" : session.getPaperFileName());
-            payload.put("paperText", paperText == null ? "" : paperText);
+            payload.put("sourceFileName", session.getPaperFileName() == null ? "" : session.getPaperFileName());
+            payload.put("sourceText", sourceText == null ? "" : sourceText);
             payload.put("templateFileName", session.getTemplateFileName() == null ? "" : session.getTemplateFileName());
             payload.put("targetSlideCount", count);
             payload.put("overallTargetSlideCount", totalSlides);
@@ -748,6 +1257,7 @@ public class PptGenerationService {
             payload.put("batchStoryFocus", templateBatchFocus(start, count, totalSlides));
             payload.put("imageManifest", imageManifest == null || imageManifest.isNull() ? Map.of("images", List.of()) : imageManifest);
             payload.put("slideLibrary", compactLibrary);
+            addRevisionContext(payload, session, "fill-plan");
             payload.put("planningInstruction", "Plan only this slideRange and return exactly targetSlideCount slides. Do not include slides outside this range. Use exact slot_id values only.");
             JsonNode batchPlan = requestTemplateFillPlan(session, payload, "fill-plan-batch-" + batchIndex);
             JsonNode slides = batchPlan.path("slides");
@@ -817,11 +1327,11 @@ public class PptGenerationService {
         double position = total <= 1 ? 0 : (double) start / total;
         boolean first = start == 0;
         boolean last = start + count >= total;
-        if (first) return "cover, agenda, research background and problem definition";
-        if (last) return "results synthesis, conclusions, limitations, outlook and thanks";
-        if (position < 0.35) return "research background, requirements, overall technical route and system architecture";
-        if (position < 0.7) return "method details, data flow, detection, localization, workflow and implementation";
-        return "experiments, evaluation, result analysis, comparison and practical value";
+        if (first) return "cover, agenda, context, goals and key message";
+        if (last) return "results synthesis, conclusions, recommendations, next steps and thanks";
+        if (position < 0.35) return "context, audience needs, goals, requirements and overall approach";
+        if (position < 0.7) return "core content, process, solution, examples, evidence and implementation";
+        return "results, comparison, impact, practical value and decisions";
     }
 
     private JsonNode checkAndRepairTemplateFillPlan(PptGenerationSession session, JsonNode fillPlan,
@@ -835,18 +1345,26 @@ public class PptGenerationService {
                 "-o",
                 reportPath.toString()
         ), "PPT 模板填充检查");
-        if (exit == 0) return fillPlan;
-
         JsonNode report = Files.isRegularFile(reportPath)
                 ? objectMapper.readTree(reportPath.toFile())
                 : objectMapper.createObjectNode().put("message", "check-plan failed without report");
+        boolean reportValid = report != null && report.isObject()
+                && (report.path("summary").isObject() || report.has("ok"));
+        int warnings = report.path("summary").path("warn").asInt(0);
+        int errors = report.path("summary").isObject()
+                ? report.path("summary").path("error").asInt(exit == 0 ? 0 : 1)
+                : (report.path("ok").asBoolean(false) && exit == 0 ? 0 : 1);
+        if (exit == 0 && reportValid && errors == 0 && warnings <= Math.max(0, config.getMaxTemplateWarnings())) {
+            return fillPlan;
+        }
         Map<String, Object> repairPayload = new LinkedHashMap<>();
         repairPayload.put("userPrompt", session.getPrompt());
-        repairPayload.put("paperText", paperText == null ? "" : paperText);
+        repairPayload.put("sourceText", paperText == null ? "" : paperText);
         repairPayload.put("imageManifest", imageManifest == null || imageManifest.isNull() ? Map.of("images", List.of()) : imageManifest);
         repairPayload.put("slideLibrary", compactSlideLibrary(slideLibrary));
         repairPayload.put("currentFillPlan", fillPlan);
         repairPayload.put("checkReport", report);
+        addRevisionContext(repairPayload, session, "fill-plan");
         repairPayload.put("repairInstruction", "Fix all errors. Prefer shorter Chinese text and valid existing slot_id values.");
         String response = llmService.complete(TEMPLATE_FILL_REPAIR_PROMPT,
                 objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(repairPayload),
@@ -864,7 +1382,16 @@ public class PptGenerationService {
                 "-o",
                 repairedReportPath.toString()
         ), "PPT 模板填充复查");
-        if (repairedExit != 0) {
+        JsonNode repairedReport = Files.isRegularFile(repairedReportPath)
+                ? objectMapper.readTree(repairedReportPath.toFile())
+                : objectMapper.createObjectNode();
+        boolean repairedReportValid = repairedReport != null && repairedReport.isObject()
+                && (repairedReport.path("summary").isObject() || repairedReport.has("ok"));
+        int repairedWarnings = repairedReport.path("summary").path("warn").asInt(0);
+        int repairedErrors = repairedReport.path("summary").isObject()
+                ? repairedReport.path("summary").path("error").asInt(repairedExit == 0 ? 0 : 1)
+                : (repairedReport.path("ok").asBoolean(false) && repairedExit == 0 ? 0 : 1);
+        if (repairedExit != 0 || !repairedReportValid || repairedErrors > 0 || repairedWarnings > Math.max(0, config.getMaxTemplateWarnings())) {
             String reportText = Files.isRegularFile(repairedReportPath)
                     ? Files.readString(repairedReportPath, StandardCharsets.UTF_8)
                     : "";
@@ -881,16 +1408,16 @@ public class PptGenerationService {
                 session.getTemplatePath().toString(),
                 session.getTaskDir().resolve("fill-plan.json").toString(),
                 "-o",
-                session.getOutputPath().toString(),
+                session.getPptxOutputPath().toString(),
                 "--transition",
                 "keep",
                 "--strip-source-content"
         ), "PPT 模板填充");
         Path timestamped = findTimestampedTemplateOutput(session);
-        if (timestamped != null && !timestamped.equals(session.getOutputPath())) {
-            Files.move(timestamped, session.getOutputPath(), StandardCopyOption.REPLACE_EXISTING);
+        if (timestamped != null && !timestamped.equals(session.getPptxOutputPath())) {
+            Files.move(timestamped, session.getPptxOutputPath(), StandardCopyOption.REPLACE_EXISTING);
         }
-        if (!Files.isRegularFile(session.getOutputPath())) {
+        if (!Files.isRegularFile(session.getPptxOutputPath())) {
             throw new IllegalStateException("PPT 模板填充未输出文件");
         }
         applyTemplateImages(session, fillPlan, imagePaths);
@@ -904,7 +1431,7 @@ public class PptGenerationService {
         boolean hasImageEdits = StreamSupport.stream(slides.spliterator(), false)
                 .anyMatch(slide -> slide.path("image_edits").isArray() && !slide.path("image_edits").isEmpty());
         if (!hasImageEdits || byId.isEmpty()) return;
-        if (!looksLikePptx(session.getOutputPath())) {
+        if (!looksLikePptx(session.getPptxOutputPath())) {
             log.warn("PPT 模板图片填充跳过，输出不是有效 PPTX: taskId={}", session.getTaskId());
             return;
         }
@@ -914,7 +1441,7 @@ public class PptGenerationService {
         try {
             List<String> command = new ArrayList<>(splitCommand(config.getRendererCommand()));
             command.add(script.toString());
-            command.add(session.getOutputPath().toString());
+            command.add(session.getPptxOutputPath().toString());
             command.add(planPath.toString());
             command.add(objectMapper.writeValueAsString(byId));
             ProcessResult result = runProcess(command, session.getTaskDir(), Math.max(30, Math.min(config.getTimeoutSeconds(), 180)));
@@ -1077,7 +1604,7 @@ public class PptGenerationService {
             com.fasterxml.jackson.databind.node.ArrayNode editArray = edits.isArray()
                     ? (com.fasterxml.jackson.databind.node.ArrayNode) edits
                     : objectMapper.createArrayNode();
-            editArray.add(templateImageEdit(imageId, region, textOr(image, "bestUse", textOr(image, "title", "论文素材"))));
+            editArray.add(templateImageEdit(imageId, region, textOr(image, "bestUse", textOr(image, "title", "资料素材"))));
             objectSlide.set("image_edits", editArray);
             assignedImageIds.add(imageId);
         }
@@ -1100,7 +1627,7 @@ public class PptGenerationService {
             String imageId = uniqueGeneratedImageId(existingIds, generatedIndex++);
             Path target = session.getImagesDir().resolve(imageId + ".png");
             try {
-                renderGeneratedVisual(target, spec, slide);
+                renderGeneratedVisual(target, spec, slide, generatedVisualPalette(session));
             } catch (IOException e) {
                 log.warn("生成 PPT 补充示意图失败，跳过该页视觉兜底: taskId={}, slideIndex={}",
                         session.getTaskId(), index + 1, e);
@@ -1142,7 +1669,7 @@ public class PptGenerationService {
             String imageId = uniqueGeneratedImageId(existingIds, generatedIndex++);
             Path target = session.getImagesDir().resolve(imageId + ".png");
             try {
-                renderGeneratedVisual(target, spec, slide);
+                renderGeneratedVisual(target, spec, slide, generatedVisualPalette(session));
             } catch (IOException e) {
                 log.warn("生成模板 PPT 补充示意图失败，跳过该页图片填充: taskId={}, slideIndex={}",
                         session.getTaskId(), slideIndex + 1, e);
@@ -1223,7 +1750,27 @@ public class PptGenerationService {
         return "image-top";
     }
 
-    private void renderGeneratedVisual(Path target, JsonNode spec, JsonNode slide) throws IOException {
+    private List<String> generatedVisualPalette(PptGenerationSession session) {
+        try {
+            if (session != null && Files.isRegularFile(session.getStyleJsonPath())) {
+                return safePalette(objectMapper.readTree(session.getStyleJsonPath().toFile()).path("palette"));
+            }
+        } catch (Exception ignored) {
+            // Fall back to the default palette below; a missing style must not fail the task.
+        }
+        return List.of("005BAC", "063A78", "D9A441", "EFF6FF", "1F2937");
+    }
+
+    private Color visualColor(List<String> palette, int index, String fallback) {
+        String value = palette != null && index >= 0 && index < palette.size() ? palette.get(index) : fallback;
+        String normalized = value == null ? "" : value.trim().replace("#", "");
+        if (!HEX_COLOR.matcher(normalized).matches()) normalized = fallback;
+        return new Color(Integer.parseInt(normalized.substring(0, 2), 16),
+                Integer.parseInt(normalized.substring(2, 4), 16),
+                Integer.parseInt(normalized.substring(4, 6), 16));
+    }
+
+    private void renderGeneratedVisual(Path target, JsonNode spec, JsonNode slide, List<String> palette) throws IOException {
         Files.createDirectories(target.getParent());
         int width = 1280;
         int height = 720;
@@ -1231,13 +1778,15 @@ public class PptGenerationService {
         Graphics2D graphics = image.createGraphics();
         try {
             graphics.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            graphics.setColor(Color.WHITE);
+            Color pale = visualColor(palette, 3, "EFF6FF");
+            Color text = visualColor(palette, 4, "1F2937");
+            graphics.setColor(pale);
             graphics.fillRect(0, 0, width, height);
-            Color accent = new Color(0x00, 0x5B, 0xAC);
-            Color deep = new Color(0x06, 0x3A, 0x78);
+            Color accent = visualColor(palette, 0, "005BAC");
+            Color deep = visualColor(palette, 1, "063A78");
             Color muted = new Color(0x64, 0x74, 0x8B);
             graphics.setFont(new Font("SansSerif", Font.BOLD, 34));
-            graphics.setColor(deep);
+            graphics.setColor(text.equals(pale) ? deep : text);
             graphics.drawString(trimVisualText(textOr(spec, "title", slide.path("title").asText("生成示意图")), 28), 58, 72);
             List<String> items = visualItems(spec, slide);
             String type = spec.path("type").asText("workflow").toLowerCase(Locale.ROOT);
@@ -1686,7 +2235,7 @@ public class PptGenerationService {
             List<Path> batch = paths.subList(start, Math.min(paths.size(), start + batchSize));
             try {
                 StringBuilder prompt = new StringBuilder();
-                prompt.append("Paper file: ").append(session.getPaperFileName() == null ? "" : session.getPaperFileName()).append('\n');
+                prompt.append("Source file: ").append(session.getPaperFileName() == null ? "" : session.getPaperFileName()).append('\n');
                 prompt.append("User request: ").append(session.getPrompt()).append('\n');
                 prompt.append("Attached images correspond to these ids in order:\n");
                 for (int i = 0; i < batch.size(); i++) {
@@ -1778,8 +2327,8 @@ public class PptGenerationService {
                     "index", i + 1,
                     "filename", filename,
                     "kind", tableImage ? "table" : fallbackKind(filename),
-                    "title", tableImage ? "论文表格 " + (i + 1) : fallbackTitle(filename, i + 1),
-                    "summary", tableImage ? "从论文 DOCX 表格渲染的图片" : "从论文页面或附件提取的候选图片",
+                    "title", tableImage ? "资料表格 " + (i + 1) : fallbackTitle(filename, i + 1),
+                    "summary", tableImage ? "从上传资料表格渲染的图片" : "从上传资料提取的候选图片",
                     "bestUse", tableImage ? "结果或数据说明页" : fallbackBestUse(filename),
                     "importance", heuristicImportance,
                     "useful", useful,
@@ -1845,7 +2394,7 @@ public class PptGenerationService {
             case "workflow" -> "流程图 " + index;
             case "architecture" -> "结构图 " + index;
             case "chart" -> "结果图 " + index;
-            default -> "论文图片 " + index;
+            default -> "资料图片 " + index;
         };
     }
 
@@ -1883,7 +2432,8 @@ public class PptGenerationService {
                     || path.getFileName().toString().startsWith("paper-excel-");
             int fallbackImportance = fallbackImportance(path, trustedTable);
             int importance = clamp(item == null ? fallbackImportance : item.path("importance").asInt(fallbackImportance), 1, 5);
-            boolean useful = item != null && item.path("useful").asBoolean(importance >= 3);
+            boolean useful = item != null && item.has("useful") && item.path("useful").isBoolean()
+                    && item.path("useful").asBoolean(false);
             if (trustedTable) {
                 importance = Math.max(3, importance);
                 useful = true;
@@ -1898,9 +2448,9 @@ public class PptGenerationService {
                     "index", index,
                     "filename", path.getFileName().toString(),
                     "kind", textOr(item, "kind", "other"),
-                    "title", textOr(item, "title", "论文图片 " + index),
-                    "summary", textOr(item, "summary", "从论文附件中提取的图片素材"),
-                    "bestUse", textOr(item, "bestUse", "结合相邻论文内容作为图文页素材"),
+                    "title", textOr(item, "title", "资料图片 " + index),
+                    "summary", textOr(item, "summary", "从上传资料中提取的图片素材"),
+                    "bestUse", textOr(item, "bestUse", "结合相邻内容作为图文页素材"),
                     "importance", importance,
                     "useful", useful,
                     "layoutHint", layoutHint));
@@ -1950,7 +2500,7 @@ public class PptGenerationService {
             JsonNode slide = slides.get(slideIndex);
             if (slide instanceof com.fasterxml.jackson.databind.node.ObjectNode objectSlide) {
                 objectSlide.put("imageId", image.path("id").asText());
-                objectSlide.put("imageHint", textOr(image, "bestUse", textOr(image, "title", "论文素材")));
+                objectSlide.put("imageHint", textOr(image, "bestUse", textOr(image, "title", "资料素材")));
                 objectSlide.put("layout", normalizeLayoutHint(image.path("layoutHint").asText("image-right")));
                 usedSlides.add(slideIndex);
             }
@@ -1986,6 +2536,7 @@ public class PptGenerationService {
             objectDeck.set("templateAnalysis", style.path("templateAnalysis"));
             objectDeck.put("templateKey", session.getTemplateKey());
             objectDeck.put("templateFileName", session.getTemplateFileName() == null ? "" : session.getTemplateFileName());
+            objectDeck.put("templateDesign", style.path("builtInTemplateDesign").asText(""));
             objectDeck.put("templateFrameworkMode", style.path("frameworkMode").asBoolean(false));
             objectDeck.put("templateFit", style.path("templateFit").asText("weak"));
             objectDeck.put("templateRoute", style.path("templateRoute").asText("framework"));
@@ -2010,6 +2561,7 @@ public class PptGenerationService {
             objectDeck.set("evidenceCandidates", manifest.path("images"));
             objectDeck.put("templateKey", session.getTemplateKey());
             objectDeck.put("templateFileName", session.getTemplateFileName() == null ? "" : session.getTemplateFileName());
+            objectDeck.put("templateDesign", style.path("builtInTemplateDesign").asText(""));
             objectDeck.put("templateFrameworkMode", style.path("frameworkMode").asBoolean(false));
             objectDeck.put("templateFit", style.path("templateFit").asText("weak"));
             objectDeck.put("templateRoute", style.path("templateRoute").asText("framework"));
@@ -2107,32 +2659,38 @@ public class PptGenerationService {
             command.add(session.getTemplatePath().toString());
         }
         command.add("--out");
-        command.add(session.getOutputPath().toString());
+        command.add(session.getPptxOutputPath().toString());
 
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.directory(runner.getParent().toFile());
         builder.redirectErrorStream(true);
         Process process = builder.start();
-        CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> {
-            try (InputStream input = process.getInputStream()) {
-                return new String(input.readAllBytes(), StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                return e.getMessage();
+        activeProcesses.add(process);
+        try {
+            CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> readProcessOutput(process));
+            boolean exited;
+            try {
+                exited = process.waitFor(Math.max(30, config.getTimeoutSeconds()), TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                terminateProcessTree(process);
+                outputFuture.cancel(true);
+                throw e;
             }
-        });
-
-        boolean exited = process.waitFor(Math.max(30, config.getTimeoutSeconds()), TimeUnit.SECONDS);
-        if (!exited) {
-            terminateProcessTree(process);
-            outputFuture.cancel(true);
-            throw new IllegalStateException("PPT 渲染脚本超时");
-        }
-        String output = outputFuture.orTimeout(5, TimeUnit.SECONDS).exceptionally(e -> "").join();
-        if (process.exitValue() != 0) {
-            throw new IllegalStateException("PPT 渲染脚本失败: " + trimLog(output));
-        }
-        if (!Files.isRegularFile(session.getOutputPath())) {
-            throw new IllegalStateException("PPT 渲染脚本未输出文件: " + trimLog(output));
+            if (!exited) {
+                terminateProcessTree(process);
+                outputFuture.cancel(true);
+                throw new IllegalStateException("PPT 渲染脚本超时");
+            }
+            String output = outputFuture.orTimeout(5, TimeUnit.SECONDS).exceptionally(e -> "").join();
+            if (process.exitValue() != 0) {
+                throw new IllegalStateException("PPT 渲染脚本失败: " + trimLog(output));
+            }
+            if (!Files.isRegularFile(session.getPptxOutputPath())) {
+                throw new IllegalStateException("PPT 渲染脚本未输出文件: " + trimLog(output));
+            }
+        } finally {
+            activeProcesses.remove(process);
+            if (process.isAlive()) terminateProcessTree(process);
         }
     }
 
@@ -2165,22 +2723,46 @@ public class PptGenerationService {
         if (directory != null) builder.directory(directory.toFile());
         builder.redirectErrorStream(true);
         Process process = builder.start();
-        CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> {
-            try (InputStream input = process.getInputStream()) {
-                return new String(input.readAllBytes(), StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                return e.getMessage();
+        activeProcesses.add(process);
+        try {
+            CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> readProcessOutput(process));
+            boolean exited;
+            try {
+                exited = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                terminateProcessTree(process);
+                outputFuture.cancel(true);
+                throw e;
             }
-        });
-
-        boolean exited = process.waitFor(timeoutSeconds, TimeUnit.SECONDS);
-        if (!exited) {
-            terminateProcessTree(process);
-            outputFuture.cancel(true);
-            throw new IllegalStateException("外部脚本执行超时");
+            if (!exited) {
+                terminateProcessTree(process);
+                outputFuture.cancel(true);
+                throw new IllegalStateException("外部脚本执行超时");
+            }
+            String output = outputFuture.orTimeout(5, TimeUnit.SECONDS).exceptionally(e -> "").join();
+            return new ProcessResult(process.exitValue(), output);
+        } finally {
+            activeProcesses.remove(process);
+            if (process.isAlive()) terminateProcessTree(process);
         }
-        String output = outputFuture.orTimeout(5, TimeUnit.SECONDS).exceptionally(e -> "").join();
-        return new ProcessResult(process.exitValue(), output);
+    }
+
+    private String readProcessOutput(Process process) {
+        final int maxChars = 64 * 1024;
+        StringBuilder tail = new StringBuilder(maxChars);
+        try (InputStream input = process.getInputStream()) {
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                if (read == 0) continue;
+                tail.append(new String(buffer, 0, read, StandardCharsets.UTF_8));
+                if (tail.length() > maxChars) tail.delete(0, tail.length() - maxChars);
+            }
+        } catch (IOException e) {
+            if (tail.isEmpty()) return e.getMessage() == null ? "" : e.getMessage();
+            tail.append("\n[process output read error] ").append(e.getMessage());
+        }
+        return tail.toString();
     }
 
     private void terminateProcessTree(Process process) {
@@ -2200,7 +2782,7 @@ public class PptGenerationService {
     }
 
     private Path findTimestampedTemplateOutput(PptGenerationSession session) throws IOException {
-        Path output = session.getOutputPath();
+        Path output = session.getPptxOutputPath();
         if (Files.isRegularFile(output)) return output;
         String stem = output.getFileName().toString().replaceFirst("\\.pptx$", "");
         try (Stream<Path> files = Files.list(session.getTaskDir())) {
@@ -2231,8 +2813,8 @@ public class PptGenerationService {
         List<String> sections = new ArrayList<>();
         sections.add(trimForPrompt(text, 5000));
         String[] keywords = {
-                "摘要", "研究背景", "系统设计", "方法", "目标检测", "三维定位",
-                "实验", "结果", "结论", "创新点", "展望"
+                "摘要", "背景", "目标", "需求", "方案", "方法", "流程", "产品",
+                "数据", "实验", "结果", "结论", "建议", "下一步", "展望"
         };
         for (String keyword : keywords) {
             int index = text.indexOf(keyword);
@@ -2282,36 +2864,146 @@ public class PptGenerationService {
 
     private void failTask(PptGenerationSession session, Exception e) {
         log.error("PPT 生成任务失败: taskId={}", session.getTaskId(), e);
-        refundIfNeeded(session, "PPT 生成失败自动退回额度");
         session.setStatus("error");
         session.setProgressStage("error");
         session.setErrorMessage(e.getMessage() == null ? "PPT 生成失败" : e.getMessage());
         saveMetadata(session);
-        emit(session, "task-error", Map.of("message", session.getErrorMessage()));
+        try {
+            refundIfNeeded(session, "PPT 生成失败自动退回额度");
+        } catch (Exception refundError) {
+            session.setRefundPending(true);
+            session.setRefundError(trimLog(refundError.getMessage()));
+            saveMetadata(session);
+            log.error("PPT 额度退回失败，已记录待补偿状态: taskId={}", session.getTaskId(), refundError);
+        }
+        Map<String, Object> errorPayload = new LinkedHashMap<>();
+        errorPayload.put("message", session.getErrorMessage());
+        if (session.isRefundPending()) errorPayload.put("refundPending", true);
+        emit(session, "task-error", errorPayload);
         completeEmitters(session.getTaskId());
+    }
+
+    /**
+     * Creation can fail after charging credits but before the task is queued. Keep a durable
+     * error record when the compensating refund itself fails so the startup reconciler can retry
+     * it instead of silently deleting the charged task.
+     */
+    private boolean persistCreationFailure(PptGenerationSession session, Exception cause, String refundReason) {
+        session.setStatus("error");
+        session.setProgressStage("error");
+        session.setErrorMessage(cause == null || cause.getMessage() == null
+                ? "PPT 任务创建失败" : cause.getMessage());
+        boolean keepRecord = false;
+        try {
+            refundIfNeeded(session, refundReason);
+        } catch (Exception refundError) {
+            keepRecord = true;
+            session.setRefundPending(true);
+            session.setRefundError(trimLog(refundError.getMessage()));
+            log.error("PPT 创建阶段额度退回失败，已记录待补偿状态: taskId={}", session.getTaskId(), refundError);
+        }
+        if (keepRecord) sessions.put(session.getTaskId(), session);
+        saveMetadata(session);
+        return keepRecord;
     }
 
     private void refundIfNeeded(PptGenerationSession session, String reason) {
         if (quotaService == null || session.getCreditTransactionId() == null || session.isCreditRefunded()) return;
         quotaService.refund(session.getCreditTransactionId(), reason);
         session.setCreditRefunded(true);
+        session.setRefundPending(false);
+        session.setRefundError(null);
         saveMetadata(session);
     }
 
     private String validatePrompt(String prompt) {
-        if (prompt == null || prompt.isBlank()) {
-            throw new IllegalArgumentException("请输入 PPT 生成提示词");
-        }
-        String value = prompt.trim();
+        String value = prompt == null ? "" : prompt.trim();
+        if (value.isBlank()) return "";
         if (value.length() > Math.max(100, config.getMaxPromptChars())) {
             throw new IllegalArgumentException("提示词超过 " + config.getMaxPromptChars() + " 字限制");
         }
         return value;
     }
 
+    private String validateRevisionPrompt(String prompt) {
+        String value = prompt == null ? "" : prompt.trim();
+        if (value.length() > 4000) {
+            throw new IllegalArgumentException("二次修改要求不能超过 4000 字");
+        }
+        return value;
+    }
+
+    private String formatSlideEdits(List<Map<String, Object>> slideEdits) {
+        if (slideEdits == null || slideEdits.isEmpty()) return "";
+        StringBuilder builder = new StringBuilder("【网页手动修改】\n");
+        int count = 0;
+        for (Map<String, Object> edit : slideEdits) {
+            if (edit == null || count >= 40) break;
+            int index = numberValue(edit.get("slideIndex"));
+            if (index < 1 || index > 40) continue;
+            String title = trimForPrompt(stringValue(edit.get("title")), 120);
+            String headline = trimForPrompt(stringValue(edit.get("headline")), 180);
+            List<String> bullets = new ArrayList<>();
+            Object rawBullets = edit.get("bullets");
+            if (rawBullets instanceof Collection<?> collection) {
+                for (Object item : collection) {
+                    String value = trimForPrompt(stringValue(item), 120);
+                    if (!value.isBlank()) bullets.add(value);
+                    if (bullets.size() >= 6) break;
+                }
+            }
+            if (title.isBlank() && headline.isBlank() && bullets.isEmpty()) continue;
+            builder.append("第").append(index).append("页：");
+            if (!title.isBlank()) builder.append("标题=【").append(title).append("】；");
+            if (!headline.isBlank()) builder.append("核心句=【").append(headline).append("】；");
+            if (!bullets.isEmpty()) builder.append("要点=【").append(String.join(" / ", bullets)).append("】；");
+            builder.append('\n');
+            count++;
+        }
+        return count == 0 ? "" : trimForPrompt(builder.toString(), 3600);
+    }
+
+    private int numberValue(Object value) {
+        if (value instanceof Number number) return number.intValue();
+        try { return Integer.parseInt(stringValue(value)); }
+        catch (NumberFormatException ignored) { return 0; }
+    }
+
+    private String stringValue(Object value) {
+        return value == null ? "" : String.valueOf(value).trim();
+    }
+
+    private String normalizeClientRequestId(String value) {
+        if (value == null) return "";
+        String normalized = value.trim();
+        return normalized.length() <= 128 && normalized.matches("[A-Za-z0-9._:-]+") ? normalized : "";
+    }
+
+    private PptGenerationSession findIdempotentTask(long userId, String clientRequestId) {
+        return sessions.values().stream()
+                .filter(session -> session.getUserId() == userId)
+                .filter(session -> clientRequestId.equals(session.getClientRequestId()))
+                .filter(session -> !"error".equals(session.getStatus()))
+                .max(Comparator.comparingLong(PptGenerationSession::getCreatedAt))
+                .orElse(null);
+    }
+
     private String normalizeTemplateKey(String templateKey) {
         String value = templateKey == null || templateKey.isBlank() ? "academic-blue" : templateKey.trim();
         return templates().stream().anyMatch(item -> value.equals(item.get("key"))) ? value : "academic-blue";
+    }
+
+    private String normalizeOutputFormat(String outputFormat) {
+        String value = outputFormat == null ? "pptx" : outputFormat.trim().toLowerCase(Locale.ROOT);
+        if (!Set.of("pptx", "html").contains(value)) {
+            throw new IllegalArgumentException("输出格式只能是 PPTX 或 HTML");
+        }
+        return value;
+    }
+
+    private String outputFileName(PptGenerationSession session) {
+        String extension = "html".equalsIgnoreCase(session.getOutputFormat()) ? ".html" : ".pptx";
+        return "AI生成PPT-" + session.getTaskId() + extension;
     }
 
     private Map<String, Object> templateByKey(String templateKey) {
@@ -2325,11 +3017,25 @@ public class PptGenerationService {
     private void applyBuiltInTemplateStyle(PptGenerationSession session) throws IOException {
         Map<String, Object> style = objectMapper.readValue(session.getStyleJsonPath().toFile(), Map.class);
         Map<String, Object> builtIn = templateByKey(session.getTemplateKey());
-        style.put("palette", builtIn.get("palette"));
-        style.put("paletteSource", "built-in-template");
-        style.put("uploadedTemplateUsage", "assets-and-text-samples-only");
+        String route = String.valueOf(style.getOrDefault("templateRoute", "")).toLowerCase(Locale.ROOT);
+        boolean nativeUploadedTemplate = hasTemplate(session)
+                && (route.isBlank() || Set.of("template-fill", "native-fill").contains(route));
+        Object scannedPalette = style.get("palette");
+        boolean hasScannedPalette = scannedPalette instanceof List<?> values && !values.isEmpty();
+        if (!nativeUploadedTemplate || !hasScannedPalette) {
+            style.put("palette", builtIn.get("palette"));
+            style.put("paletteSource", "built-in-template");
+        } else {
+            style.put("paletteSource", "uploaded-template-scan");
+        }
+        style.put("builtInTemplatePalette", builtIn.get("palette"));
+        style.put("uploadedTemplateUsage", nativeUploadedTemplate ? "native-template-style" : "assets-and-text-samples-only");
         style.put("builtInTemplateKey", builtIn.get("key"));
         style.put("builtInTemplateName", builtIn.get("name"));
+        style.put("builtInTemplateSource", builtIn.get("source"));
+        style.put("builtInTemplateLicense", builtIn.get("license"));
+        style.put("builtInTemplateUrl", builtIn.get("sourceUrl"));
+        style.put("builtInTemplateDesign", builtIn.get("design"));
         objectMapper.writerWithDefaultPrettyPrinter().writeValue(session.getStyleJsonPath().toFile(), style);
     }
 
@@ -2340,6 +3046,24 @@ public class PptGenerationService {
             throw new IllegalArgumentException("PPT 至少需要 1 页");
         }
         if (slides.size() > 40) throw new IllegalArgumentException("PPT 页数超过 40 页限制");
+        for (JsonNode slide : slides) {
+            if (!slide.isObject()) throw new IllegalArgumentException("PPT 页面结构格式错误");
+            if (slide instanceof com.fasterxml.jackson.databind.node.ObjectNode objectSlide) {
+                objectSlide.put("type", safeSlideType(slide.path("type").asText("content")));
+                validateTextField(slide, "title", 240);
+                validateTextField(slide, "headline", 400);
+                validateTextField(slide, "notes", 1200);
+            }
+        }
+    }
+
+    private void validateTextField(JsonNode node, String field, int maxChars) {
+        if (node.has(field) && !node.get(field).isTextual()) {
+            throw new IllegalArgumentException("PPT 页面字段格式错误: " + field);
+        }
+        if (node.path(field).asText("").length() > maxChars) {
+            throw new IllegalArgumentException("PPT 页面字段过长: " + field);
+        }
     }
 
     private Optional<Integer> extractTargetSlideCount(String prompt) {
@@ -2358,17 +3082,17 @@ public class PptGenerationService {
     }
 
     private boolean defenseMode(PptGenerationSession session) {
-        if (hasPaper(session)) return true;
         String prompt = session == null ? "" : session.getPrompt();
         if (prompt == null) return false;
         String normalized = prompt.toLowerCase(Locale.ROOT);
-        return containsAny(normalized, "答辩", "毕业", "论文汇报", "论文", "thesis", "defense", "dissertation");
+        return containsAny(normalized, "答辩", "毕业", "论文汇报", "论文", "thesis", "defense", "dissertation", "学位");
     }
 
     private Optional<Integer> effectiveTargetSlideCount(PptGenerationSession session) {
         Optional<Integer> explicit = extractTargetSlideCount(session == null ? "" : session.getPrompt());
         if (explicit.isPresent()) return explicit;
-        return defenseMode(session) ? Optional.of(22) : Optional.empty();
+        if (defenseMode(session)) return Optional.of(22);
+        return hasPaper(session) ? Optional.of(12) : Optional.empty();
     }
 
     private String slideCountPolicy(PptGenerationSession session, Optional<Integer> targetSlideCount) {
@@ -2378,14 +3102,14 @@ public class PptGenerationService {
         if (defenseMode(session)) {
             return "No explicit page count was provided. For this defense/research task, create a complete deck of about 22 slides.";
         }
-        return "No explicit page count was provided. Infer a natural, concise length from the user request and keep the task type exactly as requested.";
+        return "No explicit page count was provided. Infer a natural, concise length from the user request and source material, normally around 10-14 slides.";
     }
 
     private String visualPolicy(PptGenerationSession session) {
         if (defenseMode(session)) {
-            return "For defense body slides, prefer one relevant figure or a generated visualSpec per slide. Use generated visuals for workflows, architecture, comparisons, matrices, timelines, or result summaries when paper images are insufficient.";
+            return "For defense body slides, prefer one relevant figure or a generated visualSpec per slide. Use generated visuals for workflows, architecture, comparisons, matrices, timelines, or result summaries when source images are insufficient.";
         }
-        return "Use images only when they clearly support the requested deck. Prefer concise, editable slides over forced image placement.";
+        return "Use extracted images only when they clearly support the requested deck. Prefer concise, editable slides over forced image placement, and use generated visuals for simple processes, comparisons, timelines, or data summaries when helpful.";
     }
 
     private int imageBudgetFor(PptGenerationSession session, Optional<Integer> targetSlideCount) {
@@ -2418,12 +3142,11 @@ public class PptGenerationService {
 
     private String deckSystemPrompt(PptGenerationSession session) {
         if (defenseMode(session)) return SYSTEM_PROMPT;
-        return SYSTEM_PROMPT
-                .replace("Create a concise, editable thesis or research presentation deck.", "Create a concise, editable presentation deck.")
-                .replace("- For defenseMode=true, use a formal undergraduate/master thesis defense rhythm and, when targetSlideCount is empty, normally create about 22 slides.\n", "")
-                .replace("- If imageManifest is provided, choose relevant imageId values deliberately. For defenseMode, make most body slides visual: use extracted paper figures or request visualSpec for generated academic diagrams when no extracted image fits.\n",
-                        "- If imageManifest is provided, choose relevant imageId values deliberately only when they clearly support the requested deck.\n")
-                .replace("- When defenseMode=true, prefer the rhythm: cover, contents, section, background, significance, route, section, data, framework, model, section, experiment design, 4-6 result/comparison/ablation slides, section, conclusion, outlook, thanks.\n", "");
+        return SYSTEM_PROMPT.lines()
+                .filter(line -> !line.contains("defenseMode=true")
+                        && !line.contains("formal thesis defense rhythm")
+                        && !line.contains("thesis defense rhythm"))
+                .collect(java.util.stream.Collectors.joining("\n"));
     }
 
     private String compactRetryPrompt(PptGenerationSession session) {
@@ -2467,13 +3190,15 @@ public class PptGenerationService {
         return digits.getOrDefault(text.charAt(0), 0);
     }
 
-    private void validatePaperFile(MultipartFile file) {
+    private void validateSourceFile(MultipartFile file) {
         String name = Optional.ofNullable(file.getOriginalFilename()).orElse("").toLowerCase(Locale.ROOT);
-        if (!(name.endsWith(".pdf") || name.endsWith(".docx"))) {
-            throw new IllegalArgumentException("论文文件仅支持 PDF 或 DOCX");
+        if (!(name.endsWith(".pdf") || name.endsWith(".docx") || name.endsWith(".pptx")
+                || name.endsWith(".xlsx") || name.endsWith(".txt") || name.endsWith(".md")
+                || name.endsWith(".csv") || name.endsWith(".html") || name.endsWith(".htm"))) {
+            throw new IllegalArgumentException("资料文件支持 PDF、DOCX、PPTX、XLSX、TXT、MD、CSV 或 HTML");
         }
         if (file.getSize() > config.getMaxPaperBytes()) {
-            throw new IllegalArgumentException("论文文件超过 30MB 限制");
+            throw new IllegalArgumentException("资料文件超过 30MB 限制");
         }
     }
 
@@ -2689,7 +3414,18 @@ public class PptGenerationService {
                         session.setErrorMessage("任务来自旧流程或已中断，请重新提交");
                         saveMetadata(session);
                     }
+                    if ("completed".equals(session.getStatus()) && !Files.isRegularFile(session.getOutputPath())) {
+                        session.setStatus("error");
+                        session.setProgressStage("error");
+                        session.setErrorMessage("任务输出文件缺失，请重新生成");
+                        saveMetadata(session);
+                    }
                     sessions.put(session.getTaskId(), session);
+                    if (session.getUserId() > 0 && session.getClientRequestId() != null
+                            && !session.getClientRequestId().isBlank()
+                            && (!"error".equals(session.getStatus()) || session.isRefundPending())) {
+                        idempotencyClaims.put(session.getUserId() + ":" + session.getClientRequestId(), session.getTaskId());
+                    }
                 } catch (Exception e) {
                     log.warn("读取 PPT 生成任务记录失败: {}", metadata, e);
                 }
@@ -2701,16 +3437,42 @@ public class PptGenerationService {
 
     private void saveMetadata(PptGenerationSession session) {
         try {
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(session.getMetadataPath().toFile(), session);
+            Path metadata = session.getMetadataPath();
+            Path temp = metadata.resolveSibling("task.json.tmp");
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), session);
+            try {
+                Files.move(temp, metadata, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
+                Files.move(temp, metadata, StandardCopyOption.REPLACE_EXISTING);
+            }
         } catch (IOException e) {
             log.warn("保存 PPT 生成任务记录失败: taskId={}", session.getTaskId(), e);
         }
+    }
+
+    private void reconcilePendingRefunds() {
+        if (quotaService == null) return;
+        sessions.values().stream()
+                .filter(session -> "error".equals(session.getStatus()))
+                .filter(session -> session.getCreditTransactionId() != null)
+                .filter(session -> !session.isCreditRefunded())
+                .forEach(session -> {
+                    try {
+                        refundIfNeeded(session, "PPT 生成失败自动补偿额度");
+                    } catch (Exception e) {
+                        session.setRefundPending(true);
+                        session.setRefundError(trimLog(e.getMessage()));
+                        saveMetadata(session);
+                        log.warn("启动时补偿 PPT 额度失败: taskId={}", session.getTaskId(), e);
+                    }
+                });
     }
 
     private void cleanupHistory() {
         int keep = Math.max(1, config.getMaxHistory());
         List<PptGenerationSession> terminal = sessions.values().stream()
                 .filter(session -> Set.of("completed", "error").contains(session.getStatus()))
+                .filter(session -> !session.isRefundPending())
                 .sorted(Comparator.comparingLong(PptGenerationSession::getCreatedAt).reversed())
                 .toList();
         for (int index = keep; index < terminal.size(); index++) {
@@ -2732,6 +3494,26 @@ public class PptGenerationService {
             });
         } catch (IOException e) {
             log.warn("清理 PPT 任务目录失败: {}", path, e);
+        }
+    }
+
+    private void copyOptional(Path source, Path target) throws IOException {
+        if (source == null || target == null || !Files.isRegularFile(source)) return;
+        Files.createDirectories(target.getParent());
+        Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    private void copyDirectoryContents(Path source, Path target) throws IOException {
+        if (source == null || !Files.isDirectory(source)) return;
+        Files.createDirectories(target);
+        try (Stream<Path> paths = Files.walk(source)) {
+            for (Path path : paths.toList()) {
+                Path relative = source.relativize(path);
+                Path destination = target.resolve(relative).normalize();
+                if (!destination.startsWith(target.toAbsolutePath().normalize())) continue;
+                if (Files.isDirectory(path)) Files.createDirectories(destination);
+                else if (Files.isRegularFile(path)) Files.copy(path, destination, StandardCopyOption.REPLACE_EXISTING);
+            }
         }
     }
 
@@ -2781,9 +3563,9 @@ public class PptGenerationService {
     public String stageLabel(String stage) {
         return switch (stage == null ? "" : stage) {
             case "queued" -> "等待后台生成";
-            case "extracting" -> "读取论文和模板";
-            case "refreshing_assets" -> "刷新论文和模板素材";
-            case "reusing_assets" -> "复用已抽取素材";
+            case "extracting" -> "读取资料和模板";
+            case "refreshing_assets" -> "刷新资料和模板素材";
+            case "reusing_assets" -> "复用已提取素材";
             case "template_analyzing" -> "分析 PPT 模板";
             case "planning" -> "mimo 规划 PPT 结构";
             case "template_checking" -> "检查模板填充";

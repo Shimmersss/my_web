@@ -793,6 +793,7 @@ onMounted(async () => {
 @media (max-width: 768px) {
   .open-source-page {
     overflow-x: hidden;
+    padding: 22px 0 40px;
   }
 
   .page-head {
@@ -804,8 +805,14 @@ onMounted(async () => {
       flex-wrap: wrap;
     }
 
-    h2 {
-      font-size: 28px;
+    h1 {
+      font-size: 32px;
+      line-height: 1.16;
+      overflow-wrap: anywhere;
+    }
+
+    p {
+      font-size: 14px;
     }
   }
 
@@ -864,6 +871,22 @@ onMounted(async () => {
 
   .row-actions {
     justify-content: flex-start;
+  }
+}
+
+@media (max-width: 360px) {
+  .page-head h1 {
+    font-size: 28px;
+  }
+
+  .page-actions :deep(.n-button),
+  .toolbar :deep(.n-button) {
+    width: 100%;
+  }
+
+  .category {
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 }
 </style>

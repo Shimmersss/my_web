@@ -10,8 +10,10 @@ public class PptGenerationSession {
 
     private String taskId;
     private String accessToken;
+    private String clientRequestId;
     private String prompt;
     private String templateKey = "academic-blue";
+    private String outputFormat = "pptx";
     private String templateFileName;
     private int extractionPercent = 50;
     private String paperFileName;
@@ -28,6 +30,10 @@ public class PptGenerationSession {
     private int creditCost;
     private Long creditTransactionId;
     private boolean creditRefunded;
+    private boolean refundPending;
+    private String refundError;
+    private String revisionOfTaskId;
+    private String revisionPrompt;
 
     @JsonIgnore
     private Path taskDir;
@@ -44,10 +50,14 @@ public class PptGenerationSession {
     public void setTaskId(String taskId) { this.taskId = taskId; }
     public String getAccessToken() { return accessToken; }
     public void setAccessToken(String accessToken) { this.accessToken = accessToken; }
+    public String getClientRequestId() { return clientRequestId; }
+    public void setClientRequestId(String clientRequestId) { this.clientRequestId = clientRequestId; touch(); }
     public String getPrompt() { return prompt; }
     public void setPrompt(String prompt) { this.prompt = prompt; touch(); }
     public String getTemplateKey() { return templateKey; }
     public void setTemplateKey(String templateKey) { this.templateKey = templateKey; touch(); }
+    public String getOutputFormat() { return outputFormat; }
+    public void setOutputFormat(String outputFormat) { this.outputFormat = outputFormat; touch(); }
     public String getTemplateFileName() { return templateFileName; }
     public void setTemplateFileName(String templateFileName) { this.templateFileName = templateFileName; touch(); }
     public int getExtractionPercent() { return extractionPercent; }
@@ -80,6 +90,14 @@ public class PptGenerationSession {
     public void setCreditTransactionId(Long creditTransactionId) { this.creditTransactionId = creditTransactionId; touch(); }
     public boolean isCreditRefunded() { return creditRefunded; }
     public void setCreditRefunded(boolean creditRefunded) { this.creditRefunded = creditRefunded; touch(); }
+    public boolean isRefundPending() { return refundPending; }
+    public void setRefundPending(boolean refundPending) { this.refundPending = refundPending; touch(); }
+    public String getRefundError() { return refundError; }
+    public void setRefundError(String refundError) { this.refundError = refundError; touch(); }
+    public String getRevisionOfTaskId() { return revisionOfTaskId; }
+    public void setRevisionOfTaskId(String revisionOfTaskId) { this.revisionOfTaskId = revisionOfTaskId; touch(); }
+    public String getRevisionPrompt() { return revisionPrompt; }
+    public void setRevisionPrompt(String revisionPrompt) { this.revisionPrompt = revisionPrompt; touch(); }
 
     @JsonIgnore
     public Path getTaskDir() { return taskDir; }
@@ -98,15 +116,30 @@ public class PptGenerationSession {
     @JsonIgnore
     public Path getImageManifestPath() { return taskDir.resolve("image-manifest.json"); }
     @JsonIgnore
+    public Path getPreviewPath() { return taskDir.resolve("preview.json"); }
+    @JsonIgnore
     public Path getImagesDir() { return taskDir.resolve("images"); }
     @JsonIgnore
-    public Path getOutputPath() { return taskDir.resolve("output.pptx"); }
+    public Path getPptxOutputPath() { return taskDir.resolve("output.pptx"); }
+    @JsonIgnore
+    public Path getHtmlOutputPath() { return taskDir.resolve("output.html"); }
+    @JsonIgnore
+    public Path getOutputPath() {
+        return "html".equalsIgnoreCase(outputFormat) ? getHtmlOutputPath() : getPptxOutputPath();
+    }
 
     private String paperExtension() {
         if (paperFileName == null) return "";
         String lower = paperFileName.toLowerCase();
         if (lower.endsWith(".docx")) return ".docx";
         if (lower.endsWith(".pdf")) return ".pdf";
+        if (lower.endsWith(".pptx")) return ".pptx";
+        if (lower.endsWith(".xlsx")) return ".xlsx";
+        if (lower.endsWith(".txt")) return ".txt";
+        if (lower.endsWith(".md")) return ".md";
+        if (lower.endsWith(".csv")) return ".csv";
+        if (lower.endsWith(".html")) return ".html";
+        if (lower.endsWith(".htm")) return ".htm";
         return "";
     }
 

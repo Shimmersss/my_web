@@ -1,8 +1,8 @@
 # Research Workbench / 研究工具台
 
-一个面向个人研究流程的全栈工具台，整合 Zotero 文献库、论文 PDF 翻译、论文到 PPT 生成和 GitHub 项目展示。
+一个面向个人工作与研究流程的全栈工具台，整合 Zotero 文献库、论文 PDF 翻译、通用资料到 PPT 生成和 GitHub 项目展示。
 
-A full-stack personal research workbench that brings together a Zotero library browser, PDF paper translation, paper-to-PPT generation and GitHub project showcases.
+A full-stack personal workbench that brings together a Zotero library browser, PDF paper translation, general-material-to-PPT generation and GitHub project showcases.
 
 ![Research Workbench home](front/public/readme/home.jpg)
 
@@ -11,7 +11,7 @@ A full-stack personal research workbench that brings together a Zotero library b
 - **文献库展示 / Zotero library**：后端从 Zotero Web API 拉取私有文献库，启动预热并缓存；前端按 collection、关键词和附件状态浏览。
 - **附件代理 / Attachment proxy**：PDF、Markdown 和网页快照附件统一由后端代理，支持 Zotero S3 跳转、ZIP 附件解包、流式传输和真实下载进度。
 - **PDF 论文翻译 / PDF translation**：上传 PDF 后选择页码范围、字体族和速度模式，由后端排队调用 BabelDOC 生成保留版式的纯中文 / 双语 PDF。
-- **PPT 生成 / Paper to PPT**：根据提示词、论文文件和可选 PPTX 模板生成答辩或汇报材料，支持论文图片抽取、视觉筛选和模板原生填充。
+- **PPT 生成 / Materials to PPT**：根据提示词或上传资料（PDF、Word、PPT、Excel、TXT、Markdown、CSV、网页）和可选 PPTX 模板生成产品、项目、培训、课程、营销或研究演示文稿；自动提取文本、图片、表格和图表，并支持视觉筛选与模板原生填充。
 - **GitHub 项目展示 / GitHub showcase**：前端只访问站内接口，后端代理 GitHub API 和 README raw 内容，避免浏览器直连外部接口。
 
 ## 截图 / Screenshots
@@ -32,11 +32,11 @@ The translation view follows a four-state flow: upload, configure, translate and
 
 ![PDF translation](front/public/readme/translate.jpg)
 
-### Paper To PPT / 论文转 PPT
+### Materials To PPT / 通用资料转 PPT
 
-PPT 生成页支持提示词、论文和 PPTX 模板组合输入。任务在后端单 worker 队列中运行，完成后下载可编辑 `.pptx`。
+PPT 生成页支持仅提示词、仅资料、提示词 + 资料，以及可选 PPTX 模板。用户不需要配置素材提取比例，系统会自动理解资料并选择有价值的视觉素材。内置模板扩展为 23 个按基础、杂志创意、数据咨询、产品 SaaS、企业开源分类的风格包，来源覆盖 Marp、Slidev、Dracula、PPT Master、Presenton 与 GitHub Primer；选择模板时会提供封面、目录、章节、内容和结尾共 5 页样式示意，并可折叠分类。任务在后端单 worker 队列中运行，用户可选择可编辑 `.pptx` 或独立单文件 `.html` 输出；完成后用固定 16:9 画布和左侧缩略图进行图片式预览，避免响应式文字布局错位；仍可网页编辑标题/要点、用提示词二次生成新版本。
 
-The PPT generator accepts prompts, papers and optional PPTX templates. Jobs run in a single backend worker queue and produce editable `.pptx` files.
+The PPT generator accepts a prompt or common source materials plus an optional PPTX template. Extraction is automatic; jobs run in a single backend worker queue, expose a browser preview/editor after completion, and produce either editable `.pptx` or self-contained `.html` files. Revisions create a new task while preserving the original source, template, and output format.
 
 ![PPT generation](front/public/readme/ppt-generate.jpg)
 
@@ -106,6 +106,8 @@ Useful commands / 常用命令：
 ./project.sh restart backend
 ./project.sh logs backend
 ./project.sh stop
+# local MySQL is managed automatically when DB_URL points to 127.0.0.1:3306
+./project.sh mysql status
 ```
 
 ## 配置 / Configuration
@@ -123,6 +125,8 @@ Important groups / 主要配置组：
 - `PPT_GENERATION_*`
 - `ROOT_USERNAME`, `ROOT_PASSWORD`
 - `DB_URL`, `DB_DRIVER`, `DB_USERNAME`, `DB_PASSWORD` for production MySQL
+
+本地 `.env.local` 若配置 `127.0.0.1:3306` 的 MySQL，`project.sh start/stop` 会联动 Homebrew `mysql` 服务；需要显式绕过数据库服务时设置 `PROJECT_DB_MODE=h2`。
 
 真实 API key 和部署参数必须放在仓库外。根目录 `.env.local.example` 只保留空值/占位符，可作为部署配置清单；不要提交真实 `.env.local`。
 

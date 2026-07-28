@@ -1,20 +1,32 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { getCurrentUser, loginAccount, logoutAccount, registerAccount } from '@/api'
+import { getCurrentUser, getSiteSettings, loginAccount, logoutAccount, registerAccount } from '@/api'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const loading = ref(false)
+  const visibility = ref({ Publications: 'PUBLIC', Translate: 'USER', Contact: 'USER', News: 'PUBLIC', Business: 'PUBLIC', Cases: 'PUBLIC' })
 
   const isLoggedIn = computed(() => Boolean(user.value?.id))
   const isRoot = computed(() => Boolean(user.value?.root))
   const credits = computed(() => Number(user.value?.credits || 0))
 
+  function clearPptTaskSession() {
+    try {
+      sessionStorage.removeItem('ppt-generation-task-tokens')
+      sessionStorage.removeItem('ppt-generation-active-task')
+    } catch {
+      // Storage can be disabled in private browsing; auth transitions still proceed.
+    }
+  }
+
   function applyUser(data) {
     if (!data || typeof data !== 'object') {
+      clearPptTaskSession()
       user.value = null
       return
     }
+    if (user.value?.id && data.id && user.value.id !== data.id) clearPptTaskSession()
     const csrfToken = data.csrfToken
     if (csrfToken) localStorage.setItem('csrfToken', csrfToken)
     user.value = { ...data }
@@ -25,6 +37,10 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const res = await getCurrentUser()
       applyUser(res.data)
+      try {
+        const site = await getSiteSettings()
+        visibility.value = { ...visibility.value, ...(site.data?.visibility || {}) }
+      } catch {}
       return user.value
     } finally {
       loading.value = false
@@ -46,6 +62,7 @@ export const useAuthStore = defineStore('auth', () => {
       await logoutAccount()
     } finally {
       localStorage.removeItem('csrfToken')
+      clearPptTaskSession()
       user.value = null
     }
   }
@@ -54,5 +71,10 @@ export const useAuthStore = defineStore('auth', () => {
     if (user.value) user.value = { ...user.value, credits: Number(value || 0) }
   }
 
-  return { user, loading, isLoggedIn, isRoot, credits, refresh, login, register, logout, updateCredits }
+  function canView(feature) {
+    const level = visibility.value[feature] || 'PUBLIC'
+    return level === 'PUBLIC' || (level === 'USER' && isLoggedIn.value) || (level === 'ROOT' && isRoot.value)
+  }
+
+  return { user, loading, isLoggedIn, isRoot, credits, visibility, canView, refresh, login, register, logout, updateCredits }
 })

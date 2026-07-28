@@ -128,7 +128,7 @@ const MenuIcon = MenuOutline
 const MoonIcon = MoonOutline
 const SunIcon = SunnyOutline
 
-const menuOptions = computed(() => [
+const allMenuOptions = computed(() => [
   {
     label: '文献',
     key: 'Publications',
@@ -155,6 +155,8 @@ const menuOptions = computed(() => [
     onClick: () => navigateTo('/admin')
   }] : [])
 ])
+
+const menuOptions = computed(() => allMenuOptions.value.filter(item => auth.canView(item.key) || item.key === 'Admin'))
 
 const mobileMenuOptions = computed(() => menuOptions.value)
 
@@ -237,6 +239,7 @@ async function handleLogout() {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 16px;
   height: 80px;
   width: 100%;
 }
@@ -293,7 +296,7 @@ async function handleLogout() {
   display: flex;
   align-items: center;
   gap: 20px;
-  flex: 1;
+  flex: 1 1 auto;
   justify-content: flex-end;
   min-width: 0;
 }
@@ -344,6 +347,7 @@ async function handleLogout() {
   align-items: center;
   gap: 6px;
   padding-left: 4px;
+  min-width: 0;
 }
 
 .account-button {
@@ -355,12 +359,16 @@ async function handleLogout() {
   gap: 1px;
   padding: 4px 8px;
   min-width: 92px;
+  max-width: 138px;
   text-align: left;
   cursor: pointer;
 
   span {
     font-size: 12px;
     line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   strong {
@@ -420,12 +428,25 @@ async function handleLogout() {
 
   .mobile-menu-btn {
     display: inline-flex;
+    min-width: 36px;
+    min-height: 36px;
+  }
+}
+
+@media (max-width: 560px) {
+  .logo {
+    min-width: 0;
+  }
+
+  .logo small {
+    display: none;
   }
 }
 
 @media (max-width: 420px) {
   .header-content {
     padding: 0 12px;
+    gap: 8px;
   }
 
   .logo {
@@ -438,6 +459,25 @@ async function handleLogout() {
 
   .header-actions {
     gap: 4px;
+  }
+
+  .theme-btn {
+    min-width: 32px;
+    min-height: 32px;
+  }
+}
+
+@media (max-width: 360px) {
+  .logo-text {
+    font-size: 17px;
+  }
+
+  .logo-mark {
+    height: 24px;
+  }
+
+  .account-button {
+    max-width: 92px;
   }
 }
 </style>

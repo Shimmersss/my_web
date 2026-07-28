@@ -111,7 +111,7 @@ class PptInputExtractorTest {
         config.setPaperParserScript(createParserStub().toString());
         PptInputExtractor extractor = new PptInputExtractor(config, new ObjectMapper());
         Path docx = tempDir.resolve("parser.docx");
-        Files.writeString(docx, "parser-input", StandardCharsets.UTF_8);
+        createDocxWithText(docx, "parser-input");
         Path imagesDir = tempDir.resolve("parser-images");
 
         extractor.extractPaperText(docx, "paper.docx", imagesDir, 50, 10, 0);
@@ -137,6 +137,19 @@ class PptInputExtractorTest {
 
         assertTrue(text.contains("内置解析兜底文本"));
         assertTrue(elapsedMillis < 5000, "parser timeout fallback should not hang");
+    }
+
+    @Test
+    void supportsPlainTextSourceAsAnAutomaticInput() throws Exception {
+        PptGenerationConfig config = new PptGenerationConfig();
+        PptInputExtractor extractor = new PptInputExtractor(config, new ObjectMapper());
+        Path markdown = tempDir.resolve("brief.md");
+        Files.writeString(markdown, "# Product brief\n\nTarget users and launch milestones.", StandardCharsets.UTF_8);
+
+        String text = extractor.extractPaperText(markdown, "brief.md", tempDir.resolve("text-images"), 100);
+
+        assertTrue(text.contains("Product brief"));
+        assertTrue(text.contains("launch milestones"));
     }
 
     private void createDocxWithTablesAndImages(Path target, int tableCount, int imageCount) throws Exception {

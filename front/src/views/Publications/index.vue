@@ -255,6 +255,8 @@ const openedPdfUrl = reactive({})
 const openedMd = reactive({})
 const attachmentDownloads = reactive({})
 const attachmentAbortControllers = new Map()
+let collectionRefreshTimer = null
+let collectionRefreshAfterWarmupTimer = null
 
 const typeMap = {
   journalArticle: '期刊论文',
@@ -335,14 +337,7 @@ const filtered = computed(() => {
   const list = items.value.filter(item => {
     if (selectedKey.value && !(item.collections || []).includes(selectedKey.value)) return false
     if (typeFilter.value && item.itemType !== typeFilter.value) return false
-    if (!kw) return true
-    const hay = [
-      item.title,
-      item.publicationTitle,
-      formatCreators(item.creators),
-      item.abstractNote
-    ].filter(Boolean).join(' ').toLowerCase()
-    return hay.includes(kw)
+    return !kw || itemMatchesSearch(item, kw)
   })
   return [...list].sort(itemMatchesPdfFirst)
 })
@@ -419,6 +414,44 @@ function formatCreators(creators) {
 
 function itemCollections(item) {
   return (item.collections || []).map(k => collectionMap.value[k]?.name).filter(Boolean)
+}
+
+function normalizeSearchText(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/[\u2010-\u2015]/g, '-')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+}
+
+function acronymOf(value) {
+  return normalizeSearchText(value)
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(word => word[0])
+    .join('')
+}
+
+function itemMatchesSearch(item, query) {
+  const fields = [
+    item.title,
+    item.publicationTitle,
+    formatCreators(item.creators),
+    item.abstractNote,
+    item.DOI,
+    item.url,
+    ...(item.tags || []).map(tag => typeof tag === 'string' ? tag : tag?.tag),
+    ...itemCollections(item)
+  ].filter(Boolean)
+  const normalizedQuery = normalizeSearchText(query)
+  if (!normalizedQuery) return true
+
+  return fields.some(field => {
+    const normalizedField = normalizeSearchText(field)
+    if (normalizedField.includes(normalizedQuery)) return true
+    // 例如 “You Only Look Once” 的标题缩写为 YOLO。
+    return normalizedQuery.length >= 2 && acronymOf(field).includes(normalizedQuery)
+  })
 }
 
 function hasPdf(item) {
@@ -588,6 +621,19 @@ async function doExport(itemKey, opt) {
   }
 }
 
+function applyCollections(response) {
+  const nextCollections = (response?.data || []).map(c => c.data || c)
+  collectionsRaw.value = nextCollections
+  if (selectedKey.value && !nextCollections.some(c => c.key === selectedKey.value)) {
+    selectedKey.value = null
+  }
+}
+
+async function loadCollections(refresh = false) {
+  const response = await getZoteroCollections(refresh)
+  applyCollections(response)
+}
+
 async function load() {
   loading.value = true
   error.value = ''
@@ -605,7 +651,7 @@ async function load() {
     } else {
       error.value = itemsRes.message || '拉取文献失败'
     }
-    collectionsRaw.value = (collRes?.data || []).map(c => c.data || c)
+    applyCollections(collRes)
   } catch (e) {
     error.value = e.message || '网络错误'
   } finally {
@@ -613,8 +659,27 @@ async function load() {
   }
 }
 
+async function refreshCollections(refresh = false) {
+  try {
+    await loadCollections(refresh)
+  } catch (e) {
+    // 文献主体已加载时，分组短暂失败不覆盖整页内容；下次轮询继续重试。
+    console.warn('刷新 Zotero 分组失败:', e)
+  }
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') {
+    // 先异步要求后端更新缓存，再读取一次新快照，避免等待下一次 5 分钟定时刷新。
+    refreshCollections(true)
+    collectionRefreshAfterWarmupTimer = window.setTimeout(() => refreshCollections(), 2000)
+  }
+}
+
 onMounted(() => {
   load()
+  collectionRefreshTimer = window.setInterval(refreshCollections, 60 * 1000)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   nextTick(() => {
     bindSidebarFollowListeners()
     updateSidebarFollow()
@@ -624,6 +689,9 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  if (collectionRefreshTimer) window.clearInterval(collectionRefreshTimer)
+  if (collectionRefreshAfterWarmupTimer) window.clearTimeout(collectionRefreshAfterWarmupTimer)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   attachmentAbortControllers.forEach(controller => controller.abort())
   Object.values(openedPdfUrl).forEach(url => URL.revokeObjectURL(url))
   clearTimeout(sidebarResizeTimer)

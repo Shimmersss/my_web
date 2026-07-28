@@ -13,10 +13,12 @@ import java.util.Map;
 public class AuthController {
     private final AuthService authService;
     private final QuotaService quotaService;
+    private final RuntimeConfigService runtimeConfigService;
 
-    public AuthController(AuthService authService, QuotaService quotaService) {
+    public AuthController(AuthService authService, QuotaService quotaService, RuntimeConfigService runtimeConfigService) {
         this.authService = authService;
         this.quotaService = quotaService;
+        this.runtimeConfigService = runtimeConfigService;
     }
 
     @GetMapping("/me")
@@ -63,6 +65,11 @@ public class AuthController {
     @GetMapping("/quota-settings")
     public Map<String, Object> quotaSettings() {
         return ok(quotaService.settings());
+    }
+
+    @GetMapping("/site-settings")
+    public Map<String, Object> siteSettings() {
+        return Map.of("code", 200, "message", "success", "data", Map.of("visibility", runtimeConfigService.publicSettings().get("visibility")));
     }
 
     private Map<String, Object> userData(AuthUser user) {

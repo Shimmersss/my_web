@@ -28,11 +28,50 @@ svg {
   max-width: 100%;
 }
 
+iframe,
+table,
+pre,
+code {
+  max-width: 100%;
+}
+
+pre {
+  overflow-x: auto;
+}
+
 button,
 input,
 textarea,
 select {
   font: inherit;
+}
+
+.n-button {
+  max-width: 100%;
+}
+
+.n-button .n-button__content {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 640px) {
+  .n-modal {
+    max-width: calc(100vw - 20px);
+  }
+
+  .n-card.n-modal,
+  .n-dialog.n-modal {
+    margin: 10px;
+  }
+
+  .n-card.n-modal > .n-card-header,
+  .n-card.n-modal > .n-card__content,
+  .n-card.n-modal > .n-card__footer,
+  .n-dialog.n-modal > .n-dialog__content {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 }
 
 // 响应式断点

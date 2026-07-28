@@ -1,10 +1,12 @@
 package com.web.backen.zotero;
 
 import com.web.backen.config.ZoteroConfig;
+import com.web.backen.auth.RuntimeConfigService;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.client.RestClient;
 
 import java.io.IOException;
@@ -27,34 +29,45 @@ public class ZoteroService {
 
     private final RestClient restClient;
     private final ZoteroConfig config;
+    private final RuntimeConfigService runtimeConfig;
     private final HttpClient httpClient = HttpClient.newBuilder()
             .followRedirects(HttpClient.Redirect.NORMAL)
             .connectTimeout(Duration.ofSeconds(10))
             .build();
 
-    public ZoteroService(RestClient zoteroRestClient, ZoteroConfig config) {
+    @Autowired
+    public ZoteroService(RestClient zoteroRestClient, ZoteroConfig config, RuntimeConfigService runtimeConfig) {
         this.restClient = zoteroRestClient;
         this.config = config;
+        this.runtimeConfig = runtimeConfig;
+    }
+
+    // 兼容轻量单元测试构造方式。
+    public ZoteroService(RestClient zoteroRestClient, ZoteroConfig config) {
+        this(zoteroRestClient, config, null);
     }
 
     public List<Map<String, Object>> listItems(int limit) {
         return restClient.get()
-                .uri("/users/{userId}/items?limit={limit}&format=json", config.getUserId(), limit)
+                .uri(baseUrl() + "/users/{userId}/items?limit={limit}&format=json", userId(), limit)
+                .header("Zotero-API-Key", apiKey())
                 .retrieve()
                 .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
     }
 
     public List<Map<String, Object>> listCollections() {
         return restClient.get()
-                .uri("/users/{userId}/collections", config.getUserId())
+                .uri(baseUrl() + "/users/{userId}/collections", userId())
+                .header("Zotero-API-Key", apiKey())
                 .retrieve()
                 .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
     }
 
     public List<Map<String, Object>> listItemsInCollection(String collectionKey, int limit) {
         return restClient.get()
-                .uri("/users/{userId}/collections/{key}/items?limit={limit}",
-                        config.getUserId(), collectionKey, limit)
+                .uri(baseUrl() + "/users/{userId}/collections/{key}/items?limit={limit}",
+                        userId(), collectionKey, limit)
+                .header("Zotero-API-Key", apiKey())
                 .retrieve()
                 .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
     }
@@ -66,12 +79,12 @@ public class ZoteroService {
      *   自动解出包内主文件并按文件名后缀推断 content-type
      */
     public ProxiedFile fetchItemFile(String itemKey) throws Exception {
-        URI uri = URI.create(config.getBaseUrl()
-                + "/users/" + config.getUserId()
+        URI uri = URI.create(baseUrl()
+                + "/users/" + userId()
                 + "/items/" + itemKey + "/file");
         HttpRequest req = HttpRequest.newBuilder(uri)
                 .header("Zotero-API-Version", "3")
-                .header("Zotero-API-Key", config.getApiKey() == null ? "" : config.getApiKey())
+                .header("Zotero-API-Key", apiKey())
                 .timeout(Duration.ofSeconds(30))
                 .GET()
                 .build();
@@ -144,22 +157,28 @@ public class ZoteroService {
         if ("bibliography".equals(format)) {
             String s = (style == null || style.isBlank()) ? "apa" : style;
             Map<String, Object> resp = restClient.get()
-                    .uri("/users/{userId}/items/{key}?include=bib&style={style}",
-                            config.getUserId(), itemKey, s)
+                    .uri(baseUrl() + "/users/{userId}/items/{key}?include=bib&style={style}",
+                            userId(), itemKey, s)
+                    .header("Zotero-API-Key", apiKey())
                     .retrieve()
                     .body(new ParameterizedTypeReference<Map<String, Object>>() {});
             Object bib = resp == null ? null : resp.get("bib");
             return bib == null ? "" : bib.toString();
         }
         return restClient.get()
-                .uri("/users/{userId}/items/{key}?format={fmt}",
-                        config.getUserId(), itemKey, format)
+                .uri(baseUrl() + "/users/{userId}/items/{key}?format={fmt}",
+                        userId(), itemKey, format)
+                .header("Zotero-API-Key", apiKey())
                 .retrieve()
                 .body(String.class);
     }
 
     public boolean isConfigured() {
-        return config.getApiKey() != null && !config.getApiKey().isBlank()
-                && config.getUserId() != null && !config.getUserId().isBlank();
+        return !apiKey().isBlank() && !userId().isBlank();
     }
+
+    private String baseUrl() { return runtimeConfig == null ? config.getBaseUrl() : runtimeConfig.zoteroUrl(); }
+    private String userId() { return runtimeConfig == null ? value(config.getUserId()) : runtimeConfig.zoteroUser(); }
+    private String apiKey() { return runtimeConfig == null ? value(config.getApiKey()) : runtimeConfig.zoteroKey(); }
+    private String value(String value) { return value == null ? "" : value; }
 }

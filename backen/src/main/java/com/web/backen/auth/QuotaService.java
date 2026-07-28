@@ -107,12 +107,44 @@ public class QuotaService {
 
     @Transactional
     public String createInvite(long rootId, String code, int credits, int maxUses) {
+        return createInvite(rootId, code, credits, maxUses, null);
+    }
+
+    @Transactional
+    public String createInvite(long rootId, String code, int credits, int maxUses, String expiresAt) {
         String clean = code == null || code.isBlank()
                 ? java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 16)
                 : code.trim();
-        jdbc.update("INSERT INTO invite_codes (code, credits, max_uses, created_by) VALUES (?, ?, ?, ?)",
-                clean, Math.max(0, credits), Math.max(1, maxUses), rootId);
+        java.sql.Timestamp expiry = parseExpiry(expiresAt);
+        jdbc.update("INSERT INTO invite_codes (code, credits, max_uses, created_by, expires_at) VALUES (?, ?, ?, ?, ?)",
+                clean, Math.max(0, credits), Math.max(1, maxUses), rootId, expiry);
         return clean;
+    }
+
+    @Transactional
+    public void updateInvite(long id, boolean enabled, String expiresAt) {
+        int updated = jdbc.update("UPDATE invite_codes SET enabled=?, expires_at=? WHERE id=?", enabled, parseExpiry(expiresAt), id);
+        if (updated == 0) throw new AuthException(404, "邀请码不存在");
+    }
+
+    @Transactional
+    public void updateUserStatus(long id, boolean enabled) {
+        Map<String, Object> user = jdbc.queryForList("SELECT role FROM users WHERE id=?", id).stream().findFirst()
+                .orElseThrow(() -> new AuthException(404, "用户不存在"));
+        if ("ROOT".equals(String.valueOf(user.get("role"))) && !enabled) {
+            throw new AuthException(400, "不能停用 root 账户");
+        }
+        jdbc.update("UPDATE users SET enabled=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", enabled, id);
+        if (!enabled) jdbc.update("DELETE FROM user_sessions WHERE user_id=?", id);
+    }
+
+    public Map<String, Object> stats() {
+        return Map.of(
+                "users", count("SELECT COUNT(*) FROM users"),
+                "activeUsers", count("SELECT COUNT(*) FROM users WHERE enabled=TRUE"),
+                "activeInvites", count("SELECT COUNT(*) FROM invite_codes WHERE enabled=TRUE AND used_count < max_uses AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)"),
+                "creditsIssued", sum("SELECT COALESCE(SUM(amount), 0) FROM credit_transactions WHERE amount > 0"),
+                "creditsSpent", Math.abs(sum("SELECT COALESCE(SUM(amount), 0) FROM credit_transactions WHERE kind='SPEND'")));
     }
 
     public void updateSettings(int translationCreditPerPage, int pptCreditPerTask) {
@@ -144,4 +176,12 @@ public class QuotaService {
             jdbc.update("INSERT INTO app_settings (setting_key, setting_value) VALUES (?, ?)", key, value);
         }
     }
+
+    private java.sql.Timestamp parseExpiry(String value) {
+        if (value == null || value.isBlank()) return null;
+        try { return java.sql.Timestamp.from(java.time.Instant.parse(value)); }
+        catch (Exception e) { throw new AuthException(400, "过期时间格式无效"); }
+    }
+    private int count(String sql) { Integer value = jdbc.queryForObject(sql, Integer.class); return value == null ? 0 : value; }
+    private int sum(String sql) { Number value = jdbc.queryForObject(sql, Number.class); return value == null ? 0 : value.intValue(); }
 }

@@ -2,7 +2,12 @@
  * HTTP 请求工具
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+export const BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api'
+
+export function apiUrl(path = '') {
+  const suffix = String(path || '')
+  return `${BASE_URL}${suffix.startsWith('/') ? suffix : `/${suffix}`}`
+}
 
 /**
  * 通用请求方法
@@ -22,12 +27,12 @@ async function request(url, options = {}) {
   }
   const config = {
     ...options,
-    credentials: 'same-origin',
+    credentials: /^https?:\/\//i.test(BASE_URL) ? 'include' : 'same-origin',
     headers
   }
 
   try {
-    const response = await fetch(`${BASE_URL}${url}`, config)
+    const response = await fetch(apiUrl(url), config)
 
     if (!response.ok) {
       let message = `HTTP error! status: ${response.status}`

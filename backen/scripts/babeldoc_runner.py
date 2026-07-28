@@ -9,18 +9,25 @@ import statistics
 
 from babeldoc.docvision.doclayout import DocLayoutModel
 from babeldoc.format.pdf import high_level
-from babeldoc.format.pdf.document_il import Box
-from babeldoc.format.pdf.document_il import PdfParagraph
-from babeldoc.format.pdf.document_il.midend.paragraph_finder import ParagraphFinder
-from babeldoc.format.pdf.document_il.midend.paragraph_finder import generate_base58_id
+from babeldoc.format.pdf.document_il import Box, PdfParagraph
+from babeldoc.format.pdf.document_il.midend.il_translator import ILTranslator
+from babeldoc.format.pdf.document_il.midend.paragraph_finder import (
+    ParagraphFinder,
+    generate_base58_id,
+)
 from babeldoc.format.pdf.document_il.midend.typesetting import Typesetting
-from babeldoc.format.pdf.translation_config import TranslationConfig
-from babeldoc.format.pdf.translation_config import WatermarkOutputMode
-from babeldoc.translator.translator import OpenAITranslator
-from babeldoc.translator.translator import set_translate_rate_limiter
-from reference_layout import is_numbered_reference
-from reference_layout import reference_split_points
+from babeldoc.format.pdf.translation_config import (
+    TranslationConfig,
+    WatermarkOutputMode,
+)
+from babeldoc.translator.translator import OpenAITranslator, set_translate_rate_limiter
 
+from reference_layout import (
+    is_numbered_reference,
+    is_reference_paragraph,
+    reference_section_flags,
+    reference_split_points,
+)
 
 COMMON_ENGLISH_WORDS = {
     "the",
@@ -110,16 +117,52 @@ def split_merged_reference_paragraphs(paragraph_finder, paragraphs):
 
 
 def install_reference_layout_patches():
-    """Add reference splitting and a two-CJK-character hanging indent to BabelDOC."""
+    """Keep references untranslated and preserve BabelDOC compatibility fixes."""
     if getattr(ParagraphFinder, "_web_reference_layout_patch", False):
         return
 
     original_process = ParagraphFinder.process_independent_paragraphs
     original_layout = Typesetting._layout_typesetting_units
+    original_pre_translate = ILTranslator.pre_translate_paragraph
 
     def process_independent_paragraphs(self, paragraphs, median_width):
         split_merged_reference_paragraphs(self, paragraphs)
         return original_process(self, paragraphs, median_width)
+
+    def pre_translate_paragraph(
+        self, paragraph, tracker, page_font_map, xobj_font_map
+    ):
+        # Returning no translation input leaves the original PDF line/character
+        # compositions untouched. Typesetting can then pass them through at their
+        # original coordinates instead of rebuilding the bibliography as CJK text.
+        if not hasattr(self, "_web_reference_paragraph_ids"):
+            document = getattr(self, "docs", None)
+            document_paragraphs = (
+                [
+                    item
+                    for page in document.page
+                    for item in page.pdf_paragraph
+                ]
+                if document
+                else []
+            )
+            flags = reference_section_flags(
+                [item.unicode or "" for item in document_paragraphs]
+            )
+            self._web_reference_paragraph_ids = {
+                id(item)
+                for item, preserve in zip(document_paragraphs, flags)
+                if preserve
+            }
+        if (
+            id(paragraph) in self._web_reference_paragraph_ids
+            or is_reference_paragraph(paragraph.unicode or "")
+        ):
+            tracker.set_pdf_unicode(paragraph.unicode)
+            return None, None
+        return original_pre_translate(
+            self, paragraph, tracker, page_font_map, xobj_font_map
+        )
 
     def layout_typesetting_units(
         self, typesetting_units, box, scale, line_skip, paragraph, use_english_line_break=True
@@ -165,6 +208,7 @@ def install_reference_layout_patches():
 
     ParagraphFinder.process_independent_paragraphs = process_independent_paragraphs
     Typesetting._layout_typesetting_units = layout_typesetting_units
+    ILTranslator.pre_translate_paragraph = pre_translate_paragraph
     ParagraphFinder._web_reference_layout_patch = True
 
 

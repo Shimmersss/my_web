@@ -5,16 +5,20 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.time.Instant;
+import java.sql.Timestamp;
 
 @RestController
 @RequestMapping("/api/admin/accounts")
 public class AdminAccountController {
     private final AuthService authService;
     private final QuotaService quotaService;
+    private final RuntimeConfigService runtimeConfigService;
 
-    public AdminAccountController(AuthService authService, QuotaService quotaService) {
+    public AdminAccountController(AuthService authService, QuotaService quotaService, RuntimeConfigService runtimeConfigService) {
         this.authService = authService;
         this.quotaService = quotaService;
+        this.runtimeConfigService = runtimeConfigService;
     }
 
     @GetMapping
@@ -27,7 +31,9 @@ public class AdminAccountController {
                             "users", quotaService.users(),
                             "invites", quotaService.invites(),
                             "transactions", quotaService.transactions(),
-                            "settings", quotaService.settings())));
+                            "settings", quotaService.settings(),
+                            "apiSettings", runtimeConfigService.publicSettings(),
+                            "stats", quotaService.stats())));
         } catch (AuthException e) {
             return error(e);
         }
@@ -38,7 +44,7 @@ public class AdminAccountController {
         try {
             authService.requireCsrf(request);
             AuthUser root = authService.requireRoot(request);
-            String code = quotaService.createInvite(root.id(), value(body.get("code")), intValue(body.get("credits"), 0), intValue(body.get("maxUses"), 1));
+            String code = quotaService.createInvite(root.id(), value(body.get("code")), intValue(body.get("credits"), 0), intValue(body.get("maxUses"), 1), value(body.get("expiresAt")));
             return ResponseEntity.ok(Map.of("code", 200, "data", Map.of("code", code), "message", "success"));
         } catch (AuthException e) {
             return error(e);
@@ -67,6 +73,34 @@ public class AdminAccountController {
         } catch (AuthException e) {
             return error(e);
         }
+    }
+
+    @PutMapping("/api-settings")
+    public ResponseEntity<?> apiSettings(HttpServletRequest request, @RequestBody Map<String, Object> body) {
+        try {
+            authService.requireCsrf(request);
+            authService.requireRoot(request);
+            runtimeConfigService.update(body);
+            return ResponseEntity.ok(Map.of("code", 200, "data", runtimeConfigService.publicSettings(), "message", "success"));
+        } catch (AuthException e) { return error(e); }
+    }
+
+    @PatchMapping("/invites/{id}")
+    public ResponseEntity<?> inviteStatus(HttpServletRequest request, @PathVariable long id, @RequestBody Map<String, Object> body) {
+        try {
+            authService.requireCsrf(request); authService.requireRoot(request);
+            quotaService.updateInvite(id, Boolean.parseBoolean(value(body.get("enabled"))), value(body.get("expiresAt")));
+            return ResponseEntity.ok(Map.of("code", 200, "data", quotaService.invites(), "message", "success"));
+        } catch (AuthException e) { return error(e); }
+    }
+
+    @PatchMapping("/users/{id}")
+    public ResponseEntity<?> userStatus(HttpServletRequest request, @PathVariable long id, @RequestBody Map<String, Object> body) {
+        try {
+            authService.requireCsrf(request); authService.requireRoot(request);
+            quotaService.updateUserStatus(id, Boolean.parseBoolean(value(body.get("enabled"))));
+            return ResponseEntity.ok(Map.of("code", 200, "data", quotaService.users(), "message", "success"));
+        } catch (AuthException e) { return error(e); }
     }
 
     private ResponseEntity<?> error(AuthException e) {

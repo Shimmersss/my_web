@@ -68,10 +68,12 @@ def try_markitdown_convert(input_path: Path) -> dict[str, Any] | None:
         return None
 
 
-def copy_images_from_docx(path: Path, images_dir: Path) -> None:
+def copy_images_from_docx(path: Path, images_dir: Path, max_images: int = 40, max_bytes: int = 64 * 1024 * 1024) -> None:
     import zipfile
 
     images_dir.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    total_bytes = 0
     with zipfile.ZipFile(path) as zf:
         for info in zf.infolist():
             name = info.filename
@@ -80,9 +82,45 @@ def copy_images_from_docx(path: Path, images_dir: Path) -> None:
                 continue
             if not (lower.endswith(".png") or lower.endswith(".jpg") or lower.endswith(".jpeg")):
                 continue
+            if copied >= max_images or total_bytes >= max_bytes:
+                break
+            if info.file_size < 0 or info.file_size > 8 * 1024 * 1024:
+                continue
+            if total_bytes + info.file_size > max_bytes:
+                continue
             data = zf.read(info)
             out_name = sanitize_name(Path(name).name)
             (images_dir / out_name).write_bytes(data)
+            copied += 1
+            total_bytes += len(data)
+
+
+def copy_media_from_office(path: Path, images_dir: Path, prefix: str,
+                           max_images: int = 40, max_bytes: int = 64 * 1024 * 1024) -> None:
+    """Copy embedded media from PPTX/XLSX without loading the whole archive."""
+    import zipfile
+
+    images_dir.mkdir(parents=True, exist_ok=True)
+    copied = 0
+    total_bytes = 0
+    with zipfile.ZipFile(path) as zf:
+        for info in zf.infolist():
+            lower = info.filename.lower()
+            if not lower.startswith(prefix):
+                continue
+            if not lower.endswith((".png", ".jpg", ".jpeg")):
+                continue
+            if copied >= max_images or total_bytes >= max_bytes:
+                break
+            if info.file_size < 0 or info.file_size > 8 * 1024 * 1024:
+                continue
+            if total_bytes + info.file_size > max_bytes:
+                continue
+            data = zf.read(info)
+            out_name = sanitize_name(Path(info.filename).name)
+            (images_dir / f"{prefix.replace('/', '-')}{copied + 1}-{out_name}").write_bytes(data)
+            copied += 1
+            total_bytes += len(data)
 
 
 def main() -> int:
@@ -114,8 +152,13 @@ def main() -> int:
     if not markdown:
         markdown = input_path.read_text(encoding="utf-8", errors="ignore") if input_path.suffix.lower() in {".md", ".txt"} else ""
 
-    if input_path.suffix.lower() == ".docx":
+    suffix = input_path.suffix.lower()
+    if suffix == ".docx":
         copy_images_from_docx(input_path, output_dir / "images")
+    elif suffix == ".pptx":
+        copy_media_from_office(input_path, output_dir / "images", "ppt/media/")
+    elif suffix == ".xlsx":
+        copy_media_from_office(input_path, output_dir / "images", "xl/media/")
     manifest = {
         "source": source,
         "fileName": input_path.name,

@@ -26,6 +26,7 @@ import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -57,10 +58,16 @@ public class PptInputExtractor {
 
     private final PptGenerationConfig config;
     private final ObjectMapper objectMapper;
+    private final Set<Process> activeProcesses = ConcurrentHashMap.newKeySet();
 
     public PptInputExtractor(PptGenerationConfig config, ObjectMapper objectMapper) {
         this.config = config;
         this.objectMapper = objectMapper;
+    }
+
+    public void shutdown() {
+        activeProcesses.forEach(this::terminateProcessTree);
+        activeProcesses.clear();
     }
 
     public String extractPaperText(Path paper, String fileName, Path imagesDir) throws IOException {
@@ -80,6 +87,10 @@ public class PptInputExtractor {
                                    int extractionPercent, int imageBudget, int minCandidateImages) throws IOException {
         if (paper == null || fileName == null || !Files.isRegularFile(paper)) return "";
         String lower = fileName.toLowerCase(Locale.ROOT);
+        if (isOfficeArchive(lower)) {
+            PptArchiveGuard.validate(paper, config.getMaxArchiveEntries(), config.getMaxArchiveUncompressedBytes(),
+                    config.getMaxArchiveEntryBytes(), config.getMaxArchiveCompressionRatio());
+        }
         int effectiveBudget = effectiveImageLimit(imageBudget, extractionPercent, minCandidateImages);
         String text;
         if (lower.endsWith(".pdf")) {
@@ -95,10 +106,106 @@ public class PptInputExtractor {
             if (text == null || text.isBlank()) {
                 text = extractDocxTextAndImages(paper, imagesDir, effectiveBudget);
             }
+        } else if (lower.endsWith(".pptx")) {
+            text = extractViaDocumentParser(paper, imagesDir, effectiveBudget);
+            String fallback = extractPptxTextAndImages(paper, imagesDir, effectiveBudget);
+            if (text == null || text.isBlank()) text = fallback;
+        } else if (lower.endsWith(".xlsx")) {
+            text = extractViaDocumentParser(paper, imagesDir, effectiveBudget);
+            String fallback = extractXlsxTextAndImages(paper, imagesDir, effectiveBudget);
+            if (text == null || text.isBlank()) text = fallback;
+        } else if (isPlainTextFile(lower)) {
+            text = readPlainText(paper);
         } else {
-            throw new IllegalArgumentException("论文文件仅支持 PDF 或 DOCX");
+            throw new IllegalArgumentException("资料文件支持 PDF、DOCX、PPTX、XLSX、TXT、MD、CSV 或 HTML");
         }
         return limitText(cleanText(text), config.getMaxPaperTextChars());
+    }
+
+    private boolean isOfficeArchive(String fileName) {
+        return fileName.endsWith(".docx") || fileName.endsWith(".pptx") || fileName.endsWith(".xlsx");
+    }
+
+    private boolean isPlainTextFile(String fileName) {
+        return fileName.endsWith(".txt") || fileName.endsWith(".md") || fileName.endsWith(".csv")
+                || fileName.endsWith(".html") || fileName.endsWith(".htm");
+    }
+
+    private String readPlainText(Path path) throws IOException {
+        long maxBytes = Math.max(4096L, (long) config.getMaxPaperTextChars() * 4L);
+        try (InputStream input = Files.newInputStream(path)) {
+            byte[] bytes = input.readNBytes((int) Math.min(Integer.MAX_VALUE, maxBytes));
+            String text = new String(bytes, StandardCharsets.UTF_8);
+            if (path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".html")
+                    || path.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".htm")) {
+                text = text.replaceAll("(?is)<script[^>]*>.*?</script>|<style[^>]*>.*?</style>", " ")
+                        .replaceAll("(?is)<[^>]+>", " ");
+            }
+            return text;
+        }
+    }
+
+    private String extractPptxTextAndImages(Path pptx, Path imagesDir, int imageLimit) throws IOException {
+        Files.createDirectories(imagesDir);
+        StringBuilder text = new StringBuilder();
+        int copiedImages = 0;
+        int remainingImages = Math.max(0, imageLimit - countImageFiles(imagesDir));
+        try (ZipInputStream zip = new ZipInputStream(Files.newInputStream(pptx))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                String name = entry.getName();
+                String lower = name.toLowerCase(Locale.ROOT);
+                if (lower.startsWith("ppt/slides/slide") && lower.endsWith(".xml")) {
+                    text.append(extractPptSlideText(new String(zip.readAllBytes(), StandardCharsets.UTF_8))).append('\n');
+                } else if (lower.startsWith("ppt/media/") && copiedImages < remainingImages && isSupportedImageName(lower)) {
+                    String ext = lower.endsWith(".png") ? ".png" : ".jpg";
+                    Files.copy(zip, imagesDir.resolve("source-slide-image-" + (++copiedImages) + ext),
+                            StandardCopyOption.REPLACE_EXISTING);
+                }
+                zip.closeEntry();
+            }
+        }
+        return text.toString();
+    }
+
+    private String extractPptSlideText(String xml) {
+        StringBuilder builder = new StringBuilder();
+        Matcher matcher = PPT_TEXT.matcher(xml == null ? "" : xml);
+        while (matcher.find()) builder.append(unescapeXml(matcher.group(1))).append(' ');
+        return cleanText(builder.toString());
+    }
+
+    private String extractXlsxTextAndImages(Path xlsx, Path imagesDir, int imageLimit) throws IOException {
+        Files.createDirectories(imagesDir);
+        StringBuilder text = new StringBuilder();
+        List<List<String>> rows = extractXlsxRows(Files.readAllBytes(xlsx));
+        if (!rows.isEmpty()) text.append(rowsToText(rows)).append('\n');
+        int copiedImages = 0;
+        int remainingImages = Math.max(0, imageLimit - countImageFiles(imagesDir));
+        try (ZipInputStream zip = new ZipInputStream(Files.newInputStream(xlsx))) {
+            ZipEntry entry;
+            while ((entry = zip.getNextEntry()) != null) {
+                String name = entry.getName();
+                String lower = name.toLowerCase(Locale.ROOT);
+                if (lower.startsWith("xl/media/") && copiedImages < remainingImages && isSupportedImageName(lower)) {
+                    String ext = lower.endsWith(".png") ? ".png" : ".jpg";
+                    Files.copy(zip, imagesDir.resolve("source-sheet-image-" + (++copiedImages) + ext),
+                            StandardCopyOption.REPLACE_EXISTING);
+                }
+                zip.closeEntry();
+            }
+        }
+        return text.toString();
+    }
+
+    private boolean isSupportedImageName(String name) {
+        return name.endsWith(".png") || name.endsWith(".jpg") || name.endsWith(".jpeg");
+    }
+
+    private int countImageFiles(Path imagesDir) throws IOException {
+        try (Stream<Path> files = Files.list(imagesDir)) {
+            return (int) files.filter(Files::isRegularFile).filter(this::isSupportedImage).count();
+        }
     }
 
     public void extractTemplateStyle(Path template, Path taskDir) throws IOException {
@@ -239,15 +346,25 @@ public class PptInputExtractor {
         ProcessBuilder builder = new ProcessBuilder(command);
         builder.redirectErrorStream(true);
         Process process = builder.start();
+        activeProcesses.add(process);
         CompletableFuture<String> outputFuture = CompletableFuture.supplyAsync(() -> readProcessOutput(process));
-        if (!process.waitFor(documentParserTimeoutSeconds(), TimeUnit.SECONDS)) {
+        try {
+            if (!process.waitFor(documentParserTimeoutSeconds(), TimeUnit.SECONDS)) {
+                terminateProcessTree(process);
+                outputFuture.cancel(true);
+                throw new IllegalStateException("文档解析超时");
+            }
+            String output = outputFuture.join();
+            if (process.exitValue() != 0) {
+                throw new IllegalStateException("文档解析失败: " + tail(output, 1200));
+            }
+        } catch (InterruptedException e) {
             terminateProcessTree(process);
-            outputFuture.cancel(true);
-            throw new IllegalStateException("文档解析超时");
-        }
-        String output = outputFuture.join();
-        if (process.exitValue() != 0) {
-            throw new IllegalStateException("文档解析失败: " + tail(output, 1200));
+            Thread.currentThread().interrupt();
+            throw e;
+        } finally {
+            activeProcesses.remove(process);
+            if (process.isAlive()) terminateProcessTree(process);
         }
     }
 
@@ -256,11 +373,21 @@ public class PptInputExtractor {
     }
 
     private String readProcessOutput(Process process) {
+        final int maxChars = 64 * 1024;
+        StringBuilder tail = new StringBuilder(maxChars);
         try (InputStream input = process.getInputStream()) {
-            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            byte[] buffer = new byte[8192];
+            int read;
+            while ((read = input.read(buffer)) >= 0) {
+                if (read == 0) continue;
+                tail.append(new String(buffer, 0, read, StandardCharsets.UTF_8));
+                if (tail.length() > maxChars) tail.delete(0, tail.length() - maxChars);
+            }
         } catch (IOException e) {
-            return e.getMessage() == null ? "" : e.getMessage();
+            if (tail.isEmpty()) return e.getMessage() == null ? "" : e.getMessage();
+            tail.append("\n[process output read error] ").append(e.getMessage());
         }
+        return tail.toString();
     }
 
     private void terminateProcessTree(Process process) {
@@ -311,9 +438,14 @@ public class PptInputExtractor {
 
     private void extractPdfPageImages(PDDocument document, Path imagesDir, int imageBudget) throws IOException {
         Files.createDirectories(imagesDir);
-        clearDirectory(imagesDir);
+        int existing = 0;
+        try (Stream<Path> files = Files.list(imagesDir)) {
+            existing = (int) files.filter(Files::isRegularFile).count();
+        }
+        int remainingBudget = Math.max(0, imageBudget - existing);
+        if (remainingBudget == 0) return;
         PDFRenderer renderer = new PDFRenderer(document);
-        int count = Math.min(document.getNumberOfPages(), Math.max(1, imageBudget));
+        int count = Math.min(document.getNumberOfPages(), remainingBudget);
         for (int pageIndex : prioritizedPdfPageIndexes(document, count)) {
             BufferedImage image = renderer.renderImageWithDPI(pageIndex, 96, ImageType.RGB);
             Path target = imagesDir.resolve("paper-page-" + (pageIndex + 1) + ".png");

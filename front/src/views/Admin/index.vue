@@ -1,280 +1,30 @@
 <template>
-  <div class="admin-page">
-    <div class="admin-shell">
-      <div class="admin-header">
-        <div>
-          <h1>账号后台</h1>
-          <p>管理邀请码、用户 credits 和任务扣费价格。</p>
-        </div>
-        <n-button :loading="loading" @click="loadDashboard">刷新</n-button>
-      </div>
-
-      <n-alert v-if="!auth.isRoot" type="warning" title="需要 root 账户登录" />
-      <n-alert v-if="errorMsg" type="error" :title="errorMsg" closable @close="errorMsg = ''" />
-
-      <template v-if="auth.isRoot">
-        <section class="admin-panel">
-          <h2>扣费价格</h2>
-          <div class="settings-row">
-            <n-input-number v-model:value="settings.translationCreditPerPage" :min="1" aria-label="翻译每页 credits" />
-            <span>翻译每页 credits</span>
-            <n-input-number v-model:value="settings.pptCreditPerTask" :min="1" aria-label="PPT 每次 credits" />
-            <span>PPT 每次 credits</span>
-            <n-button type="primary" :loading="savingSettings" @click="saveSettings">保存价格</n-button>
-          </div>
-        </section>
-
-        <section class="admin-panel">
-          <h2>生成邀请码</h2>
-          <div class="settings-row">
-            <n-input v-model:value="inviteForm.code" placeholder="留空自动生成" />
-            <n-input-number v-model:value="inviteForm.credits" :min="0" placeholder="初始 credits" />
-            <n-input-number v-model:value="inviteForm.maxUses" :min="1" placeholder="可用次数" />
-            <n-button type="primary" :loading="creatingInvite" @click="createInvite">生成</n-button>
-          </div>
-        </section>
-
-        <section class="admin-panel">
-          <h2>用户额度</h2>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr><th>ID</th><th>用户名</th><th>角色</th><th>余额</th><th>调整</th></tr>
-              </thead>
-              <tbody>
-                <tr v-for="user in users" :key="user.id">
-                  <td>{{ user.id }}</td>
-                  <td>{{ user.username }}</td>
-                  <td>{{ user.role }}</td>
-                  <td>{{ user.credits }}</td>
-                  <td>
-                    <div class="inline-action">
-                      <n-input-number v-model:value="adjustForms[user.id]" size="small" />
-                      <n-button size="small" @click="adjustCredits(user.id)">应用</n-button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section class="admin-grid">
-          <div class="admin-panel">
-            <h2>邀请码</h2>
-            <div class="table-wrap compact">
-              <table>
-                <thead><tr><th>code</th><th>credits</th><th>使用</th><th>启用</th></tr></thead>
-                <tbody>
-                  <tr v-for="invite in invites" :key="invite.id">
-                    <td>{{ invite.code }}</td>
-                    <td>{{ invite.credits }}</td>
-                    <td>{{ invite.used_count }}/{{ invite.max_uses }}</td>
-                    <td>{{ invite.enabled ? '是' : '否' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div class="admin-panel">
-            <h2>最近额度流水</h2>
-            <div class="table-wrap compact">
-              <table>
-                <thead><tr><th>用户</th><th>变动</th><th>类型</th><th>任务</th></tr></thead>
-                <tbody>
-                  <tr v-for="tx in transactions" :key="tx.id">
-                    <td>{{ tx.username }}</td>
-                    <td>{{ tx.amount }}</td>
-                    <td>{{ tx.kind }}</td>
-                    <td>{{ tx.task_id || '-' }}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-      </template>
-    </div>
-  </div>
+  <main class="admin-page"><div class="admin-shell">
+    <header class="admin-header"><div><span class="eyebrow">CONTROL CENTER / ROOT ONLY</span><h1>运营管理中心</h1><p>统一管理 API、访问资格、额度和可见节目。</p></div><button class="ghost" @click="loadDashboard">刷新数据</button></header>
+    <n-alert v-if="!auth.isRoot" type="warning" title="需要 root 账户登录" />
+    <n-alert v-if="errorMsg" type="error" :title="errorMsg" closable @close="errorMsg = ''" />
+    <template v-if="auth.isRoot">
+      <section class="admin-panel"><div class="panel-title"><div><span class="eyebrow">PROGRAM VISIBILITY</span><h2>节目可见范围</h2></div><span class="muted">访客、登录用户、root 可分别配置</span></div><div class="visibility-grid"><label v-for="item in visibilityItems" :key="item.key">{{ item.label }}<select v-model="visibilityForm[item.key]"><option value="PUBLIC">所有人（含访客）</option><option value="USER">登录用户</option><option value="ROOT">仅 root</option></select></label></div></section>
+      <section class="stat-grid"><div v-for="item in statCards" :key="item.label" class="stat-card"><span>{{ item.label }}</span><strong>{{ item.value }}</strong><small>{{ item.hint }}</small></div></section>
+      <section class="admin-panel"><div class="panel-title"><div><span class="eyebrow">RUNTIME CONFIGURATION</span><h2>API 与模型配置</h2></div><button class="primary" @click="saveApiSettings">保存配置</button></div><p class="panel-desc">修改后立即对新任务生效。API Key 只显示末四位；留空表示保留原密钥。</p><div class="provider-grid"><div v-for="provider in providerCards" :key="provider.key" class="provider-card"><div class="provider-head"><div><h3>{{ provider.name }}</h3><span>{{ provider.description }}</span></div><n-tag :type="apiForm[provider.key].apiKey ? 'success' : 'warning'" size="small" :bordered="false">{{ apiForm[provider.key].apiKey || '未配置' }}</n-tag></div><n-input v-model:value="apiForm[provider.key].baseUrl" placeholder="Base URL" /><n-input v-if="provider.key !== 'zotero'" v-model:value="apiForm[provider.key].model" class="field-gap" placeholder="模型名称" /><n-input v-else v-model:value="apiForm.zotero.userId" class="field-gap" placeholder="Zotero User ID" /><n-input v-model:value="apiForm[provider.key].apiKey" class="field-gap" type="password" show-password-on="click" placeholder="输入新 Key 可替换" /></div></div></section>
+      <div class="content-grid"><section class="admin-panel"><div class="panel-title"><div><span class="eyebrow">BILLING RULES</span><h2>额度与计费</h2></div><button class="primary" @click="saveSettings">保存</button></div><div class="form-grid"><label>PDF 翻译 / 页<n-input-number v-model:value="settings.translationCreditPerPage" :min="1" /></label><label>PPT 生成 / 次<n-input-number v-model:value="settings.pptCreditPerTask" :min="1" /></label></div></section><section class="admin-panel"><div class="panel-title"><div><span class="eyebrow">ACCESS CONTROL</span><h2>生成邀请码</h2></div></div><div class="form-grid"><label>自定义 code<n-input v-model:value="inviteForm.code" placeholder="留空自动生成" /></label><label>赠送 credits<n-input-number v-model:value="inviteForm.credits" :min="0" /></label><label>最大使用次数<n-input-number v-model:value="inviteForm.maxUses" :min="1" /></label><label>过期时间<n-input v-model:value="inviteForm.expiresAt" type="datetime-local" /></label></div><button class="primary wide" @click="createInvite">生成并复制邀请码</button></section></div>
+      <section class="admin-panel"><div class="panel-title"><div><span class="eyebrow">INVITATION MANAGEMENT</span><h2>邀请码管理</h2></div><span class="muted">支持撤销、恢复和过期控制</span></div><div class="table-wrap"><table><thead><tr><th>邀请码</th><th>额度</th><th>使用情况</th><th>状态</th><th>操作</th></tr></thead><tbody><tr v-for="invite in invites" :key="invite.id"><td><code>{{ invite.code }}</code></td><td>{{ invite.credits }}</td><td>{{ invite.used_count }} / {{ invite.max_uses }}</td><td>{{ inviteStatus(invite) }}</td><td><button class="small" @click="toggleInvite(invite)">{{ invite.enabled ? '撤销' : '恢复' }}</button></td></tr></tbody></table></div></section>
+      <div class="content-grid"><section class="admin-panel"><div class="panel-title"><div><span class="eyebrow">USER ACCESS</span><h2>用户与额度</h2></div></div><div class="table-wrap"><table><thead><tr><th>用户</th><th>角色</th><th>余额</th><th>状态</th><th>调整</th><th>操作</th></tr></thead><tbody><tr v-for="user in users" :key="user.id"><td>{{ user.username }}</td><td>{{ user.role }}</td><td>{{ user.credits }}</td><td>{{ user.enabled ? '正常' : '已停用' }}</td><td><n-input-number v-model:value="adjustForms[user.id]" size="small" /></td><td><button class="small" @click="adjustCredits(user.id)">应用</button><button v-if="user.role !== 'ROOT'" class="small danger" @click="toggleUser(user)">{{ user.enabled ? '停用' : '启用' }}</button></td></tr></tbody></table></div></section><section class="admin-panel"><div class="panel-title"><div><span class="eyebrow">AUDIT TRAIL</span><h2>最近额度流水</h2></div></div><div class="table-wrap"><table><thead><tr><th>用户</th><th>变动</th><th>余额</th><th>类型</th></tr></thead><tbody><tr v-for="tx in transactions" :key="tx.id"><td>{{ tx.username }}</td><td>{{ tx.amount }}</td><td>{{ tx.balance_after }}</td><td>{{ tx.kind }}</td></tr></tbody></table></div></section></div>
+    </template>
+  </div></main>
 </template>
-
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
-import { NAlert, NButton, NInput, NInputNumber, useMessage } from 'naive-ui'
-import { adjustUserCredits, createInviteCode, getAdminAccounts, updateQuotaSettings } from '@/api'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { NAlert, NInput, NInputNumber, NTag, useMessage } from 'naive-ui'
+import { adjustUserCredits, createInviteCode, getAdminAccounts, updateAdminApiSettings, updateAdminUserStatus, updateInviteStatus, updateQuotaSettings } from '@/api'
 import { useAuthStore } from '@/stores/auth'
-
-const auth = useAuthStore()
-const message = useMessage()
-const loading = ref(false)
-const savingSettings = ref(false)
-const creatingInvite = ref(false)
-const errorMsg = ref('')
-const users = ref([])
-const invites = ref([])
-const transactions = ref([])
-const adjustForms = reactive({})
-const settings = reactive({
-  translationCreditPerPage: 1,
-  pptCreditPerTask: 10
-})
-const inviteForm = reactive({
-  code: '',
-  credits: 10,
-  maxUses: 1
-})
-
-onMounted(async () => {
-  await auth.refresh().catch(() => {})
-  if (auth.isRoot) loadDashboard()
-})
-
-async function loadDashboard() {
-  loading.value = true
-  errorMsg.value = ''
-  try {
-    const res = await getAdminAccounts()
-    users.value = res.data.users || []
-    invites.value = res.data.invites || []
-    transactions.value = res.data.transactions || []
-    Object.assign(settings, res.data.settings || {})
-  } catch (error) {
-    errorMsg.value = error.message || '后台数据加载失败'
-  } finally {
-    loading.value = false
-  }
-}
-
-async function saveSettings() {
-  savingSettings.value = true
-  try {
-    const res = await updateQuotaSettings(settings)
-    Object.assign(settings, res.data || {})
-    message.success('价格已保存')
-  } catch (error) {
-    errorMsg.value = error.message || '保存失败'
-  } finally {
-    savingSettings.value = false
-  }
-}
-
-async function createInvite() {
-  creatingInvite.value = true
-  try {
-    const res = await createInviteCode(inviteForm)
-    message.success(`邀请码已生成：${res.data.code}`)
-    inviteForm.code = ''
-    await loadDashboard()
-  } catch (error) {
-    errorMsg.value = error.message || '邀请码生成失败'
-  } finally {
-    creatingInvite.value = false
-  }
-}
-
-async function adjustCredits(userId) {
-  const amount = Number(adjustForms[userId] || 0)
-  if (!amount) return
-  try {
-    await adjustUserCredits({ userId, amount, note: 'root 后台调整' })
-    adjustForms[userId] = 0
-    await loadDashboard()
-    await auth.refresh()
-  } catch (error) {
-    errorMsg.value = error.message || '额度调整失败'
-  }
-}
+const visibilityForm=reactive({Publications:'PUBLIC',Translate:'USER',Contact:'USER',News:'PUBLIC',Business:'PUBLIC',Cases:'PUBLIC'});const visibilityItems=[{key:'Publications',label:'文献库'},{key:'Translate',label:'论文翻译'},{key:'Contact',label:'PPT 生成'},{key:'News',label:'GitHub 项目'},{key:'Business',label:'工具模块'},{key:'Cases',label:'任务样例'}]
+const auth=useAuthStore();const message=useMessage();const errorMsg=ref('');const users=ref([]);const invites=ref([]);const transactions=ref([]);const stats=reactive({users:0,activeUsers:0,activeInvites:0,creditsIssued:0,creditsSpent:0});const adjustForms=reactive({});const settings=reactive({translationCreditPerPage:1,pptCreditPerTask:10});const inviteForm=reactive({code:'',credits:10,maxUses:1,expiresAt:''});const apiForm=reactive({llm:{baseUrl:'',model:'',apiKey:''},babeldoc:{baseUrl:'',model:'',apiKey:''},zotero:{baseUrl:'',userId:'',apiKey:''}});const providerCards=[{key:'llm',name:'LLM 通用模型',description:'PPT、视觉与通用文本任务'},{key:'babeldoc',name:'BabelDOC 翻译',description:'PDF 排版翻译链路'},{key:'zotero',name:'Zotero 文献库',description:'文献缓存与附件代理'}];const statCards=computed(()=>[{label:'用户总数',value:stats.users,hint:`${stats.activeUsers} 个账户正常`},{label:'可用邀请码',value:stats.activeInvites,hint:'未撤销、未用尽且未过期'},{label:'已发放额度',value:stats.creditsIssued,hint:'邀请码和管理员调整'},{label:'已消耗额度',value:stats.creditsSpent,hint:'翻译与 PPT 任务'}]);
+onMounted(async()=>{await auth.refresh().catch(()=>{});if(auth.isRoot)await loadDashboard()});async function loadDashboard(){try{const res=await getAdminAccounts();const d=res.data||{};users.value=d.users||[];invites.value=d.invites||[];transactions.value=d.transactions||[];Object.assign(settings,d.settings||{});Object.assign(stats,d.stats||{});applyApiSettings(d.apiSettings)}catch(e){errorMsg.value=e.message||'后台数据加载失败'}}function applyApiSettings(d={}){for(const k of ['llm','babeldoc','zotero'])if(d[k]){apiForm[k].baseUrl=d[k].baseUrl||'';apiForm[k].model=d[k].model||'';apiForm[k].userId=d[k].userId||'';apiForm[k].apiKey=d[k].apiKeyHint||''}}async function saveApiSettings(){try{applyApiSettings((await updateAdminApiSettings(apiForm)).data);message.success('API 配置已保存')}catch(e){errorMsg.value=e.message||'API 配置保存失败'}}async function saveSettings(){try{Object.assign(settings,(await updateQuotaSettings(settings)).data||{});message.success('计费规则已保存')}catch(e){errorMsg.value=e.message||'保存失败'}}async function createInvite(){try{const code=(await createInviteCode(inviteForm)).data.code;await navigator.clipboard?.writeText(code).catch(()=>{});message.success(`邀请码 ${code} 已生成`);inviteForm.code='';inviteForm.expiresAt='';await loadDashboard()}catch(e){errorMsg.value=e.message||'邀请码生成失败'}}async function toggleInvite(i){try{await updateInviteStatus(i.id,!i.enabled,i.expires_at?new Date(i.expires_at).toISOString():'');await loadDashboard()}catch(e){errorMsg.value=e.message||'邀请码状态更新失败'}}async function toggleUser(u){try{await updateAdminUserStatus(u.id,!u.enabled);await loadDashboard()}catch(e){errorMsg.value=e.message||'用户状态更新失败'}}async function adjustCredits(id){const amount=Number(adjustForms[id]||0);if(!amount)return;try{await adjustUserCredits({userId:id,amount,note:'root 后台调整'});adjustForms[id]=0;await loadDashboard()}catch(e){errorMsg.value=e.message||'额度调整失败'}}function inviteStatus(i){if(!i.enabled)return'已撤销';if(i.used_count>=i.max_uses)return'已用尽';if(i.expires_at&&new Date(i.expires_at)<=new Date())return'已过期';return'可使用'}
+watch(() => auth.visibility, value => { Object.assign(visibilityForm, value || {}) }, { deep: true })
+watch(visibilityForm, () => { if (auth.isRoot) saveVisibility() }, { deep: true })
+async function saveVisibility() { try { await updateAdminApiSettings({ visibility: visibilityForm }); auth.visibility = { ...auth.visibility, ...visibilityForm }; message.success('节目可见范围已保存') } catch (e) { errorMsg.value = e.message || '可见范围保存失败' } }
 </script>
-
-<style scoped lang="scss">
-.admin-page {
-  min-height: 100vh;
-  background: #eee9df;
-  padding: 32px 20px 56px;
-}
-
-.admin-shell {
-  max-width: 1180px;
-  margin: 0 auto;
-  display: grid;
-  gap: 18px;
-}
-
-.admin-header,
-.admin-panel {
-  background: #f8f5ee;
-  border: 1px solid #cfc7b7;
-  padding: 18px;
-}
-
-.admin-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-
-  h1 {
-    margin: 0 0 6px;
-    font-size: 28px;
-  }
-
-  p {
-    margin: 0;
-    color: #6f685f;
-  }
-}
-
-.admin-panel h2 {
-  margin: 0 0 14px;
-  font-size: 18px;
-}
-
-.settings-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-.admin-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-}
-
-.table-wrap {
-  overflow: auto;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-}
-
-th,
-td {
-  border-bottom: 1px solid #d7cebd;
-  padding: 9px;
-  text-align: left;
-  white-space: nowrap;
-}
-
-.inline-action {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  min-width: 180px;
-}
-
-.compact {
-  max-height: 360px;
-}
-
-@media (max-width: 860px) {
-  .admin-grid {
-    grid-template-columns: 1fr;
-  }
-}
+<style scoped lang="scss">.admin-page{min-height:100vh;padding:40px 20px 72px;background:#f3f5f7;color:#17212b}.admin-shell{max-width:1280px;margin:auto;display:grid;gap:18px}.admin-header,.admin-panel,.stat-card{background:#fff;border:1px solid #e1e7ec;border-radius:14px;box-shadow:0 6px 22px #1626330b}.admin-header{padding:28px 30px;display:flex;align-items:center;justify-content:space-between;gap:20px}.admin-header h1{margin:5px 0 8px;font-size:30px}.admin-header p,.panel-desc,.muted{color:#72808c}.eyebrow{color:#7b8b99;font-size:11px;font-weight:700;letter-spacing:.13em}.admin-panel{padding:22px}.panel-title,.provider-head{display:flex;align-items:center;justify-content:space-between;gap:14px}.panel-title h2{margin:3px 0 0;font-size:18px}.panel-desc{margin:10px 0 18px;font-size:13px}.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}.stat-card{padding:17px 19px}.stat-card span,.stat-card small{display:block;color:#71808c;font-size:13px}.stat-card strong{display:block;margin:6px 0 3px;font-size:27px}.provider-grid,.content-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.content-grid{grid-template-columns:repeat(2,1fr)}.provider-card{padding:16px;border:1px solid #e5eaee;border-radius:11px;background:#fbfcfd}.provider-head{align-items:flex-start;margin-bottom:14px}.provider-head h3{margin:0 0 4px;font-size:15px}.provider-head span{color:#7b8791;font-size:12px}.field-gap{margin-top:9px}.form-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:13px;margin:14px 0 16px}.form-grid label{display:grid;gap:6px;color:#53616c;font-size:12px;font-weight:600}.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:12px 10px;border-bottom:1px solid #edf0f2;text-align:left;white-space:nowrap}th{color:#7a8791;font-size:11px}code{padding:4px 7px;border-radius:5px;color:#315e78;background:#edf5f8}.primary,.ghost,.small{border:0;border-radius:7px;padding:9px 14px;cursor:pointer}.primary{color:#fff;background:#b83126}.ghost{background:#edf1f4;color:#3a4a55}.small{padding:5px 9px;background:#edf1f4;margin-right:5px}.danger{color:#a12d2d}.wide{width:100%}@media(max-width:900px){.stat-grid,.provider-grid{grid-template-columns:repeat(2,1fr)}.content-grid{grid-template-columns:1fr}}@media(max-width:600px){.admin-page{padding:20px 12px}.admin-header{align-items:flex-start;flex-direction:column}.stat-grid,.provider-grid,.form-grid{grid-template-columns:1fr}.admin-panel{padding:17px}}
+.visibility-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}.visibility-grid label{display:grid;gap:6px;color:#53616c;font-size:12px;font-weight:600}.visibility-grid select{padding:9px;border:1px solid #d9e1e6;border-radius:6px;background:#fff;color:#34434d}
 </style>

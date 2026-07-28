@@ -50,8 +50,11 @@ public class ZoteroController {
     }
 
     @GetMapping("/collections")
-    public Map<String, Object> collections() {
+    public Map<String, Object> collections(@RequestParam(required = false) Boolean refresh) {
         Map<String, Object> result = new HashMap<>();
+        if (Boolean.TRUE.equals(refresh) && zoteroService.isConfigured()) {
+            zoteroCache.warmAsync();
+        }
         result.put("code", 200);
         result.put("data", zoteroCache.getCollections());
         result.put("updatedAt", zoteroCache.getCollectionsUpdatedAt());

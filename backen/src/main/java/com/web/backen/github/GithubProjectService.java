@@ -36,6 +36,35 @@ public class GithubProjectService {
         return out;
     }
 
+    /**
+     * 查询指定时间窗口内按 stars 倒序排列的公开仓库。
+     * 排行榜统一由后端访问 GitHub，前端不直接调用 GitHub Search API。
+     */
+    public List<Map<String, Object>> searchTopRepositories(String query, int limit) {
+        Map<String, Object> response = githubClient.get()
+                .uri(uriBuilder -> uriBuilder
+                        .path("/search/repositories")
+                        .queryParam("q", query)
+                        .queryParam("sort", "stars")
+                        .queryParam("order", "desc")
+                        .queryParam("per_page", Math.min(20, Math.max(1, limit)))
+                        .build())
+                .retrieve()
+                .body(new ParameterizedTypeReference<>() {});
+        if (response == null || !(response.get("items") instanceof List<?> items)) {
+            return List.of();
+        }
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Object item : items) {
+            if (item instanceof Map<?, ?> map) {
+                @SuppressWarnings("unchecked")
+                Map<String, Object> typed = (Map<String, Object>) map;
+                out.add(typed);
+            }
+        }
+        return out;
+    }
+
     public List<Map<String, Object>> save(List<Map<String, Object>> projects) {
         return store.save(projects);
     }

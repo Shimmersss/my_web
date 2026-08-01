@@ -74,9 +74,8 @@ def is_reference_heading(text):
     return bool(REFERENCE_HEADING_RE.fullmatch((text or "").strip()))
 
 
-def reference_section_flags(texts):
+def reference_section_flags(texts, in_reference_section=False):
     """Mark bibliography paragraphs, including weak entries after a heading."""
-    in_reference_section = False
     flags = []
     for text in texts:
         normalized = (text or "").strip()

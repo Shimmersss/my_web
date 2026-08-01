@@ -11,7 +11,7 @@ A full-stack personal workbench that brings together a Zotero library browser, P
 - **文献库展示 / Zotero library**：后端从 Zotero Web API 拉取私有文献库，启动预热并缓存；前端按 collection、关键词和附件状态浏览。
 - **附件代理 / Attachment proxy**：PDF、Markdown 和网页快照附件统一由后端代理，支持 Zotero S3 跳转、ZIP 附件解包、流式传输和真实下载进度。
 - **PDF 论文翻译 / PDF translation**：上传 PDF 后选择页码范围、字体族和速度模式，由后端排队调用 BabelDOC 生成保留版式的纯中文 / 双语 PDF。
-- **PPT 生成 / Materials to PPT**：根据提示词或上传资料（PDF、Word、PPT、Excel、TXT、Markdown、CSV、网页）和可选 PPTX 模板生成产品、项目、培训、课程、营销或研究演示文稿；自动提取文本、图片、表格和图表，并支持视觉筛选与模板原生填充。
+- **PPT 生成 / Materials to PPT**：provider-neutral Agent 读取仓库级 Skills，自主完成研究、事实核验、叙事规划、PPTX/HTML 创作、真实逐页渲染、视觉审查和最多两轮返修。PPTX 复用 6 套 GitHub 源 deck 的真实页面与文字框几何，HTML 使用 12 套独立 reveal.js theme assets；没有相似配色重绘或旧 renderer 回退。BJTU 来源仓库虽标注 Apache-2.0，但 README 另有学习/非商业声明。
 - **GitHub 项目展示 / GitHub showcase**：前端只访问站内接口，后端代理 GitHub API 和 README raw 内容，避免浏览器直连外部接口。
 
 ## 截图 / Screenshots
@@ -34,7 +34,7 @@ The translation view follows a four-state flow: upload, configure, translate and
 
 ### Materials To PPT / 通用资料转 PPT
 
-PPT 生成页支持仅提示词、仅资料、提示词 + 资料，以及可选 PPTX 模板。用户不需要配置素材提取比例，系统会自动理解资料并选择有价值的视觉素材。内置模板扩展为 23 个按基础、杂志创意、数据咨询、产品 SaaS、企业开源分类的风格包，来源覆盖 Marp、Slidev、Dracula、PPT Master、Presenton 与 GitHub Primer；选择模板时会提供封面、目录、章节、内容和结尾共 5 页样式示意，并可折叠分类。任务在后端单 worker 队列中运行，用户可选择可编辑 `.pptx` 或独立单文件 `.html` 输出；完成后用固定 16:9 画布和左侧缩略图进行图片式预览，避免响应式文字布局错位；仍可网页编辑标题/要点、用提示词二次生成新版本。
+PPT 生成页支持仅提示词、仅资料、提示词 + 资料，以及可选 PPTX 模板；联网研究默认开启，也可关闭。内置模板按输出格式分为 6 个 GitHub 源成品 PPTX 与 12 个 HTML reveal.js 主题。Spring Boot 管理登录、额度、队列、恢复和 SSE，Node Agent 负责研究与生成。结果页直接显示 LibreOffice/Chromium 的真实 PNG、来源与 QA；二次修改只需要自然语言要求，并保留版本链。
 
 The PPT generator accepts a prompt or common source materials plus an optional PPTX template. Extraction is automatic; jobs run in a single backend worker queue, expose a browser preview/editor after completion, and produce either editable `.pptx` or self-contained `.html` files. Revisions create a new task while preserving the original source, template, and output format.
 
@@ -63,7 +63,7 @@ The browser only talks to `/api/*`. External services, local CLIs, file download
 | --- | --- |
 | Frontend / 前端 | Vue 3, Vite, Naive UI, Pinia, Vue Router |
 | Backend / 后端 | Spring Boot 3, Java 17 |
-| Documents / 文档处理 | PDFBox, BabelDOC, python-pptx, Docling / MarkItDown fallback |
+| Documents / 文档处理 | PDFBox, BabelDOC, pptx-automizer, reveal.js, LibreOffice, Chromium, Docling / MarkItDown |
 | Data Sources / 数据源 | Zotero Web API v3, GitHub API |
 | Runtime / 运行 | macOS/Linux shell scripts, root `.env.local`, disk-backed task storage |
 
@@ -86,7 +86,7 @@ GIT_UNTRACK_GUIDE.md     detailed Git untracking guide
 Requirements / 环境要求：
 
 - Java 17
-- Node.js + npm
+- Node.js 20+ + npm、stable LibreOffice、Poppler、Chromium、fontconfig + Noto CJK（PPT Agent）
 - `uv` for BabelDOC / Python helper commands
 
 ```bash

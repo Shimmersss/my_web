@@ -94,7 +94,9 @@ public final class PptxQualityGate {
                 String target = attribute(node, "Target");
                 if (target.isBlank()) throw new IOException("PPTX relationship 缺少 Target: " + relsName);
                 String mode = attribute(node, "TargetMode");
-                if ("External".equalsIgnoreCase(mode) || target.matches("(?i)^[a-z][a-z0-9+.-]*:.*")) continue;
+                if ("External".equalsIgnoreCase(mode) || target.matches("(?i)^[a-z][a-z0-9+.-]*:.*")) {
+                    throw new IOException("PPTX 不允许外部 relationship: " + relsName);
+                }
                 String normalized = resolveTarget(relsName, target);
                 require(names, normalized);
                 parts.addLast(normalized);

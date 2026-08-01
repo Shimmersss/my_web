@@ -1,0 +1,14 @@
+[
+  {"key":"html-reveal-black","name":"Reveal Black","design":"reveal-black","palette":["111111","000000","D9A441","111111","F8FAFC"],"description":"纯黑演讲主题，适合现场演示、发布和强叙事内容"},
+  {"key":"html-reveal-white","name":"Reveal White","design":"reveal-white","palette":["1D4ED8","FFFFFF","D97706","F8FAFC","1F2937"],"description":"白底高可读主题，适合文档、课程和知识分享"},
+  {"key":"html-reveal-beige","name":"Reveal Beige","design":"reveal-beige","palette":["8C3B1F","F7F1E3","B7791F","FFFDF7","3D2B1F"],"description":"暖米色纸张感，适合品牌故事、案例和长内容"},
+  {"key":"html-reveal-sky","name":"Reveal Sky","design":"reveal-sky","palette":["0EA5E9","075985","FDE047","E0F2FE","0F172A"],"description":"蓝色渐变舞台感，适合产品发布和工作坊"},
+  {"key":"html-reveal-league","name":"Reveal League","design":"reveal-league","palette":["E11D48","1E293B","FACC15","0F172A","F8FAFC"],"description":"高对比杂志式主题，适合观点、趋势和演讲"},
+  {"key":"html-reveal-night","name":"Reveal Night","design":"reveal-night","palette":["60A5FA","0B1120","A78BFA","111827","E2E8F0"],"description":"夜间舞台主题，适合 AI、技术和现场演示"},
+  {"key":"html-reveal-solarized","name":"Reveal Solarized","design":"reveal-solarized","palette":["268BD2","002B36","B58900","FDF6E3","586E75"],"description":"柔和护眼的代码与数据主题，适合技术报告"},
+  {"key":"html-reveal-gradient","name":"Reveal Gradient","design":"reveal-gradient","palette":["8B5CF6","312E81","22D3EE","F5F3FF","1F2937"],"description":"独立渐变卡片布局，适合商业计划和产品策略"},
+  {"key":"html-editorial-ink","name":"Editorial Ink","design":"editorial-ink","palette":["D9482B","F5F1E8","A16207","DED6C8","171717"],"description":"纸刊留白、衬线标题与编辑部式红色批注，适合洞察和品牌故事"},
+  {"key":"html-neon-grid","name":"Neon Grid","design":"neon-grid","palette":["2DD4BF","070A13","8B5CF6","172033","ECFEFF"],"description":"深色网格与青色霓虹界面，适合 AI、数据产品和技术发布"},
+  {"key":"html-terminal-green","name":"Terminal Green","design":"terminal-green","palette":["4ADE80","07120D","FACC15","10261A","D1FAE5"],"description":"终端式等宽字体与命令行节奏，适合开发者、架构和开源项目"},
+  {"key":"html-gallery-cream","name":"Gallery Cream","design":"gallery-cream","palette":["9F1239","F4EFE5","C08457","E7DAC9","3B2524"],"description":"画廊米白、酒红强调与高雅衬线排版，适合文化、设计和高端品牌"}
+]

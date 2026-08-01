@@ -17,6 +17,8 @@ public class BabelDocConfig {
     private int resourceCgroupLimitMiB = 2600;
     private int resourceMinAvailableMiB = 400;
     private int resourceMaxSwapUsedMiB = 1200;
+    private int maxPagesPerChunk = 5;
+    private int resourceRecoveryTimeoutSeconds = 120;
 
     public boolean isEnabled() {
         return enabled;
@@ -96,5 +98,21 @@ public class BabelDocConfig {
 
     public void setResourceMaxSwapUsedMiB(int resourceMaxSwapUsedMiB) {
         this.resourceMaxSwapUsedMiB = resourceMaxSwapUsedMiB;
+    }
+
+    public int getMaxPagesPerChunk() {
+        return maxPagesPerChunk;
+    }
+
+    public void setMaxPagesPerChunk(int maxPagesPerChunk) {
+        this.maxPagesPerChunk = maxPagesPerChunk;
+    }
+
+    public int getResourceRecoveryTimeoutSeconds() {
+        return resourceRecoveryTimeoutSeconds;
+    }
+
+    public void setResourceRecoveryTimeoutSeconds(int resourceRecoveryTimeoutSeconds) {
+        this.resourceRecoveryTimeoutSeconds = resourceRecoveryTimeoutSeconds;
     }
 }

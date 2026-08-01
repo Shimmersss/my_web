@@ -180,6 +180,10 @@ export function getGithubProjects() {
   return get('/github-projects')
 }
 
+export function getGithubRankings(refresh = false) {
+  return get('/github-projects/rankings', refresh ? { refresh: true } : {})
+}
+
 export function loginGithubProjectsAdmin(key) {
   return post('/github-projects/login', { key })
 }
@@ -238,6 +242,10 @@ export function updateQuotaSettings({ translationCreditPerPage, pptCreditPerTask
 
 export function updateAdminApiSettings(settings) {
   return put('/admin/accounts/api-settings', settings)
+}
+
+export function testAdminApiSettings(provider, config) {
+  return post('/admin/accounts/api-settings/test', { provider, config })
 }
 
 export function updateInviteStatus(id, enabled, expiresAt = '') {
@@ -355,11 +363,12 @@ export function downloadTranslatedPdf(taskId, mode = 'translated') {
 
 // ==================== PPT 生成 API ====================
 
-export async function createPptGenerationTask({ prompt, templateKey, outputFormat = 'pptx', templateFile, sourceFile, paperFile, idempotencyKey }) {
+export async function createPptGenerationTask({ prompt, templateKey, outputFormat = 'pptx', researchMode = 'auto', templateFile, sourceFile, paperFile, idempotencyKey }) {
   const formData = new FormData()
   if (prompt?.trim()) formData.append('prompt', prompt.trim())
   if (templateKey) formData.append('templateKey', templateKey)
   if (outputFormat) formData.append('outputFormat', outputFormat)
+  formData.append('researchMode', researchMode === 'off' ? 'off' : 'auto')
   if (templateFile) formData.append('templateFile', templateFile)
   if (sourceFile || paperFile) formData.append('sourceFile', sourceFile || paperFile)
 
@@ -393,6 +402,21 @@ export function getPptPreview(taskId, accessToken, options = {}) {
   })
 }
 
+export async function getPptHtmlPreview(taskId, accessToken, options = {}) {
+  const res = await fetch(apiUrl(`/ppt-generate/preview-html/${encodeURIComponent(taskId)}`), {
+    ...options,
+    method: 'GET',
+    credentials: /^https?:\/\//i.test(apiUrl('')) ? 'include' : 'same-origin',
+    headers: pptTaskHeaders(accessToken),
+    cache: 'no-store'
+  })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.message || `HTML 预览加载失败（HTTP ${res.status}）`)
+  }
+  return URL.createObjectURL(await res.blob())
+}
+
 export async function getPptPreviewImage(taskId, fileName, accessToken, options = {}) {
   const res = await fetch(apiUrl(`/ppt-generate/preview/${encodeURIComponent(taskId)}/images/${encodeURIComponent(fileName)}`), {
     ...options,
@@ -419,7 +443,7 @@ export function getPptGenerationStatus(taskId, accessToken) {
   })
 }
 
-export async function revisePptGenerationTask(taskId, accessToken, { prompt = '', slides = [], idempotencyKey } = {}) {
+export async function revisePptGenerationTask(taskId, accessToken, { prompt = '', idempotencyKey } = {}) {
   const csrfToken = localStorage.getItem('csrfToken')
   const res = await fetch(apiUrl(`/ppt-generate/tasks/${encodeURIComponent(taskId)}/revise`), {
     method: 'POST',
@@ -430,7 +454,7 @@ export async function revisePptGenerationTask(taskId, accessToken, { prompt = ''
       ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
       ...(idempotencyKey ? { 'X-Ppt-Idempotency-Key': idempotencyKey } : {})
     },
-    body: JSON.stringify({ prompt: prompt.trim(), slides })
+    body: JSON.stringify({ prompt: prompt.trim() })
   })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) throw new Error(data.message || `二次修改提交失败（HTTP ${res.status}）`)

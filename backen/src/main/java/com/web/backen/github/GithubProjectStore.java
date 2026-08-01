@@ -84,19 +84,6 @@ public class GithubProjectStore {
     }
 
     private List<Map<String, Object>> defaultProjects() {
-        return List.of(
-                project("vuejs/core", "Vue 3 核心框架，当前站点前端技术栈的基础。", "Frontend", true),
-                project("vitejs/vite", "极速前端构建工具，本项目开发环境由 Vite 驱动。", "Tooling", true),
-                project("tusen-ai/naive-ui", "Vue 3 组件库，负责项目里的主要交互控件与信息展示。", "UI", true)
-        );
-    }
-
-    private Map<String, Object> project(String repo, String highlight, String category, boolean featured) {
-        Map<String, Object> item = new LinkedHashMap<>();
-        item.put("repo", repo);
-        item.put("highlight", highlight);
-        item.put("category", category);
-        item.put("featured", featured);
-        return item;
+        return List.of();
     }
 }

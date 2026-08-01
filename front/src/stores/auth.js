@@ -6,6 +6,8 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const loading = ref(false)
   const visibility = ref({ Publications: 'PUBLIC', Translate: 'USER', Contact: 'USER', News: 'PUBLIC', Business: 'PUBLIC', Cases: 'PUBLIC' })
+  const authPrompt = ref('')
+  const pendingPath = ref('')
 
   const isLoggedIn = computed(() => Boolean(user.value?.id))
   const isRoot = computed(() => Boolean(user.value?.root))
@@ -76,5 +78,10 @@ export const useAuthStore = defineStore('auth', () => {
     return level === 'PUBLIC' || (level === 'USER' && isLoggedIn.value) || (level === 'ROOT' && isRoot.value)
   }
 
-  return { user, loading, isLoggedIn, isRoot, credits, visibility, canView, refresh, login, register, logout, updateCredits }
+  function requestLogin(path) { pendingPath.value = path || '/'; authPrompt.value = 'login' }
+  function requestPermissionDenied() { pendingPath.value = ''; authPrompt.value = 'forbidden' }
+  function clearAuthPrompt() { authPrompt.value = '' }
+  function consumePendingPath() { const path = pendingPath.value; pendingPath.value = ''; authPrompt.value = ''; return path }
+
+  return { user, loading, isLoggedIn, isRoot, credits, visibility, authPrompt, canView, requestLogin, requestPermissionDenied, clearAuthPrompt, consumePendingPath, refresh, login, register, logout, updateCredits }
 })

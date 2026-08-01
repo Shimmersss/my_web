@@ -63,6 +63,20 @@ class ReferenceLayoutTest(unittest.TestCase):
             reference_section_flags(["Reference", "BPA", "3.4 Risk predictions"]),
         )
 
+    def test_continues_reference_section_across_page_chunks(self):
+        self.assertEqual(
+            [True, True, False, False],
+            reference_section_flags(
+                [
+                    "A source without machine-readable publication metadata.",
+                    "Another weak reference entry.",
+                    "Supplementary Material",
+                    "Additional experiments should still be translated.",
+                ],
+                in_reference_section=True,
+            ),
+        )
+
     def test_only_splits_sequential_bibliographic_entries(self):
         self.assertEqual(
             [0, 2],

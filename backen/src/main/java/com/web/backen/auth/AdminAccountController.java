@@ -1,12 +1,13 @@
 package com.web.backen.auth;
 
+import com.web.backen.translate.LlmService;
+import com.web.backen.zotero.ZoteroService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
-import java.time.Instant;
-import java.sql.Timestamp;
 
 @RestController
 @RequestMapping("/api/admin/accounts")
@@ -14,11 +15,17 @@ public class AdminAccountController {
     private final AuthService authService;
     private final QuotaService quotaService;
     private final RuntimeConfigService runtimeConfigService;
+    private final LlmService llmService;
+    private final ZoteroService zoteroService;
 
-    public AdminAccountController(AuthService authService, QuotaService quotaService, RuntimeConfigService runtimeConfigService) {
+    public AdminAccountController(AuthService authService, QuotaService quotaService,
+                                  RuntimeConfigService runtimeConfigService, LlmService llmService,
+                                  ZoteroService zoteroService) {
         this.authService = authService;
         this.quotaService = quotaService;
         this.runtimeConfigService = runtimeConfigService;
+        this.llmService = llmService;
+        this.zoteroService = zoteroService;
     }
 
     @GetMapping
@@ -85,6 +92,44 @@ public class AdminAccountController {
         } catch (AuthException e) { return error(e); }
     }
 
+    @PostMapping("/api-settings/test")
+    public ResponseEntity<?> testApiSettings(HttpServletRequest request, @RequestBody Map<String, Object> body) {
+        try {
+            authService.requireCsrf(request);
+            authService.requireRoot(request);
+            String provider = value(body.get("provider")).toLowerCase();
+            Map<String, Object> config = map(body.get("config"));
+            long started = System.nanoTime();
+            Map<String, Object> result = switch (provider) {
+                case "llm" -> llmService.testConnection(
+                        text(config, "baseUrl", runtimeConfigService.llmUrl()),
+                        secret(config.get("apiKey"), runtimeConfigService.llmKey()),
+                        text(config, "model", runtimeConfigService.llmModel()),
+                        text(config, "protocol", runtimeConfigService.llmProtocol()));
+                case "babeldoc" -> llmService.testConnection(
+                        text(config, "baseUrl", runtimeConfigService.babelUrl()),
+                        secret(config.get("apiKey"), runtimeConfigService.babelKey()),
+                        text(config, "model", runtimeConfigService.babelModel()), "openai");
+                case "zotero" -> zoteroService.testConnection(
+                        text(config, "baseUrl", runtimeConfigService.zoteroUrl()),
+                        text(config, "userId", runtimeConfigService.zoteroUser()),
+                        secret(config.get("apiKey"), runtimeConfigService.zoteroKey()));
+                case "research" -> runtimeConfigService.testTavilyConnection(
+                        text(config, "baseUrl", runtimeConfigService.tavilyUrl()),
+                        secret(config.get("apiKey"), runtimeConfigService.tavilyKey()));
+                default -> throw new AuthException(400, "不支持的 API 提供方");
+            };
+            Map<String, Object> data = new LinkedHashMap<>(result);
+            data.put("latencyMs", Math.max(1, (System.nanoTime() - started) / 1_000_000));
+            return ResponseEntity.ok(Map.of("code", 200, "data", data, "message", "success"));
+        } catch (AuthException e) {
+            return error(e);
+        } catch (Exception e) {
+            String message = e.getMessage() == null || e.getMessage().isBlank() ? "上游接口测试失败" : e.getMessage();
+            return ResponseEntity.status(502).body(Map.of("code", 502, "message", message));
+        }
+    }
+
     @PatchMapping("/invites/{id}")
     public ResponseEntity<?> inviteStatus(HttpServletRequest request, @PathVariable long id, @RequestBody Map<String, Object> body) {
         try {
@@ -108,6 +153,16 @@ public class AdminAccountController {
     }
 
     private String value(Object value) { return value == null ? "" : value.toString().trim(); }
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> map(Object value) { return value instanceof Map<?, ?> ? (Map<String, Object>) value : Map.of(); }
+    private String text(Map<String, Object> body, String key, String fallback) {
+        String value = value(body.get(key));
+        return value.isBlank() ? fallback : value;
+    }
+    private String secret(Object submitted, String fallback) {
+        String value = value(submitted);
+        return value.isBlank() || value.startsWith("已配置（") ? fallback : value;
+    }
     private int intValue(Object value, int fallback) {
         try { return Integer.parseInt(value(value)); } catch (Exception e) { return fallback; }
     }

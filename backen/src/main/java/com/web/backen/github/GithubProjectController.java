@@ -15,16 +15,28 @@ import java.util.Map;
 public class GithubProjectController {
 
     private final GithubProjectService githubProjectService;
+    private final GithubRankingService githubRankingService;
     private final AdminConfig adminConfig;
 
-    public GithubProjectController(GithubProjectService githubProjectService, AdminConfig adminConfig) {
+    public GithubProjectController(GithubProjectService githubProjectService,
+                                   GithubRankingService githubRankingService,
+                                   AdminConfig adminConfig) {
         this.githubProjectService = githubProjectService;
+        this.githubRankingService = githubRankingService;
         this.adminConfig = adminConfig;
     }
 
     @GetMapping
     public Map<String, Object> list() {
         return ok(githubProjectService.listEnriched());
+    }
+
+    @GetMapping("/rankings")
+    public Map<String, Object> rankings(@RequestParam(required = false) Boolean refresh) {
+        if (Boolean.TRUE.equals(refresh)) {
+            githubRankingService.requestRefresh(true);
+        }
+        return ok(githubRankingService.getRankings());
     }
 
     @GetMapping(value = "/{owner}/{repo}/readme", produces = "text/markdown;charset=UTF-8")

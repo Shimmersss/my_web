@@ -1,0 +1,4 @@
+interface:
+  display_name: "模板 PPTX Agent"
+  short_description: "严格复用源模板生成并质检可编辑 PowerPoint"
+  default_prompt: "Use $create-template-pptx to create a sourced deck from the selected template."

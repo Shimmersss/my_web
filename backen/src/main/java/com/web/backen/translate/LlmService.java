@@ -55,6 +55,34 @@ public class LlmService {
     }
 
     /**
+     * 用极小请求验证当前表单中的 LLM 地址、协议、模型和密钥是否可用。
+     * 不写入运行时配置；调用方负责在需要时先保存配置。
+     */
+    public Map<String, Object> testConnection(String baseUrl, String apiKey, String model, String protocol) {
+        if (apiKey == null || apiKey.isBlank()) throw new IllegalStateException("API Key 未配置");
+        if (baseUrl == null || baseUrl.isBlank()) throw new IllegalStateException("API Base URL 未配置");
+        if (model == null || model.isBlank()) throw new IllegalStateException("模型名称未配置");
+
+        String resolvedProtocol = runtimeConfig.resolveLlmProtocol(baseUrl, protocol);
+        String endpoint = runtimeConfig.llmEndpoint(baseUrl, protocol);
+        Map<String, Object> requestBody = textRequest(resolvedProtocol, model.trim(),
+                "Reply with exactly OK.", "Return only the requested short confirmation.", 8);
+        String responseJson = llmRestClient.post()
+                .uri(endpoint)
+                .headers(headers -> applyHeaders(headers, apiKey, resolvedProtocol))
+                .body(requestBody)
+                .retrieve()
+                .body(String.class);
+        String response = extractContent(responseJson);
+        String preview = response.replaceAll("\\s+", " ").trim();
+        if (preview.length() > 48) preview = preview.substring(0, 48) + "…";
+        return new LinkedHashMap<>(Map.of(
+                "protocol", resolvedProtocol,
+                "model", model.trim(),
+                "message", preview.isBlank() ? "连接成功" : "连接成功 · 返回：" + preview));
+    }
+
+    /**
      * 翻译一段文本，含重试逻辑
      */
     public String translate(String sourceText) {
@@ -75,15 +103,7 @@ public class LlmService {
                 ? CONTINUATION_PROMPT + "\n\n" + sourceText
                 : sourceText;
 
-        // Anthropic Messages API 格式：system 是顶级字段，messages 只放用户消息
-        Map<String, Object> requestBody = Map.of(
-                "model", runtimeConfig.llmModel(),
-                "max_tokens", llmConfig.getMaxTokens(),
-                "system", SYSTEM_PROMPT,
-                "messages", List.of(
-                        Map.of("role", "user", "content", userMessage)
-                )
-        );
+        Map<String, Object> requestBody = textRequest(runtimeConfig.llmModel(), SYSTEM_PROMPT, userMessage, llmConfig.getMaxTokens());
 
         int maxRetries = 3;
         long delayMs = 1000;
@@ -91,8 +111,8 @@ public class LlmService {
         for (int attempt = 0; attempt <= maxRetries; attempt++) {
             try {
                 String responseJson = llmRestClient.post()
-                        .uri(runtimeConfig.llmUrl() + "/v1/messages")
-                        .header("x-api-key", runtimeConfig.llmKey())
+                        .uri(runtimeConfig.llmEndpoint())
+                        .headers(headers -> applyHeaders(headers))
                         .body(requestBody)
                         .retrieve()
                         .body(String.class);
@@ -135,22 +155,18 @@ public class LlmService {
             throw new IllegalArgumentException("用户提示词不能为空");
         }
 
-        Map<String, Object> requestBody = Map.of(
-                "model", model == null || model.isBlank() ? runtimeConfig.llmModel() : model,
-                "max_tokens", Math.max(1024, maxTokens),
-                "system", systemPrompt == null || systemPrompt.isBlank() ? "You are a helpful assistant." : systemPrompt,
-                "messages", List.of(
-                        Map.of("role", "user", "content", userPrompt)
-                )
-        );
+        Map<String, Object> requestBody = textRequest(
+                model == null || model.isBlank() ? runtimeConfig.llmModel() : model,
+                systemPrompt == null || systemPrompt.isBlank() ? "You are a helpful assistant." : systemPrompt,
+                userPrompt, Math.max(1024, maxTokens));
 
         int maxRetries = 2;
         long delayMs = 1000;
         for (int attempt = 0; attempt <= maxRetries; attempt++) {
             try {
                 String responseJson = llmRestClient.post()
-                        .uri(runtimeConfig.llmUrl() + "/v1/messages")
-                        .header("x-api-key", runtimeConfig.llmKey())
+                        .uri(runtimeConfig.llmEndpoint())
+                        .headers(headers -> applyHeaders(headers))
                         .body(requestBody)
                         .retrieve()
                         .body(String.class);
@@ -200,31 +216,31 @@ public class LlmService {
                         break;
                     }
                     totalImageBytes += encoded.data().length;
-                    content.add(Map.of(
-                            "type", "image",
-                            "source", Map.of(
-                                    "type", "base64",
-                                    "media_type", encoded.mediaType(),
-                                    "data", Base64.getEncoder().encodeToString(encoded.data()))));
+                    String encodedData = Base64.getEncoder().encodeToString(encoded.data());
+                    if (runtimeConfig.resolvedLlmProtocol().equals("CLAUDE")) {
+                        content.add(Map.of("type", "image", "source", Map.of(
+                                "type", "base64", "media_type", encoded.mediaType(), "data", encodedData)));
+                    } else {
+                        content.add(Map.of("type", "image_url", "image_url", Map.of(
+                                "url", "data:" + encoded.mediaType() + ";base64," + encodedData, "detail", "auto")));
+                    }
                 } catch (IOException e) {
                     log.warn("读取视觉模型图片失败: {}", imagePath, e);
                 }
             }
         }
 
-        Map<String, Object> requestBody = new LinkedHashMap<>();
-        requestBody.put("model", model == null || model.isBlank() ? runtimeConfig.llmModel() : model);
-        requestBody.put("max_tokens", Math.max(512, maxTokens));
-        requestBody.put("system", systemPrompt == null || systemPrompt.isBlank() ? "You are a helpful assistant." : systemPrompt);
-        requestBody.put("messages", List.of(Map.of("role", "user", "content", content)));
+        String selectedModel = model == null || model.isBlank() ? runtimeConfig.llmModel() : model;
+        String selectedSystem = systemPrompt == null || systemPrompt.isBlank() ? "You are a helpful assistant." : systemPrompt;
+        Map<String, Object> requestBody = visionRequest(selectedModel, selectedSystem, userPrompt, content, Math.max(512, maxTokens));
 
         int maxRetries = 1;
         long delayMs = 1000;
         for (int attempt = 0; attempt <= maxRetries; attempt++) {
             try {
                 String responseJson = llmRestClient.post()
-                        .uri(runtimeConfig.llmUrl() + "/v1/messages")
-                        .header("x-api-key", runtimeConfig.llmKey())
+                        .uri(runtimeConfig.llmEndpoint())
+                        .headers(headers -> applyHeaders(headers))
                         .body(requestBody)
                         .retrieve()
                         .body(String.class);
@@ -248,6 +264,58 @@ public class LlmService {
             }
         }
         throw new RuntimeException("LLM 视觉模型调用失败: 未知错误");
+    }
+
+    private Map<String, Object> textRequest(String model, String systemPrompt, String userPrompt, int maxTokens) {
+        return textRequest(runtimeConfig.resolvedLlmProtocol(), model, systemPrompt, userPrompt, maxTokens);
+    }
+
+    private Map<String, Object> textRequest(String protocol, String model, String systemPrompt,
+                                            String userPrompt, int maxTokens) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", model);
+        body.put("max_tokens", maxTokens);
+        if ("CLAUDE".equals(protocol)) {
+            body.put("system", systemPrompt);
+            body.put("messages", List.of(Map.of("role", "user", "content", userPrompt)));
+        } else {
+            body.put("messages", List.of(
+                    Map.of("role", "system", "content", systemPrompt),
+                    Map.of("role", "user", "content", userPrompt)));
+        }
+        return body;
+    }
+
+    private Map<String, Object> visionRequest(String model, String systemPrompt, String userPrompt,
+                                               List<Object> content, int maxTokens) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("model", model);
+        body.put("max_tokens", maxTokens);
+        if (runtimeConfig.resolvedLlmProtocol().equals("CLAUDE")) {
+            body.put("system", systemPrompt);
+            body.put("messages", List.of(Map.of("role", "user", "content", content)));
+        } else {
+            body.put("messages", List.of(
+                    Map.of("role", "system", "content", systemPrompt),
+                    Map.of("role", "user", "content", content)));
+        }
+        return body;
+    }
+
+    private void applyHeaders(org.springframework.http.HttpHeaders headers) {
+        applyHeaders(headers, runtimeConfig.llmKey(), runtimeConfig.resolvedLlmProtocol());
+    }
+
+    private void applyHeaders(org.springframework.http.HttpHeaders headers, String apiKey, String protocol) {
+        headers.remove("Authorization");
+        headers.remove("x-api-key");
+        headers.remove("anthropic-version");
+        if ("CLAUDE".equals(protocol)) {
+            headers.set("x-api-key", apiKey);
+            headers.set("anthropic-version", "2023-06-01");
+        } else {
+            headers.setBearerAuth(apiKey);
+        }
     }
 
     private String mediaType(Path imagePath) {
@@ -327,6 +395,18 @@ public class LlmService {
                         String text = block.get("text").asText().trim();
                         if (!text.isEmpty()) {
                             return text;
+                        }
+                    }
+                }
+            }
+            JsonNode choices = root.path("choices");
+            if (choices.isArray() && !choices.isEmpty()) {
+                JsonNode message = choices.get(0).path("message").path("content");
+                if (message.isTextual() && !message.asText().isBlank()) return message.asText().trim();
+                if (message.isArray()) {
+                    for (JsonNode block : message) {
+                        if (block.path("text").isTextual() && !block.path("text").asText().isBlank()) {
+                            return block.path("text").asText().trim();
                         }
                     }
                 }

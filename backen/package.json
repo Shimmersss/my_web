@@ -1,0 +1,22 @@
+{
+  "name": "shimmer-presentation-agent",
+  "private": true,
+  "type": "module",
+  "description": "Provider-neutral agent worker and presentation tools used by the Spring Boot service",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test scripts/ppt-agent/*.test.mjs",
+    "prepare:ppt-templates": "node scripts/ppt-agent/prepare-templates.mjs",
+    "preflight:ppt-fonts": "node scripts/ppt-agent/font-preflight.mjs",
+    "smoke:presentations": "node scripts/ppt-agent/visual-smoke.mjs"
+  },
+  "dependencies": {
+    "jszip": "3.10.1",
+    "playwright-core": "1.62.1",
+    "pptx-automizer": "0.8.2",
+    "reveal.js": "6.0.1",
+    "undici": "6.28.0"
+  }
+}

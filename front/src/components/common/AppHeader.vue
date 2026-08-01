@@ -86,7 +86,7 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { NAlert, NDrawer, NDrawerContent, NInput, NMenu, NModal, NButton, NIcon, useMessage } from 'naive-ui'
@@ -127,6 +127,15 @@ const activeKey = computed(() => {
 const MenuIcon = MenuOutline
 const MoonIcon = MoonOutline
 const SunIcon = SunnyOutline
+
+watch(() => auth.authPrompt, prompt => {
+  if (prompt === 'login') {
+    openLogin()
+  } else if (prompt === 'forbidden') {
+    message.error('权限不足：该节目需要 root 权限')
+    auth.clearAuthPrompt()
+  }
+})
 
 const allMenuOptions = computed(() => [
   {
@@ -187,7 +196,9 @@ async function submitAuth() {
     if (authMode.value === 'login') {
       await auth.login(authForm.username, authForm.password)
       authModalOpen.value = false
+      const pendingPath = auth.consumePendingPath()
       message.success('已登录')
+      if (pendingPath && pendingPath !== '/') await router.push(pendingPath)
     } else {
       await auth.register(authForm.username, authForm.password, authForm.inviteCode)
       authMode.value = 'login'
@@ -238,8 +249,8 @@ async function handleLogout() {
   padding: 0 $spacing-lg;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
+  justify-content: flex-start;
+  gap: 34px;
   height: 80px;
   width: 100%;
 }
@@ -295,22 +306,22 @@ async function handleLogout() {
 .header-right {
   display: flex;
   align-items: center;
-  gap: 20px;
+  gap: 18px;
   flex: 1 1 auto;
-  justify-content: flex-end;
+  justify-content: flex-start;
   min-width: 0;
 }
 
 .nav-menu {
-  flex: 1;
+  flex: 0 1 auto;
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   min-width: 0;
 
   :deep(.n-menu) {
     display: flex;
-    width: 100%;
-    justify-content: flex-end;
+    width: auto;
+    justify-content: flex-start;
     gap: 0;
 
     .n-menu-item {
@@ -334,6 +345,7 @@ async function handleLogout() {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
   flex-shrink: 0;
 
   .theme-btn {
@@ -420,6 +432,8 @@ async function handleLogout() {
   .header-content {
     height: 64px;
     padding: 0 16px;
+    justify-content: space-between;
+    gap: 16px;
   }
 
   .logo-text {

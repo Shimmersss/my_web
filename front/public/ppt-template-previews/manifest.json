@@ -1,0 +1,93 @@
+{
+  "engine": "pptxgenjs-source-decks",
+  "slideCount": 5,
+  "generatedAt": "2026-07-28T17:16:52.878Z",
+  "templates": {
+    "github-bjtu-blue": [
+      "/ppt-template-previews/github-bjtu-blue/slide-1.png",
+      "/ppt-template-previews/github-bjtu-blue/slide-2.png",
+      "/ppt-template-previews/github-bjtu-blue/slide-3.png",
+      "/ppt-template-previews/github-bjtu-blue/slide-4.png",
+      "/ppt-template-previews/github-bjtu-blue/slide-5.png"
+    ],
+    "github-bjtu-green": [
+      "/ppt-template-previews/github-bjtu-green/slide-1.png",
+      "/ppt-template-previews/github-bjtu-green/slide-2.png",
+      "/ppt-template-previews/github-bjtu-green/slide-3.png",
+      "/ppt-template-previews/github-bjtu-green/slide-4.png",
+      "/ppt-template-previews/github-bjtu-green/slide-5.png"
+    ],
+    "github-bjtu-yellow": [
+      "/ppt-template-previews/github-bjtu-yellow/slide-1.png",
+      "/ppt-template-previews/github-bjtu-yellow/slide-2.png",
+      "/ppt-template-previews/github-bjtu-yellow/slide-3.png",
+      "/ppt-template-previews/github-bjtu-yellow/slide-4.png",
+      "/ppt-template-previews/github-bjtu-yellow/slide-5.png"
+    ],
+    "github-bjtu-red-2024": [
+      "/ppt-template-previews/github-bjtu-red-2024/slide-1.png",
+      "/ppt-template-previews/github-bjtu-red-2024/slide-2.png",
+      "/ppt-template-previews/github-bjtu-red-2024/slide-3.png",
+      "/ppt-template-previews/github-bjtu-red-2024/slide-4.png",
+      "/ppt-template-previews/github-bjtu-red-2024/slide-5.png"
+    ],
+    "github-bjtu-red-2023": [
+      "/ppt-template-previews/github-bjtu-red-2023/slide-1.png",
+      "/ppt-template-previews/github-bjtu-red-2023/slide-2.png",
+      "/ppt-template-previews/github-bjtu-red-2023/slide-3.png",
+      "/ppt-template-previews/github-bjtu-red-2023/slide-4.png",
+      "/ppt-template-previews/github-bjtu-red-2023/slide-5.png"
+    ],
+    "github-bjtu-handdrawn": [
+      "/ppt-template-previews/github-bjtu-handdrawn/slide-1.png",
+      "/ppt-template-previews/github-bjtu-handdrawn/slide-2.png",
+      "/ppt-template-previews/github-bjtu-handdrawn/slide-3.png",
+      "/ppt-template-previews/github-bjtu-handdrawn/slide-4.png",
+      "/ppt-template-previews/github-bjtu-handdrawn/slide-5.png"
+    ]
+  },
+  "externalSources": {
+    "github-bjtu-blue": {
+      "source": "Allenpandas/BJTU-Slides-Template",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/Allenpandas/BJTU-Slides-Template",
+      "rawUrl": "https://raw.githubusercontent.com/Allenpandas/BJTU-Slides-Template/main/2024-style/PPT003-%E8%93%9D%E8%89%B2%E7%B3%BB.pptx",
+      "importedAt": "2026-07-28T18:21:34.217Z"
+    },
+    "github-bjtu-green": {
+      "source": "Allenpandas/BJTU-Slides-Template",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/Allenpandas/BJTU-Slides-Template",
+      "rawUrl": "https://raw.githubusercontent.com/Allenpandas/BJTU-Slides-Template/main/2024-style/PPT004-%E7%BB%BF%E8%89%B2%E7%B3%BB.pptx",
+      "importedAt": "2026-07-28T18:21:47.836Z"
+    },
+    "github-bjtu-yellow": {
+      "source": "Allenpandas/BJTU-Slides-Template",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/Allenpandas/BJTU-Slides-Template",
+      "rawUrl": "https://raw.githubusercontent.com/Allenpandas/BJTU-Slides-Template/main/2024-style/PPT002-%E9%BB%84%E8%89%B2%E7%B3%BB.pptx",
+      "importedAt": "2026-07-28T18:21:54.137Z"
+    },
+    "github-bjtu-red-2024": {
+      "source": "Allenpandas/BJTU-Slides-Template",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/Allenpandas/BJTU-Slides-Template",
+      "rawUrl": "https://raw.githubusercontent.com/Allenpandas/BJTU-Slides-Template/main/2024-style/PPT001-%E7%BA%A2%E8%89%B2%E7%B3%BB.pptx",
+      "importedAt": "2026-07-28T18:22:00.232Z"
+    },
+    "github-bjtu-red-2023": {
+      "source": "Allenpandas/BJTU-Slides-Template",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/Allenpandas/BJTU-Slides-Template",
+      "rawUrl": "https://raw.githubusercontent.com/Allenpandas/BJTU-Slides-Template/main/2023-style/PPT001-%E7%BA%A2%E8%89%B2%E7%B3%BB.pptx",
+      "importedAt": "2026-07-28T18:22:10.105Z"
+    },
+    "github-bjtu-handdrawn": {
+      "source": "Allenpandas/BJTU-Slides-Template",
+      "license": "Apache-2.0",
+      "sourceUrl": "https://github.com/Allenpandas/BJTU-Slides-Template",
+      "rawUrl": "https://raw.githubusercontent.com/Allenpandas/BJTU-Slides-Template/main/2022-style/PPT003-%E6%89%8B%E7%BB%98%E9%A3%8E.pptx",
+      "importedAt": "2026-07-28T18:22:14.227Z"
+    }
+  }
+}

@@ -1,6 +1,7 @@
 package com.web.backen.translate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.web.backen.auth.QuotaService;
 import com.web.backen.config.TranslationConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -118,6 +119,47 @@ class TranslationServiceTest {
             awaitStatus(service, "resume01", "completed");
             verify(babelDocService).translatePdf(
                     eq(queued.getInputPdfPath()), eq(taskDir), eq("paper.pdf"), eq(1), eq(2), eq("auto"), eq(4), any());
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void creatingTranslationHydratesChargeAndResumesAfterRestart() throws Exception {
+        PdfParseService pdfParseService = mock(PdfParseService.class);
+        BabelDocService babelDocService = mock(BabelDocService.class);
+        QuotaService quotaService = mock(QuotaService.class);
+        TranslationConfig config = new TranslationConfig();
+        config.setStorageDir(tempDir.toString());
+        config.setQueueCapacity(2);
+        Path taskDir = Files.createDirectories(tempDir.resolve("creating01"));
+        Files.writeString(taskDir.resolve("input.pdf"), "pdf");
+        TranslationSession creating = new TranslationSession("creating01", "paper.pdf", taskDir);
+        creating.setTotalPages(2);
+        creating.setPageRange(1, 2);
+        creating.setStatus("creating");
+        creating.setProgressStage("creating");
+        creating.setQuotaRequired(true);
+        creating.setCreationReady(true);
+        new ObjectMapper().writerWithDefaultPrettyPrinter().writeValue(creating.getMetadataPath().toFile(), creating);
+        when(quotaService.findSpendTransactionId("creating01")).thenReturn(99L);
+        when(babelDocService.translatePdf(any(), any(), anyString(), anyInt(), anyInt(), anyString(), anyInt(), any()))
+                .thenAnswer(invocation -> {
+                    Path resultDir = invocation.getArgument(1);
+                    Path translated = resultDir.resolve("translated.pdf");
+                    Path bilingual = resultDir.resolve("bilingual.pdf");
+                    Files.writeString(translated, "translated");
+                    Files.writeString(bilingual, "bilingual");
+                    return new BabelDocService.TranslationResult(translated, bilingual);
+                });
+
+        TranslationService service = new TranslationService(
+                pdfParseService, babelDocService, config, new ObjectMapper(), quotaService);
+        service.initialize();
+        try {
+            awaitStatus(service, "creating01", "completed");
+            assertEquals(99L, service.getSession("creating01").getCreditTransactionId());
+            verify(quotaService, never()).refund(eq(99L), anyString());
         } finally {
             service.shutdown();
         }

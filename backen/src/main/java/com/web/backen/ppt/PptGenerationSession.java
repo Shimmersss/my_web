@@ -12,8 +12,9 @@ public class PptGenerationSession {
     private String accessToken;
     private String clientRequestId;
     private String prompt;
-    private String templateKey = "academic-blue";
+    private String templateKey = "github-bjtu-blue";
     private String outputFormat = "pptx";
+    private String researchMode = "auto";
     private String templateFileName;
     private int extractionPercent = 50;
     private String paperFileName;
@@ -34,6 +35,11 @@ public class PptGenerationSession {
     private String refundError;
     private String revisionOfTaskId;
     private String revisionPrompt;
+    private int sourceCount;
+    private int agentIteration;
+    private boolean qaValid;
+    private boolean creationReady;
+    private boolean quotaRequired;
 
     @JsonIgnore
     private Path taskDir;
@@ -58,6 +64,8 @@ public class PptGenerationSession {
     public void setTemplateKey(String templateKey) { this.templateKey = templateKey; touch(); }
     public String getOutputFormat() { return outputFormat; }
     public void setOutputFormat(String outputFormat) { this.outputFormat = outputFormat; touch(); }
+    public String getResearchMode() { return researchMode; }
+    public void setResearchMode(String researchMode) { this.researchMode = researchMode; touch(); }
     public String getTemplateFileName() { return templateFileName; }
     public void setTemplateFileName(String templateFileName) { this.templateFileName = templateFileName; touch(); }
     public int getExtractionPercent() { return extractionPercent; }
@@ -98,6 +106,16 @@ public class PptGenerationSession {
     public void setRevisionOfTaskId(String revisionOfTaskId) { this.revisionOfTaskId = revisionOfTaskId; touch(); }
     public String getRevisionPrompt() { return revisionPrompt; }
     public void setRevisionPrompt(String revisionPrompt) { this.revisionPrompt = revisionPrompt; touch(); }
+    public int getSourceCount() { return sourceCount; }
+    public void setSourceCount(int sourceCount) { this.sourceCount = sourceCount; touch(); }
+    public int getAgentIteration() { return agentIteration; }
+    public void setAgentIteration(int agentIteration) { this.agentIteration = agentIteration; touch(); }
+    public boolean isQaValid() { return qaValid; }
+    public void setQaValid(boolean qaValid) { this.qaValid = qaValid; touch(); }
+    public boolean isCreationReady() { return creationReady; }
+    public void setCreationReady(boolean creationReady) { this.creationReady = creationReady; touch(); }
+    public boolean isQuotaRequired() { return quotaRequired; }
+    public void setQuotaRequired(boolean quotaRequired) { this.quotaRequired = quotaRequired; touch(); }
 
     @JsonIgnore
     public Path getTaskDir() { return taskDir; }
@@ -110,13 +128,13 @@ public class PptGenerationSession {
     @JsonIgnore
     public Path getPaperPath() { return taskDir.resolve("paper" + paperExtension()); }
     @JsonIgnore
-    public Path getDeckJsonPath() { return taskDir.resolve("deck.json"); }
-    @JsonIgnore
-    public Path getStyleJsonPath() { return taskDir.resolve("style.json"); }
-    @JsonIgnore
-    public Path getImageManifestPath() { return taskDir.resolve("image-manifest.json"); }
-    @JsonIgnore
     public Path getPreviewPath() { return taskDir.resolve("preview.json"); }
+    @JsonIgnore
+    public Path getPreviewDir() { return taskDir.resolve("preview"); }
+    @JsonIgnore
+    public Path getSourcesPath() { return taskDir.resolve("sources.json"); }
+    @JsonIgnore
+    public Path getAgentPlanPath() { return taskDir.resolve("agent-plan.json"); }
     @JsonIgnore
     public Path getImagesDir() { return taskDir.resolve("images"); }
     @JsonIgnore

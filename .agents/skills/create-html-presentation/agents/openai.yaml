@@ -1,0 +1,4 @@
+interface:
+  display_name: "HTML 演示 Agent"
+  short_description: "生成、渲染并质检离线 reveal.js 演示文稿"
+  default_prompt: "Use $create-html-presentation to build a polished offline HTML presentation."

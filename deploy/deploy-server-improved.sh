@@ -75,7 +75,7 @@ validate_simple_value() {
   [[ "$value" != *"'"* ]] || die "$name contains a single quote"
 }
 
-for command in git mvn npm ssh scp curl tar; do
+for command in git mvn node npm ssh scp curl tar; do
   require_command "$command"
 done
 
@@ -153,17 +153,27 @@ fi
 
 command -v java >/dev/null 2>&1 || die "java not found. Install Java 17 first."
 command -v uv >/dev/null 2>&1 || die "uv not found. Runtime PPT/PDF features depend on uv run."
+command -v python3 >/dev/null 2>&1 || die "python3 not found. Deployment safety checks require Python 3."
+command -v node >/dev/null 2>&1 || die "node not found. The presentation Agent requires Node.js 20+."
+command -v npm >/dev/null 2>&1 || die "npm not found. Install npm alongside Node.js."
+node -e 'if (Number(process.versions.node.split(".")[0]) < 20) process.exit(1)' \
+  || die "Node.js 20+ is required by the presentation Agent."
+command -v soffice >/dev/null 2>&1 || die "soffice not found. Install stable LibreOffice; the Agent has no secondary renderer."
+if soffice --version 2>&1 | grep -Eiq 'dev|alpha|beta|rc[0-9]*'; then
+  die "A stable LibreOffice release is required; development and prerelease builds are rejected."
+fi
+command -v pdftoppm >/dev/null 2>&1 || die "pdftoppm not found. Install poppler; the Agent has no secondary renderer."
 
 if ! java -version 2>&1 | grep -Eq 'version "17|version "18|version "19|version "2[0-9]|openjdk version "17|openjdk version "18|openjdk version "19|openjdk version "2[0-9]'; then
   warn "Java exists, but it may be older than 17. Spring Boot 3 requires Java 17+."
 fi
 
 if command -v fc-list >/dev/null 2>&1; then
-  if ! fc-list | grep -Eiq 'Noto.*CJK|Source Han|WenQuanYi|Microsoft YaHei|SimSun|PingFang|Heiti'; then
-    warn "No common CJK font found via fc-list. Generated PPT/PDF Chinese text may render poorly."
+  if [[ -z "$(fc-list | grep -Ei 'Noto.*CJK|Source Han|WenQuanYi|Microsoft YaHei|SimSun|PingFang|Heiti' | sed -n '1p')" ]]; then
+    die "No CJK font found. Install fonts-noto-cjk before deploying the presentation Agent."
   fi
 else
-  warn "fontconfig fc-list not found. Install fontconfig and CJK fonts for reliable Chinese PPT/PDF rendering."
+  die "fontconfig fc-list not found. Install fontconfig and fonts-noto-cjk."
 fi
 
 mkdir -p "$CONFIG_DIR"
@@ -180,7 +190,15 @@ set -a
 source "$ENV_FILE"
 set +a
 
+mkdir -p "$INSTALL_DIR/.run"
+DEPLOYMENT_LOCK="${DEPLOYMENT_LOCK_PATH:-$INSTALL_DIR/.run/deployment.lock}"
+mkdir -p "$(dirname "$DEPLOYMENT_LOCK")"
+touch "$DEPLOYMENT_LOCK"
+cleanup_deployment_lock() { rm -f "$DEPLOYMENT_LOCK"; }
+trap cleanup_deployment_lock EXIT
+
 [[ -n "${ROOT_PASSWORD:-}" && "${#ROOT_PASSWORD}" -ge 6 ]] || die "ROOT_PASSWORD in $ENV_FILE must be set and at least 6 characters."
+[[ -x "${PPT_GENERATION_CHROME_COMMAND:-/usr/bin/chromium}" ]] || die "Chromium/Chrome not found at PPT_GENERATION_CHROME_COMMAND (default /usr/bin/chromium)."
 
 if [[ "$REQUIRE_MYSQL_CONFIG" == "1" ]]; then
   [[ -n "${DB_URL:-}" && "$DB_URL" == jdbc:mysql:* ]] || die "DB_URL in $ENV_FILE must point to MySQL, or set REQUIRE_MYSQL_CONFIG=0."
@@ -195,9 +213,57 @@ if [[ -z "${LLM_API_KEY:-}" && -z "${BABELDOC_OPENAI_API_KEY:-}" ]]; then
   warn "LLM/BabelDOC API key is empty; translation and PPT generation may fail."
 fi
 
+scan_active_tasks() {
+python3 - "$INSTALL_DIR" <<'PY'
+import glob
+import json
+import os
+import sys
+
+install_dir = sys.argv[1]
+working_dir = os.path.join(install_dir, "backen")
+
+def storage_path(env_name, default_value):
+    value = os.environ.get(env_name, default_value)
+    return os.path.normpath(value if os.path.isabs(value) else os.path.join(working_dir, value))
+
+checks = (
+    ("translation", os.path.join(storage_path("TRANSLATION_STORAGE_DIR", "../.run/translation-tasks"), "*/task.json"),
+     {"creating", "queued", "translating"}),
+    ("ppt", os.path.join(storage_path("PPT_GENERATION_STORAGE_DIR", "../.run/ppt-generation-tasks"), "*/task.json"),
+     {"creating", "queued", "generating"}),
+)
+active = []
+for kind, pattern, active_states in checks:
+    for metadata in glob.glob(pattern):
+        try:
+            with open(metadata, encoding="utf-8") as handle:
+                status = str(json.load(handle).get("status", "")).lower()
+        except (OSError, ValueError):
+            continue
+        if status in active_states:
+            active.append(f"{kind}:{os.path.basename(os.path.dirname(metadata))}:{status}")
+if active:
+    print("[x] Active heavy tasks block deployment: " + ", ".join(active), file=sys.stderr)
+    sys.exit(42)
+PY
+}
+
+# Let requests that passed the pre-lock check persist their "creating" marker,
+# then scan the exact runtime storage paths before stopping the service.
+sleep 2
+if ! scan_active_tasks; then
+  exit 42
+fi
+
 if systemctl list-unit-files "$SERVICE_NAME.service" >/dev/null 2>&1; then
   info "Stopping existing backend service before replacing files..."
   systemctl stop "$SERVICE_NAME.service" || true
+  if ! scan_active_tasks; then
+    rm -f "$DEPLOYMENT_LOCK"
+    systemctl start "$SERVICE_NAME.service" || true
+    exit 42
+  fi
 fi
 
 info "Installing files to $INSTALL_DIR..."
@@ -207,6 +273,14 @@ chmod 644 "$INSTALL_DIR/backen/backen.jar.new"
 mv -f "$INSTALL_DIR/backen/backen.jar.new" "$INSTALL_DIR/backen/backen.jar"
 rm -rf "$INSTALL_DIR/backen/scripts"
 cp -R "$CURRENT_DIR/backen/scripts" "$INSTALL_DIR/backen/scripts"
+rm -rf "$INSTALL_DIR/.agents"
+cp -R "$CURRENT_DIR/.agents" "$INSTALL_DIR/.agents"
+if [[ -f "$CURRENT_DIR/backen/package.json" ]]; then
+  cp "$CURRENT_DIR/backen/package.json" "$INSTALL_DIR/backen/package.json"
+  [[ ! -f "$CURRENT_DIR/backen/package-lock.json" ]] || cp "$CURRENT_DIR/backen/package-lock.json" "$INSTALL_DIR/backen/package-lock.json"
+  info "Installing the provider-neutral Agent worker, pptx-automizer, and reveal.js..."
+  (cd "$INSTALL_DIR/backen" && npm ci --omit=dev --ignore-scripts)
+fi
 rm -rf "$INSTALL_DIR/front/dist"
 cp -R "$CURRENT_DIR/front/dist" "$INSTALL_DIR/front/dist"
 
@@ -220,6 +294,12 @@ done
 if [[ -f "$CURRENT_DIR/.run/github-projects.json" && ! -f "$INSTALL_DIR/.run/github-projects.json" ]]; then
   cp "$CURRENT_DIR/.run/github-projects.json" "$INSTALL_DIR/.run/github-projects.json"
 fi
+mkdir -p "$INSTALL_DIR/.run/ppt-generation-tasks"
+rm -rf "$INSTALL_DIR/.run/ppt-generation-tasks/_template-cache"
+cp -R "$CURRENT_DIR/.run/ppt-generation-tasks/_template-cache" "$INSTALL_DIR/.run/ppt-generation-tasks/_template-cache"
+
+info "Verifying that headless LibreOffice really renders newly authored CJK text..."
+(cd "$INSTALL_DIR/backen" && npm run preflight:ppt-fonts)
 
 info "Installing systemd service..."
 cat > "/etc/systemd/system/$SERVICE_NAME.service" <<SERVICE_UNIT
@@ -234,6 +314,8 @@ WorkingDirectory=$INSTALL_DIR/backen
 EnvironmentFile=$ENV_FILE
 Environment=HOME=/home/admin
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=DEPLOYMENT_LOCK_PATH=$DEPLOYMENT_LOCK
+Environment=PPT_GENERATION_TEMPLATE_CACHE_DIR=$INSTALL_DIR/.run/ppt-generation-tasks/_template-cache
 Environment="JAVA_TOOL_OPTIONS=-Xms128m -Xmx768m -XX:+UseG1GC"
 ExecStart=/usr/bin/env java -jar $INSTALL_DIR/backen/backen.jar
 Restart=always
@@ -250,6 +332,7 @@ SERVICE_UNIT
 
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME.service" >/dev/null
+rm -f "$DEPLOYMENT_LOCK"
 systemctl start "$SERVICE_NAME.service"
 
 if [[ -d "/etc/systemd/system/$SERVICE_NAME.service.d" ]]; then
@@ -348,6 +431,7 @@ build_release() {
   if [[ "$RUN_TESTS" == "1" ]]; then
     info "Running backend tests..."
     (cd "$ROOT/backen" && mvn -q test)
+    (cd "$ROOT/backen" && npm test)
   fi
 
   info "Building backend jar..."
@@ -360,13 +444,19 @@ build_release() {
     (cd "$ROOT/front" && npm install --cache "$NPM_CACHE_DIR" && VITE_API_BASE_URL=/api npm run build)
   fi
 
+  info "Downloading and hashing the six allow-listed PPTX source decks..."
+  (cd "$ROOT/backen" && npm run prepare:ppt-templates)
+
   if grep -Rqs 'api\.example\.com' "$ROOT/front/dist"; then
     die "Frontend build contains placeholder API host api.example.com"
   fi
 
   info "Collecting release files..."
   cp "$ROOT/backen/target/backen-0.0.1-SNAPSHOT.jar" "$PACKAGE_ROOT/backen/backen.jar"
+  cp "$ROOT/backen/package.json" "$PACKAGE_ROOT/backen/package.json"
+  cp "$ROOT/backen/package-lock.json" "$PACKAGE_ROOT/backen/package-lock.json"
   cp -R "$ROOT/backen/scripts" "$PACKAGE_ROOT/backen/scripts"
+  cp -R "$ROOT/.agents" "$PACKAGE_ROOT/.agents"
   find "$PACKAGE_ROOT/backen/scripts" -type d -name node_modules -prune -exec rm -rf {} +
   find "$PACKAGE_ROOT/backen/scripts" \( -type d -name __pycache__ -o -type d -name .pytest_cache \) -prune -exec rm -rf {} +
   find "$PACKAGE_ROOT/backen/scripts" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
@@ -383,6 +473,8 @@ build_release() {
     mkdir -p "$PACKAGE_ROOT/.run"
     cp "$ROOT/.run/github-projects.json" "$PACKAGE_ROOT/.run/github-projects.json"
   fi
+  mkdir -p "$PACKAGE_ROOT/.run/ppt-generation-tasks"
+  cp -R "$ROOT/.run/ppt-generation-tasks/_template-cache" "$PACKAGE_ROOT/.run/ppt-generation-tasks/_template-cache"
 
   {
     echo "version=$version"
@@ -429,6 +521,7 @@ REMOTE_ARCHIVE="$REMOTE_UPLOAD_DIR/$ARCHIVE_NAME"
 REMOTE_STAGE="$REMOTE_UPLOAD_DIR/stage-$VERSION"
 REMOTE_PACKAGE="$REMOTE_STAGE/web-homepage"
 REMOTE_BACKUP="$REMOTE_UPLOAD_DIR/web-homepage-backup-$VERSION.tar.gz"
+REMOTE_TEMPLATE_CACHE_BACKUP="$REMOTE_UPLOAD_DIR/template-cache-backup-$VERSION"
 REMOTE_PARENT="$(dirname "$REMOTE_DIR")"
 REMOTE_BASENAME="$(basename "$REMOTE_DIR")"
 INSTALL_ATTEMPTED=0
@@ -449,9 +542,18 @@ rollback_remote_release() {
     "set -e; \
     if [ -f '$REMOTE_BACKUP' ]; then \
       sudo systemctl stop '$SERVICE_NAME.service' || true; \
+      preserve_run='$REMOTE_PARENT/.web-homepage-run-$VERSION'; \
+      sudo rm -rf \"\$preserve_run\"; \
+      if [ -d '$REMOTE_DIR/.run' ]; then sudo mv '$REMOTE_DIR/.run' \"\$preserve_run\"; fi; \
       sudo rm -rf '$REMOTE_DIR'; \
       sudo mkdir -p '$REMOTE_PARENT'; \
       sudo tar -xzf '$REMOTE_BACKUP' -C '$REMOTE_PARENT'; \
+      if [ -d \"\$preserve_run\" ]; then sudo rm -rf '$REMOTE_DIR/.run'; sudo mv \"\$preserve_run\" '$REMOTE_DIR/.run'; fi; \
+      if [ -d '$REMOTE_TEMPLATE_CACHE_BACKUP' ]; then \
+        sudo rm -rf '$REMOTE_DIR/.run/ppt-generation-tasks/_template-cache'; \
+        sudo mkdir -p '$REMOTE_DIR/.run/ppt-generation-tasks'; \
+        sudo mv '$REMOTE_TEMPLATE_CACHE_BACKUP' '$REMOTE_DIR/.run/ppt-generation-tasks/_template-cache'; \
+      fi; \
       sudo systemctl daemon-reload; \
       sudo systemctl start '$SERVICE_NAME.service'; \
       if command -v nginx >/dev/null 2>&1; then sudo nginx -t && sudo systemctl reload nginx || true; fi; \
@@ -479,12 +581,31 @@ run_cmd "${SCP[@]}" "$ARCHIVE" "$TARGET:$REMOTE_ARCHIVE"
 
 info "Creating server backup and extracting release..."
 run_cmd "${SSH[@]}" \
-  "set -e; rm -rf '$REMOTE_STAGE'; mkdir -p '$REMOTE_STAGE'; if [ -d '$REMOTE_DIR' ]; then tar -czf '$REMOTE_BACKUP' -C '$REMOTE_PARENT' '$REMOTE_BASENAME'; fi; tar -xzf '$REMOTE_ARCHIVE' -C '$REMOTE_STAGE'"
+  "set -e; \
+  rm -rf '$REMOTE_STAGE' '$REMOTE_TEMPLATE_CACHE_BACKUP'; \
+  mkdir -p '$REMOTE_STAGE'; \
+  if [ -d '$REMOTE_DIR' ]; then tar --exclude='$REMOTE_BASENAME/.run' -czf '$REMOTE_BACKUP' -C '$REMOTE_PARENT' '$REMOTE_BASENAME'; fi; \
+  if [ -d '$REMOTE_DIR/.run/ppt-generation-tasks/_template-cache' ]; then \
+    cp -a '$REMOTE_DIR/.run/ppt-generation-tasks/_template-cache' '$REMOTE_TEMPLATE_CACHE_BACKUP'; \
+  fi; \
+  tar -xzf '$REMOTE_ARCHIVE' -C '$REMOTE_STAGE'"
 
 info "Installing release. sudo may ask for the server password..."
 INSTALL_ATTEMPTED=1
+set +e
 run_cmd "${SSH_TTY[@]}" \
   "sudo env INSTALL_DIR='$REMOTE_DIR' CONFIG_DIR='$CONFIG_DIR' SERVICE_NAME='$SERVICE_NAME' NGINX_SITE_NAME='$NGINX_SITE_NAME' DOMAIN='$DOMAIN' FORCE_NGINX_CONFIG='$FORCE_NGINX_CONFIG' REQUIRE_MYSQL_CONFIG='$REQUIRE_MYSQL_CONFIG' bash '$REMOTE_PACKAGE/install-linux.sh'"
+INSTALL_STATUS=$?
+set -e
+if [[ "$INSTALL_STATUS" -eq 42 ]]; then
+  INSTALL_ATTEMPTED=0
+  run_cmd "${SSH[@]}" "rm -rf '$REMOTE_TEMPLATE_CACHE_BACKUP'"
+  warn "Deployment postponed because a translation or presentation task is active."
+  exit 42
+fi
+if [[ "$INSTALL_STATUS" -ne 0 ]]; then
+  exit "$INSTALL_STATUS"
+fi
 
 info "Verifying backend, Nginx, and local server response..."
 run_cmd "${SSH[@]}" \
@@ -502,6 +623,7 @@ run_cmd "${SSH[@]}" \
   done; \
   curl -fsSI -H 'Host: $LOCAL_SITE_HOST' '$LOCAL_SITE_URL' >/dev/null"
 LOCAL_VERIFY_PASSED=1
+run_cmd "${SSH[@]}" "rm -rf '$REMOTE_TEMPLATE_CACHE_BACKUP'"
 
 info "Verifying public response: $PUBLIC_URL"
 run_cmd "${SSH[@]}" "curl -fsSI '$PUBLIC_URL' >/dev/null"
@@ -519,6 +641,7 @@ run_cmd "${SSH[@]}" \
   find . -maxdepth 1 -type f -name 'web-homepage-backup-[0-9]*.tar.gz' -printf '%T@ %p\n' \
     | sort -rn | awk 'NR>$REMOTE_RELEASE_KEEP {print substr(\$0, index(\$0,\$2))}' \
     | xargs -r rm -f --; \
+  find . -maxdepth 1 -type d -name 'template-cache-backup-*' -mtime +1 -exec rm -rf -- {} +; \
   du -sh '$REMOTE_UPLOAD_DIR'"
 
 if [[ "$DRY_RUN" == "1" ]]; then

@@ -116,7 +116,7 @@ def split_merged_reference_paragraphs(paragraph_finder, paragraphs):
         index += len(replacement)
 
 
-def install_reference_layout_patches():
+def install_reference_layout_patches(force_reference_section=False):
     """Keep references untranslated and preserve BabelDOC compatibility fixes."""
     if getattr(ParagraphFinder, "_web_reference_layout_patch", False):
         return
@@ -147,7 +147,8 @@ def install_reference_layout_patches():
                 else []
             )
             flags = reference_section_flags(
-                [item.unicode or "" for item in document_paragraphs]
+                [item.unicode or "" for item in document_paragraphs],
+                in_reference_section=force_reference_section,
             )
             self._web_reference_paragraph_ids = {
                 id(item)
@@ -279,7 +280,7 @@ class RepairingOpenAITranslator(OpenAITranslator):
 
 
 async def run(args):
-    install_reference_layout_patches()
+    install_reference_layout_patches(args.force_reference_section)
     high_level.init()
     translator = RepairingOpenAITranslator(
         lang_in="en",
@@ -337,6 +338,7 @@ def main():
     parser.add_argument("--model", required=True)
     parser.add_argument("--qps", type=int, required=True)
     parser.add_argument("--font-family", default="auto")
+    parser.add_argument("--force-reference-section", action="store_true")
     args = parser.parse_args()
     args.api_key = os.environ["BABELDOC_OPENAI_API_KEY"]
     asyncio.run(run(args))

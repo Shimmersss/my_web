@@ -1,0 +1,74 @@
+[
+  {
+    "key": "github-bjtu-blue",
+    "name": "BJTU 蓝色答辩",
+    "design": "bjtu-blue",
+    "palette": ["24539A", "08245C", "F5C542", "F8FAFC", "0F172A"],
+    "description": "北京交通大学开源成品模板，适合答辩、研究汇报与课程展示",
+    "source": "Allenpandas/BJTU-Slides-Template",
+    "license": "Apache-2.0",
+    "sourceUrl": "https://github.com/Allenpandas/BJTU-Slides-Template",
+    "rawUrl": "https://raw.githubusercontent.com/Allenpandas/BJTU-Slides-Template/b68f691e08a4c2874901fcf04a34671a591eaf7b/2024-style/PPT003-%E8%93%9D%E8%89%B2%E7%B3%BB.pptx",
+    "sha256": "29ce5f56f748867546da8ae57d408327c4b9b4e4101a6fd93b2df4bc2113602f"
+  },
+  {
+    "key": "github-bjtu-green",
+    "name": "BJTU 青绿影像",
+    "design": "bjtu-green",
+    "palette": ["2A807D", "5D948F", "D7B95D", "F1F4F0", "173B3A"],
+    "description": "北京交通大学开源成品模板，强调照片、圆形构图和校园叙事",
+    "source": "Allenpandas/BJTU-Slides-Template",
+    "license": "Apache-2.0",
+    "sourceUrl": "https://github.com/Allenpandas/BJTU-Slides-Template",
+    "rawUrl": "https://raw.githubusercontent.com/Allenpandas/BJTU-Slides-Template/b68f691e08a4c2874901fcf04a34671a591eaf7b/2024-style/PPT004-%E7%BB%BF%E8%89%B2%E7%B3%BB.pptx",
+    "sha256": "d3c6da5dff2593f46a567715bab711a51832aa0466844189148c3dc53578d01e"
+  },
+  {
+    "key": "github-bjtu-yellow",
+    "name": "BJTU 金色分栏",
+    "design": "bjtu-yellow",
+    "palette": ["F5B400", "E29A2E", "0F172A", "FFFDF6", "111827"],
+    "description": "北京交通大学开源成品模板，左侧图片带与右侧正文分栏",
+    "source": "Allenpandas/BJTU-Slides-Template",
+    "license": "Apache-2.0",
+    "sourceUrl": "https://github.com/Allenpandas/BJTU-Slides-Template",
+    "rawUrl": "https://raw.githubusercontent.com/Allenpandas/BJTU-Slides-Template/b68f691e08a4c2874901fcf04a34671a591eaf7b/2024-style/PPT002-%E9%BB%84%E8%89%B2%E7%B3%BB.pptx",
+    "sha256": "7d0e4d21249ba564f379236bb5c16e7a7f9dfbf878e55b4413e8e25f46f212b1"
+  },
+  {
+    "key": "github-bjtu-red-2024",
+    "name": "BJTU 红色舞台",
+    "design": "bjtu-red",
+    "palette": ["EF4444", "58151C", "FFFFFF", "FFF1F2", "FFFFFF"],
+    "description": "北京交通大学开源成品模板，大面积红色舞台与强标题层级",
+    "source": "Allenpandas/BJTU-Slides-Template",
+    "license": "Apache-2.0",
+    "sourceUrl": "https://github.com/Allenpandas/BJTU-Slides-Template",
+    "rawUrl": "https://raw.githubusercontent.com/Allenpandas/BJTU-Slides-Template/b68f691e08a4c2874901fcf04a34671a591eaf7b/2024-style/PPT001-%E7%BA%A2%E8%89%B2%E7%B3%BB.pptx",
+    "sha256": "f6a76354d95a615b24f18cc44cbf132c424c08351c536ab0b4dd5d36766a431d"
+  },
+  {
+    "key": "github-bjtu-red-2023",
+    "name": "BJTU 红色拱门",
+    "design": "bjtu-2023-red",
+    "palette": ["EF4444", "4A2029", "FFFFFF", "FFF1F2", "FFFFFF"],
+    "description": "北京交通大学开源成品模板，拱门线稿与年份叙事适合正式汇报",
+    "source": "Allenpandas/BJTU-Slides-Template",
+    "license": "Apache-2.0",
+    "sourceUrl": "https://github.com/Allenpandas/BJTU-Slides-Template",
+    "rawUrl": "https://raw.githubusercontent.com/Allenpandas/BJTU-Slides-Template/b68f691e08a4c2874901fcf04a34671a591eaf7b/2023-style/PPT001-%E7%BA%A2%E8%89%B2%E7%B3%BB.pptx",
+    "sha256": "79cf9f2b9166071bf69f9ff0a00dcfe426bedad1fa84ab5b20d3e37ca7e79467"
+  },
+  {
+    "key": "github-bjtu-handdrawn",
+    "name": "BJTU 手绘波形",
+    "design": "bjtu-handdrawn",
+    "palette": ["7CBFC3", "819FB3", "E3C6BA", "EAF5F5", "203B4A"],
+    "description": "北京交通大学开源成品模板，柔和波形、插画和手绘感版式",
+    "source": "Allenpandas/BJTU-Slides-Template",
+    "license": "Apache-2.0",
+    "sourceUrl": "https://github.com/Allenpandas/BJTU-Slides-Template",
+    "rawUrl": "https://raw.githubusercontent.com/Allenpandas/BJTU-Slides-Template/b68f691e08a4c2874901fcf04a34671a591eaf7b/2022-style/PPT003-%E6%89%8B%E7%BB%98%E9%A3%8E.pptx",
+    "sha256": "78360e5a0b61548105bfb8ee5822c8f79ea9ea008a7478c0b068f7ace343f781"
+  }
+]

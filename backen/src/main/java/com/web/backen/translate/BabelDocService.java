@@ -4,6 +4,11 @@ import com.web.backen.config.BabelDocConfig;
 import com.web.backen.auth.RuntimeConfigService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.io.IOUtils;
+import org.apache.pdfbox.multipdf.PDFMergerUtility;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.text.PDFTextStripper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -12,8 +17,10 @@ import java.io.IOException;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -21,6 +28,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 @Service
@@ -29,6 +37,14 @@ public class BabelDocService {
     private static final Logger log = LoggerFactory.getLogger(BabelDocService.class);
     private static final int MAX_OUTPUT_CHARS = 64 * 1024;
     private static final long MONITOR_INTERVAL_MILLIS = 2000;
+    private static final Pattern REFERENCE_HEADING = Pattern.compile(
+            "^[\\t ]*(?:references|bibliography|works[\\t ]+cited|"
+                    + "literature[\\t ]+cited)[\\t ]*$",
+            Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
+    private static final Pattern REFERENCE_SECTION_END = Pattern.compile(
+            "^[\\t ]*(?:appendix(?:es)?(?:[\\t ]+[A-Z0-9]+)?|"
+                    + "supplementary[\\t ]+materials?|supplemental[\\t ]+materials?)[\\t ]*$",
+            Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
 
     private final BabelDocConfig config;
     private final RuntimeConfigService runtimeConfig;
@@ -47,6 +63,97 @@ public class BabelDocService {
         if (runtimeConfig.babelKey().isBlank()) {
             throw new IllegalStateException("BabelDOC API Key 未配置，请在 .env.local 中设置 BABELDOC_OPENAI_API_KEY");
         }
+        int totalPages = endPage - startPage + 1;
+        if (totalPages <= 0) {
+            throw new IllegalArgumentException("BabelDOC 页面范围无效");
+        }
+        int chunkSize = Math.max(1, config.getMaxPagesPerChunk());
+        if (totalPages <= chunkSize) {
+            return translateRange(inputPdf, resultDir, fileName, startPage, endPage,
+                    fontFamily, qps,
+                    isReferenceSectionActiveBefore(inputPdf, startPage),
+                    progressConsumer);
+        }
+
+        Path chunkRoot = resultDir.resolve(".babeldoc-chunks")
+                .resolve(startPage + "-" + endPage);
+        List<Path> translatedParts = new ArrayList<>();
+        List<Path> bilingualParts = new ArrayList<>();
+        int totalChunks = (totalPages + chunkSize - 1) / chunkSize;
+        int completedPages = 0;
+        try {
+            prepareChunkRoot(chunkRoot, inputPdf, startPage, endPage, chunkSize,
+                    fontFamily);
+            log.info("BabelDOC 长文档启用分片: file={}, pages={}-{}, chunkSize={}, chunks={}",
+                    fileName, startPage, endPage, chunkSize, totalChunks);
+            for (int chunkIndex = 0, chunkStart = startPage;
+                 chunkStart <= endPage;
+                 chunkIndex++, chunkStart += chunkSize) {
+                int chunkEnd = Math.min(endPage, chunkStart + chunkSize - 1);
+                int chunkPages = chunkEnd - chunkStart + 1;
+                Path chunkDir = Files.createDirectories(
+                        chunkRoot.resolve(chunkStart + "-" + chunkEnd));
+                Path translatedPart = chunkDir.resolve("translated.pdf");
+                Path bilingualPart = chunkDir.resolve("bilingual.pdf");
+
+                if (!isCompleteChunk(translatedPart, bilingualPart, chunkPages)) {
+                    if (chunkIndex > 0) {
+                        emitProgress(progressConsumer, completedPages * 100.0 / totalPages,
+                                "chunk-wait", chunkIndex, totalChunks);
+                        waitForResourceRecovery();
+                    }
+                    int completedBeforeChunk = completedPages;
+                    Consumer<ProgressUpdate> chunkProgress = update -> emitProgress(
+                            progressConsumer,
+                            aggregateProgress(completedBeforeChunk, chunkPages, totalPages,
+                                    update.progress()),
+                            update.stage(), update.current(), update.total());
+                    log.info("启动 BabelDOC 分片: file={}, chunk={}/{}, pages={}-{}, qps={}",
+                            fileName, chunkIndex + 1, totalChunks, chunkStart, chunkEnd, qps);
+                    translateRange(inputPdf, chunkDir, fileName, chunkStart, chunkEnd,
+                            fontFamily, qps,
+                            isReferenceSectionActiveBefore(inputPdf, chunkStart),
+                            chunkProgress);
+                    if (!isCompleteChunk(translatedPart, bilingualPart, chunkPages)) {
+                        throw new IllegalStateException("BabelDOC 分片结果不完整: "
+                                + chunkStart + "-" + chunkEnd);
+                    }
+                } else {
+                    log.info("复用已完成 BabelDOC 分片: file={}, pages={}-{}",
+                            fileName, chunkStart, chunkEnd);
+                }
+
+                translatedParts.add(translatedPart);
+                bilingualParts.add(bilingualPart);
+                completedPages += chunkPages;
+                emitProgress(progressConsumer,
+                        Math.min(98.5, completedPages * 100.0 / totalPages),
+                        "chunk-completed", chunkIndex + 1, totalChunks);
+            }
+
+            emitProgress(progressConsumer, 99.0, "merge", totalChunks, totalChunks);
+            Files.createDirectories(resultDir);
+            Path translatedResult = resultDir.resolve("translated.pdf");
+            Path bilingualResult = resultDir.resolve("bilingual.pdf");
+            mergePdfParts(translatedParts, translatedResult);
+            mergePdfParts(bilingualParts, bilingualResult);
+            deleteRecursively(chunkRoot);
+            log.info("BabelDOC 分片合并完成: file={}, pages={}-{}, chunks={}",
+                    fileName, startPage, endPage, totalChunks);
+            return new TranslationResult(translatedResult, bilingualResult);
+        } catch (IllegalStateException e) {
+            // Keep completed chunks so a resource-pressure downgrade or service restart
+            // resumes at the failed range instead of translating earlier pages again.
+            throw e;
+        } catch (Exception e) {
+            throw new IllegalStateException("BabelDOC 分片翻译失败: " + e.getMessage(), e);
+        }
+    }
+
+    protected TranslationResult translateRange(Path inputPdf, Path resultDir, String fileName,
+                                               int startPage, int endPage, String fontFamily,
+                                               int qps, boolean forceReferenceSection,
+                                               Consumer<ProgressUpdate> progressConsumer) {
 
         Path workDir = null;
         try {
@@ -55,7 +162,8 @@ public class BabelDocService {
             Path outputDir = Files.createDirectories(workDir.resolve("output"));
             Files.copy(inputPdf, inputFile);
 
-            List<String> command = buildCommand(inputFile, outputDir, startPage, endPage, fontFamily, qps);
+            List<String> command = buildCommand(inputFile, outputDir, startPage, endPage,
+                    fontFamily, qps, forceReferenceSection);
             log.info("启动 BabelDOC: file={}, pages={}-{}, fontFamily={}, qps={}",
                     fileName, startPage, endPage, fontFamily, qps);
 
@@ -103,8 +211,94 @@ public class BabelDocService {
         }
     }
 
+    private double aggregateProgress(int completedPages, int chunkPages, int totalPages,
+                                     double chunkProgress) {
+        double normalized = Math.max(0, Math.min(100, chunkProgress));
+        return Math.min(98.5,
+                (completedPages + chunkPages * normalized / 100.0) * 100.0 / totalPages);
+    }
+
+    private void emitProgress(Consumer<ProgressUpdate> progressConsumer, double progress,
+                              String stage, int current, int total) {
+        if (progressConsumer != null) {
+            progressConsumer.accept(new ProgressUpdate(progress, stage, current, total));
+        }
+    }
+
+    private boolean isCompleteChunk(Path translated, Path bilingual, int expectedPages) {
+        return hasExpectedPages(translated, expectedPages)
+                && hasExpectedPages(bilingual, expectedPages);
+    }
+
+    private boolean hasExpectedPages(Path pdf, int expectedPages) {
+        if (!Files.isRegularFile(pdf)) return false;
+        try (PDDocument document = Loader.loadPDF(pdf.toFile())) {
+            return document.getNumberOfPages() == expectedPages;
+        } catch (Exception e) {
+            log.warn("忽略损坏的 BabelDOC 分片结果: {}", pdf);
+            return false;
+        }
+    }
+
+    private void mergePdfParts(List<Path> parts, Path destination) throws IOException {
+        if (parts.isEmpty()) {
+            throw new IllegalArgumentException("没有可合并的 BabelDOC 分片");
+        }
+        Path temporary = destination.resolveSibling(destination.getFileName() + ".part");
+        Files.deleteIfExists(temporary);
+        PDFMergerUtility merger = new PDFMergerUtility();
+        for (Path part : parts) {
+            merger.addSource(part.toFile());
+        }
+        merger.setDestinationFileName(temporary.toString());
+        try {
+            merger.mergeDocuments(IOUtils.createTempFileOnlyStreamCache());
+            try {
+                Files.move(temporary, destination, StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temporary, destination, StandardCopyOption.REPLACE_EXISTING);
+            }
+        } finally {
+            Files.deleteIfExists(temporary);
+        }
+    }
+
+    private void prepareChunkRoot(Path chunkRoot, Path inputPdf, int startPage,
+                                  int endPage, int chunkSize, String fontFamily)
+            throws IOException {
+        String fingerprint = String.join("\n",
+                "version=1",
+                "input=" + inputFingerprint(inputPdf),
+                "pages=" + startPage + "-" + endPage,
+                "chunkSize=" + chunkSize,
+                "fontFamily=" + String.valueOf(fontFamily),
+                "model=" + String.valueOf(runtimeConfig.babelModel()));
+        Path manifest = chunkRoot.resolve("manifest.txt");
+        if (Files.isDirectory(chunkRoot)) {
+            String existing = Files.isRegularFile(manifest)
+                    ? Files.readString(manifest, StandardCharsets.UTF_8)
+                    : "";
+            if (!fingerprint.equals(existing)) {
+                log.info("BabelDOC 分片参数已变化，清理旧缓存: {}", chunkRoot);
+                deleteRecursively(chunkRoot);
+            }
+        }
+        Files.createDirectories(chunkRoot);
+        Files.writeString(manifest, fingerprint, StandardCharsets.UTF_8);
+    }
+
+    private String inputFingerprint(Path inputPdf) {
+        try {
+            return Files.size(inputPdf) + ":" + Files.getLastModifiedTime(inputPdf).toMillis();
+        } catch (IOException e) {
+            return inputPdf.toAbsolutePath().normalize().toString();
+        }
+    }
+
     private List<String> buildCommand(Path inputFile, Path outputDir, int startPage, int endPage,
-                                      String fontFamily, int qps) {
+                                      String fontFamily, int qps,
+                                      boolean forceReferenceSection) {
         List<String> command = new ArrayList<>(splitCommand(config.getCommand()));
         command.add(Path.of("scripts", "babeldoc_runner.py").toAbsolutePath().toString());
         command.add("--input");
@@ -121,7 +315,30 @@ public class BabelDocService {
         command.add(String.valueOf(qps));
         command.add("--font-family");
         command.add(fontFamily);
+        if (forceReferenceSection) {
+            command.add("--force-reference-section");
+        }
         return command;
+    }
+
+    boolean isReferenceSectionActiveBefore(Path inputPdf, int startPage) {
+        if (!Files.isRegularFile(inputPdf) || startPage <= 1) return false;
+        try (PDDocument document = Loader.loadPDF(inputPdf.toFile())) {
+            PDFTextStripper stripper = new PDFTextStripper();
+            int lastPage = Math.min(startPage - 1, document.getNumberOfPages());
+            boolean active = false;
+            for (int page = 1; page <= lastPage; page++) {
+                stripper.setStartPage(page);
+                stripper.setEndPage(page);
+                String text = stripper.getText(document);
+                if (REFERENCE_HEADING.matcher(text).find()) active = true;
+                if (REFERENCE_SECTION_END.matcher(text).find()) active = false;
+            }
+            return active;
+        } catch (Exception e) {
+            log.warn("检测分片起点参考文献状态失败，将回退逐段识别: file={}", inputPdf, e);
+        }
+        return false;
     }
 
     private List<String> splitCommand(String command) {
@@ -184,6 +401,8 @@ public class BabelDocService {
     public record ProgressUpdate(double progress, String stage, int current, int total) {}
 
     public static class ResourcePressureException extends IllegalStateException {
+        private static final long serialVersionUID = 1L;
+
         public ResourcePressureException(String message) {
             super(message);
         }
@@ -254,6 +473,43 @@ public class BabelDocService {
         return Optional.empty();
     }
 
+    protected void waitForResourceRecovery() throws InterruptedException {
+        int timeoutSeconds = Math.max(5, config.getResourceRecoveryTimeoutSeconds());
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        int consecutiveSafeSamples = 0;
+        String lastRisk = "内存尚未恢复";
+        while (System.nanoTime() < deadline) {
+            Optional<String> risk = detectRecoveryRisk();
+            if (risk.isEmpty()) {
+                consecutiveSafeSamples++;
+                if (consecutiveSafeSamples >= 2) {
+                    return;
+                }
+            } else {
+                consecutiveSafeSamples = 0;
+                lastRisk = risk.get();
+            }
+            Thread.sleep(MONITOR_INTERVAL_MILLIS);
+        }
+        throw new ResourcePressureException("上一分片结束后等待内存恢复超时: " + lastRisk);
+    }
+
+    private Optional<String> detectRecoveryRisk() {
+        Optional<String> hardRisk = detectResourceRisk();
+        if (hardRisk.isPresent()) {
+            return hardRisk;
+        }
+        MemoryInfo memoryInfo = readMemoryInfo();
+        long recoveryAvailableMiB = Math.max(
+                600L, config.getResourceMinAvailableMiB() + 200L);
+        if (memoryInfo.memAvailableBytes > 0
+                && memoryInfo.memAvailableBytes < mibToBytes(recoveryAvailableMiB)) {
+            return Optional.of("系统可用内存 " + formatMiB(memoryInfo.memAvailableBytes)
+                    + " MiB 尚未恢复到 " + recoveryAvailableMiB + " MiB");
+        }
+        return Optional.empty();
+    }
+
     private long readCgroupMemoryCurrent() {
         for (Path path : cgroupMemoryPaths()) {
             try {
@@ -318,7 +574,7 @@ public class BabelDocService {
         return String.valueOf(bytes / 1024 / 1024);
     }
 
-    private long mibToBytes(int mib) {
+    private long mibToBytes(long mib) {
         return Math.max(1L, mib) * 1024 * 1024;
     }
 

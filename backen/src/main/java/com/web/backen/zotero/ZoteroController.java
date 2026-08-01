@@ -1,5 +1,7 @@
 package com.web.backen.zotero;
 
+import com.web.backen.auth.AuthService;
+import com.web.backen.auth.RuntimeConfigService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.MediaType;
@@ -15,10 +17,15 @@ public class ZoteroController {
 
     private final ZoteroService zoteroService;
     private final ZoteroCache zoteroCache;
+    private final AuthService authService;
+    private final RuntimeConfigService runtimeConfig;
 
-    public ZoteroController(ZoteroService zoteroService, ZoteroCache zoteroCache) {
+    public ZoteroController(ZoteroService zoteroService, ZoteroCache zoteroCache, AuthService authService,
+                            RuntimeConfigService runtimeConfig) {
         this.zoteroService = zoteroService;
         this.zoteroCache = zoteroCache;
+        this.authService = authService;
+        this.runtimeConfig = runtimeConfig;
     }
 
     /**
@@ -27,6 +34,7 @@ public class ZoteroController {
      */
     @GetMapping("/items")
     public Map<String, Object> items(@RequestParam(required = false) Boolean refresh) {
+        requirePublicationAccess();
         Map<String, Object> result = new HashMap<>();
         if (!zoteroService.isConfigured()) {
             result.put("code", 500);
@@ -46,11 +54,13 @@ public class ZoteroController {
 
     @GetMapping("/items/raw")
     public List<Map<String, Object>> itemsRaw(@RequestParam(defaultValue = "200") int limit) {
+        requirePublicationAccess();
         return zoteroService.listItems(limit);
     }
 
     @GetMapping("/collections")
     public Map<String, Object> collections(@RequestParam(required = false) Boolean refresh) {
+        requirePublicationAccess();
         Map<String, Object> result = new HashMap<>();
         if (Boolean.TRUE.equals(refresh) && zoteroService.isConfigured()) {
             zoteroCache.warmAsync();
@@ -66,6 +76,7 @@ public class ZoteroController {
      */
     @GetMapping("/file/{key}")
     public ResponseEntity<?> file(@PathVariable String key) {
+        requirePublicationAccess();
         try {
             ZoteroService.ProxiedFile upstream = zoteroService.fetchItemFile(key);
             HttpHeaders out = new HttpHeaders();
@@ -91,6 +102,7 @@ public class ZoteroController {
     public ResponseEntity<String> export(@PathVariable String key,
                                          @RequestParam(defaultValue = "bibtex") String format,
                                          @RequestParam(defaultValue = "apa") String style) {
+        requirePublicationAccess();
         try {
             String body = zoteroService.exportItem(key, format, style);
             HttpHeaders headers = new HttpHeaders();
@@ -105,5 +117,16 @@ public class ZoteroController {
         } catch (Exception e) {
             return ResponseEntity.status(502).body("export error: " + e.getMessage());
         }
+    }
+
+    private jakarta.servlet.http.HttpServletRequest request() {
+        return ((org.springframework.web.context.request.ServletRequestAttributes)
+                org.springframework.web.context.request.RequestContextHolder.currentRequestAttributes()).getRequest();
+    }
+
+    private void requirePublicationAccess() {
+        String level = runtimeConfig.visibilityLevel("Publications");
+        if ("ROOT".equals(level)) authService.requireRoot(request());
+        else if ("USER".equals(level)) authService.requireUser(request());
     }
 }

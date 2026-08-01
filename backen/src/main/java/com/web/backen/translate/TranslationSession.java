@@ -34,6 +34,10 @@ public class TranslationSession {
     private int creditCost;
     private Long creditTransactionId;
     private boolean creditRefunded;
+    private boolean refundPending;
+    private String refundError;
+    private boolean creationReady;
+    private boolean quotaRequired;
 
     @JsonIgnore
     private Path taskDir;
@@ -73,6 +77,10 @@ public class TranslationSession {
     public int getCreditCost() { return creditCost; }
     public Long getCreditTransactionId() { return creditTransactionId; }
     public boolean isCreditRefunded() { return creditRefunded; }
+    public boolean isRefundPending() { return refundPending; }
+    public String getRefundError() { return refundError; }
+    public boolean isCreationReady() { return creationReady; }
+    public boolean isQuotaRequired() { return quotaRequired; }
     @JsonIgnore
     public Path getTaskDir() { return taskDir; }
     @JsonIgnore
@@ -113,6 +121,10 @@ public class TranslationSession {
     public void setCreditCost(int creditCost) { this.creditCost = creditCost; touch(); }
     public void setCreditTransactionId(Long creditTransactionId) { this.creditTransactionId = creditTransactionId; touch(); }
     public void setCreditRefunded(boolean creditRefunded) { this.creditRefunded = creditRefunded; touch(); }
+    public void setRefundPending(boolean refundPending) { this.refundPending = refundPending; touch(); }
+    public void setRefundError(String refundError) { this.refundError = refundError; touch(); }
+    public void setCreationReady(boolean creationReady) { this.creationReady = creationReady; touch(); }
+    public void setQuotaRequired(boolean quotaRequired) { this.quotaRequired = quotaRequired; touch(); }
 
     private void touch() {
         this.updatedAt = System.currentTimeMillis();

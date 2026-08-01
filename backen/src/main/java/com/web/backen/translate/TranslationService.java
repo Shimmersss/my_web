@@ -66,6 +66,7 @@ public class TranslationService {
         storageDir = Path.of(config.getStorageDir()).toAbsolutePath().normalize();
         Files.createDirectories(storageDir);
         List<TranslationSession> recoveredSessions = loadRecentSessions();
+        reconcilePendingRefunds();
         cleanupHistory();
         resumeIncompleteSessions(recoveredSessions);
         log.info("翻译队列已启动: workers=1, queueCapacity={}, maxHistory={}, storage={}",
@@ -82,6 +83,7 @@ public class TranslationService {
     }
 
     public TranslationSession createSessionPreview(String fileName, InputStream pdfStream, long userId) throws Exception {
+        assertDeploymentNotLocked();
         String taskId = UUID.randomUUID().toString().substring(0, 8);
         Path taskDir = Files.createDirectories(storageDir.resolve(taskId));
         Path inputPdf = taskDir.resolve("input.pdf");
@@ -118,6 +120,7 @@ public class TranslationService {
 
     public TranslationSession startTranslation(String taskId, int startPage, int endPage, String fontFamily,
                                                int qps, AuthUser user) {
+        assertDeploymentNotLocked();
         TranslationSession session = requireSession(taskId);
         synchronized (session) {
             if (user != null && !user.isRoot() && session.getUserId() != user.id()) {
@@ -139,13 +142,26 @@ public class TranslationService {
             session.setResourceDowngraded(false);
             session.setResourceDowngradeReason(null);
             session.setResourceDowngradeCount(0);
-            if (user != null && quotaService != null && !user.isRoot()) {
-                int cost = (effectiveEnd - effectiveStart + 1) * quotaService.translationCreditPerPage();
-                long tx = quotaService.spend(user.id(), cost, "TRANSLATION", taskId, "翻译 " + (effectiveEnd - effectiveStart + 1) + " 页");
-                session.setUserId(user.id());
-                session.setCreditCost(cost);
-                session.setCreditTransactionId(tx);
-                session.setCreditRefunded(false);
+            session.setQuotaRequired(user != null && quotaService != null && !user.isRoot());
+            session.setCreationReady(true);
+            session.setStatus("creating");
+            session.setProgressStage("creating");
+            saveMetadata(session);
+            try {
+                if (user != null && quotaService != null && !user.isRoot()) {
+                    int cost = (effectiveEnd - effectiveStart + 1) * quotaService.translationCreditPerPage();
+                    long tx = quotaService.spend(user.id(), cost, "TRANSLATION", taskId, "翻译 " + (effectiveEnd - effectiveStart + 1) + " 页");
+                    session.setUserId(user.id());
+                    session.setCreditCost(cost);
+                    session.setCreditTransactionId(tx);
+                    session.setCreditRefunded(false);
+                    saveMetadata(session);
+                }
+            } catch (RuntimeException e) {
+                session.setStatus("preview");
+                session.setProgressStage("");
+                saveMetadata(session);
+                throw e;
             }
             session.setErrorMessage(null);
             session.setProgress(0);
@@ -177,6 +193,16 @@ public class TranslationService {
     public TranslationSession getSession(String taskId) {
         updateQueuePositions();
         return sessions.get(taskId);
+    }
+
+    private void assertDeploymentNotLocked() {
+        String configured = System.getenv("DEPLOYMENT_LOCK_PATH");
+        Path lock = configured == null || configured.isBlank()
+                ? Path.of("").toAbsolutePath().resolve("../.run/deployment.lock").normalize()
+                : Path.of(configured).toAbsolutePath().normalize();
+        if (Files.exists(lock)) {
+            throw new IllegalStateException("系统正在发布更新，请稍后重新提交任务");
+        }
     }
 
     public boolean canAccess(TranslationSession session, AuthUser user) {
@@ -322,7 +348,12 @@ public class TranslationService {
 
     private void failTranslation(TranslationSession session, Exception e) {
         log.error("翻译任务失败: taskId={}", session.getTaskId(), e);
-        refundIfNeeded(session, "翻译任务失败自动退回额度");
+        try {
+            refundIfNeeded(session, "翻译任务失败自动退回额度");
+        } catch (RuntimeException refundError) {
+            session.setRefundPending(true);
+            session.setRefundError(refundError.getMessage());
+        }
         session.setStatus("error");
         session.setErrorMessage(e.getMessage());
         session.setProgressStage("error");
@@ -336,6 +367,8 @@ public class TranslationService {
         if (quotaService == null || session.getCreditTransactionId() == null || session.isCreditRefunded()) return;
         quotaService.refund(session.getCreditTransactionId(), reason);
         session.setCreditRefunded(true);
+        session.setRefundPending(false);
+        session.setRefundError(null);
         saveMetadata(session);
     }
 
@@ -451,6 +484,9 @@ public class TranslationService {
                 try {
                     TranslationSession session = objectMapper.readValue(metadata.toFile(), TranslationSession.class);
                     session.setTaskDir(taskDir);
+                    if ("creating".equals(session.getStatus())) {
+                        reconcileCreatingSession(session);
+                    }
                     if (Set.of("queued", "translating").contains(session.getStatus())) {
                         incompleteSessions.add(session);
                     }
@@ -463,6 +499,52 @@ public class TranslationService {
             log.warn("读取翻译任务目录失败: {}", storageDir, e);
         }
         return incompleteSessions;
+    }
+
+    private void reconcileCreatingSession(TranslationSession session) {
+        if (session.isQuotaRequired() && session.getCreditTransactionId() == null && quotaService != null) {
+            session.setCreditTransactionId(quotaService.findSpendTransactionId(session.getTaskId()));
+        }
+        if (!session.isCreationReady() || !Files.isRegularFile(session.getInputPdfPath())) {
+            session.setStatus("error");
+            session.setProgressStage("error");
+            session.setErrorMessage("服务在翻译任务资料写入完成前重启，请重新上传");
+            try {
+                refundIfNeeded(session, "翻译创建中断自动补偿额度");
+            } catch (RuntimeException refundError) {
+                session.setRefundPending(true);
+                session.setRefundError(refundError.getMessage());
+            }
+            saveMetadata(session);
+            return;
+        }
+        if (session.isQuotaRequired() && session.getCreditTransactionId() == null) {
+            session.setStatus("preview");
+            session.setProgressStage("");
+            session.setErrorMessage("服务在额度扣减完成前重启，请重新开始翻译");
+            saveMetadata(session);
+            return;
+        }
+        session.setStatus("queued");
+        session.setProgressStage("queued");
+        session.setErrorMessage(null);
+        saveMetadata(session);
+    }
+
+    private void reconcilePendingRefunds() {
+        if (quotaService == null) return;
+        sessions.values().stream()
+                .filter(session -> session.getCreditTransactionId() != null && !session.isCreditRefunded())
+                .filter(session -> session.isRefundPending() || "error".equals(session.getStatus()))
+                .forEach(session -> {
+                    try {
+                        refundIfNeeded(session, "翻译失败自动补偿额度");
+                    } catch (RuntimeException error) {
+                        session.setRefundPending(true);
+                        session.setRefundError(error.getMessage());
+                        saveMetadata(session);
+                    }
+                });
     }
 
     private void resumeIncompleteSessions(List<TranslationSession> incompleteSessions) {
@@ -585,6 +667,9 @@ public class TranslationService {
             case "queued" -> "等待后台翻译";
             case "starting" -> "正在启动 BabelDOC";
             case "resource-downgrade" -> "内存压力较高，已切换稳定模式重试";
+            case "chunk-wait" -> "正在释放内存，准备下一批";
+            case "chunk-completed" -> "已完成一批页面";
+            case "merge" -> "正在合并翻译结果";
             case "Parse PDF and Create Intermediate Representation" -> "解析 PDF";
             case "DetectScannedFile" -> "检测 PDF 类型";
             case "Parse Page Layout" -> "分析页面版式";

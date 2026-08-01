@@ -44,6 +44,7 @@ public class PptGenerationController {
     public ResponseEntity<?> createTask(@RequestParam(value = "prompt", required = false, defaultValue = "") String prompt,
                                         @RequestParam(value = "templateKey", required = false) String templateKey,
                                         @RequestParam(value = "outputFormat", required = false, defaultValue = "pptx") String outputFormat,
+                                        @RequestParam(value = "researchMode", required = false, defaultValue = "auto") String researchMode,
                                         @RequestParam(value = "templateFile", required = false) MultipartFile templateFile,
                                         @RequestParam(value = "sourceFile", required = false) MultipartFile sourceFile,
                                         @RequestParam(value = "paperFile", required = false) MultipartFile legacyPaperFile,
@@ -58,7 +59,8 @@ public class PptGenerationController {
         }
         try {
             MultipartFile materialFile = sourceFile != null && !sourceFile.isEmpty() ? sourceFile : legacyPaperFile;
-            PptGenerationSession session = pptGenerationService.createTask(prompt, templateKey, 100, templateFile, materialFile, user, clientRequestId, outputFormat);
+            PptGenerationSession session = pptGenerationService.createTask(prompt, templateKey, 100,
+                    templateFile, materialFile, user, clientRequestId, outputFormat, researchMode);
             Map<String, Object> data = toSummary(session);
             data.put("accessToken", session.getAccessToken());
             data.put("credits", quotaService.balance(user.id()));
@@ -99,19 +101,8 @@ public class PptGenerationController {
                 original = pptGenerationService.getAuthorizedSession(taskId, accessToken);
             }
             String prompt = body == null ? "" : String.valueOf(body.getOrDefault("prompt", ""));
-            List<Map<String, Object>> slideEdits = new ArrayList<>();
-            Object rawEdits = body == null ? null : body.get("slides");
-            if (rawEdits instanceof List<?> list) {
-                for (Object item : list) {
-                    if (item instanceof Map<?, ?> raw) {
-                        Map<String, Object> edit = new java.util.LinkedHashMap<>();
-                        raw.forEach((key, value) -> edit.put(String.valueOf(key), value));
-                        slideEdits.add(edit);
-                    }
-                }
-            }
             PptGenerationSession session = pptGenerationService.createRevisionTask(
-                    original, prompt, slideEdits, user, clientRequestId);
+                    original, prompt, List.of(), user, clientRequestId);
             Map<String, Object> data = toSummary(session);
             data.put("accessToken", session.getAccessToken());
             data.put("credits", quotaService.balance(user.id()));
@@ -168,6 +159,40 @@ public class PptGenerationController {
         } catch (Exception e) {
             log.error("读取 PPT 预览素材失败: taskId={}, file={}", taskId, fileName, e);
             return ResponseEntity.internalServerError().body(Map.of("code", 500, "message", "预览素材暂时不可用"));
+        }
+    }
+
+    @GetMapping("/preview-html/{taskId}")
+    public ResponseEntity<?> previewHtml(@PathVariable String taskId,
+                                         @RequestHeader(value = "X-Ppt-Task-Token", required = false) String headerToken,
+                                         HttpServletRequest request) {
+        try {
+            AuthUser user = authService.currentUser(request).orElse(null);
+            PptGenerationSession session = pptGenerationService.getSession(taskId);
+            boolean sessionAuthorized = pptGenerationService.canAccess(session, user);
+            if (!sessionAuthorized) {
+                session = pptGenerationService.getAuthorizedSession(taskId, headerToken);
+            }
+            if (!"html".equalsIgnoreCase(session.getOutputFormat())) {
+                return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "该任务不是 HTML 输出"));
+            }
+            Path output = sessionAuthorized ? pptGenerationService.getOutput(taskId) : pptGenerationService.getOutput(taskId, headerToken);
+            String fileName = session.getOutputFileName() == null ? "AI生成演示.html" : session.getOutputFileName();
+            String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename*=UTF-8''" + encodedFileName)
+                    .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                    .header("Content-Security-Policy", "default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; font-src data:")
+                    .header("Cross-Origin-Resource-Policy", "same-origin")
+                    .contentType(MediaType.parseMediaType("text/html;charset=UTF-8"))
+                    .body(new FileSystemResource(output));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("code", 404, "message", "预览不存在"));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("code", 400, "message", e.getMessage()));
+        } catch (Exception e) {
+            log.error("读取 reveal.js HTML 预览失败: taskId={}", taskId, e);
+            return ResponseEntity.internalServerError().body(Map.of("code", 500, "message", "HTML 预览暂时不可用"));
         }
     }
 
@@ -260,6 +285,7 @@ public class PptGenerationController {
         data.put("prompt", session.getPrompt());
         data.put("templateKey", session.getTemplateKey());
         data.put("outputFormat", session.getOutputFormat());
+        data.put("researchMode", session.getResearchMode());
         data.put("templateFileName", session.getTemplateFileName() == null ? "" : session.getTemplateFileName());
         data.put("sourceFileName", session.getPaperFileName() == null ? "" : session.getPaperFileName());
         data.put("paperFileName", session.getPaperFileName() == null ? "" : session.getPaperFileName());
@@ -274,6 +300,9 @@ public class PptGenerationController {
         data.put("refundPending", session.isRefundPending());
         data.put("refundError", session.getRefundError() == null ? "" : session.getRefundError());
         data.put("revisionOfTaskId", session.getRevisionOfTaskId() == null ? "" : session.getRevisionOfTaskId());
+        data.put("sourceCount", session.getSourceCount());
+        data.put("agentIteration", session.getAgentIteration());
+        data.put("qaValid", session.isQaValid());
         data.put("previewAvailable", "completed".equals(session.getStatus()));
         data.put("createdAt", session.getCreatedAt());
         data.put("updatedAt", session.getUpdatedAt());

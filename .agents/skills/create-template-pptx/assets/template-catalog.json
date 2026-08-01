@@ -1,0 +1,8 @@
+{
+  "github-bjtu-blue": {"source":"Allenpandas/BJTU-Slides-Template@b68f691e08a4c2874901fcf04a34671a591eaf7b","license":"Apache-2.0","family":"academic-blue","sha256":"29ce5f56f748867546da8ae57d408327c4b9b4e4101a6fd93b2df4bc2113602f"},
+  "github-bjtu-green": {"source":"Allenpandas/BJTU-Slides-Template@b68f691e08a4c2874901fcf04a34671a591eaf7b","license":"Apache-2.0","family":"photo-green","sha256":"d3c6da5dff2593f46a567715bab711a51832aa0466844189148c3dc53578d01e"},
+  "github-bjtu-yellow": {"source":"Allenpandas/BJTU-Slides-Template@b68f691e08a4c2874901fcf04a34671a591eaf7b","license":"Apache-2.0","family":"split-gold","sha256":"7d0e4d21249ba564f379236bb5c16e7a7f9dfbf878e55b4413e8e25f46f212b1"},
+  "github-bjtu-red-2024": {"source":"Allenpandas/BJTU-Slides-Template@b68f691e08a4c2874901fcf04a34671a591eaf7b","license":"Apache-2.0","family":"stage-red","sha256":"f6a76354d95a615b24f18cc44cbf132c424c08351c536ab0b4dd5d36766a431d"},
+  "github-bjtu-red-2023": {"source":"Allenpandas/BJTU-Slides-Template@b68f691e08a4c2874901fcf04a34671a591eaf7b","license":"Apache-2.0","family":"formal-red","sha256":"79cf9f2b9166071bf69f9ff0a00dcfe426bedad1fa84ab5b20d3e37ca7e79467"},
+  "github-bjtu-handdrawn": {"source":"Allenpandas/BJTU-Slides-Template@b68f691e08a4c2874901fcf04a34671a591eaf7b","license":"Apache-2.0","family":"illustrated","sha256":"78360e5a0b61548105bfb8ee5822c8f79ea9ea008a7478c0b068f7ace343f781"}
+}

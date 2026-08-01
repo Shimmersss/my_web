@@ -70,6 +70,16 @@ public class QuotaService {
                 """, userId, amount, balance(userId), spend.get("task_type"), spend.get("task_id"), transactionId, reason);
     }
 
+    public Long findSpendTransactionId(String taskId) {
+        if (taskId == null || taskId.isBlank()) return null;
+        List<Long> ids = jdbc.query("""
+                SELECT id FROM credit_transactions
+                WHERE task_id=? AND kind='SPEND'
+                ORDER BY id DESC LIMIT 1
+                """, (rs, rowNum) -> rs.getLong("id"), taskId);
+        return ids.isEmpty() ? null : ids.get(0);
+    }
+
     @Transactional
     public void adjust(long userId, int amount, String note) {
         if (amount == 0) return;

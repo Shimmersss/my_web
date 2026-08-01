@@ -83,8 +83,23 @@ router.beforeEach(async (to, from, next) => {
   const visibility = to.meta.visibility
   if (visibility && visibility !== 'Admin') {
     const auth = useAuthStore()
-    if (!auth.user && !auth.loading) await auth.refresh().catch(() => {})
-    if (!auth.canView(visibility)) return next('/')
+    if (!auth.user) await auth.refresh().catch(() => {})
+    const level = auth.visibility[visibility] || 'PUBLIC'
+    if (level === 'USER' && !auth.isLoggedIn) {
+      auth.requestLogin(to.fullPath)
+      return next('/')
+    }
+    if (level === 'ROOT' && !auth.isRoot) {
+      auth.requestPermissionDenied()
+      return next('/')
+    }
+  } else if (visibility === 'Admin') {
+    const auth = useAuthStore()
+    if (!auth.user) await auth.refresh().catch(() => {})
+    if (!auth.isRoot) {
+      auth.requestPermissionDenied()
+      return next('/')
+    }
   }
   next()
 })

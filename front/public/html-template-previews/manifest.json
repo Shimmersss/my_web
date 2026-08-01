@@ -1,0 +1,91 @@
+{
+  "engine": "agent-reveal.js",
+  "slideCount": 5,
+  "generatedAt": "2026-07-31T09:00:26.145Z",
+  "templates": {
+    "html-reveal-black": [
+      "/html-template-previews/html-reveal-black/slide-1.png",
+      "/html-template-previews/html-reveal-black/slide-2.png",
+      "/html-template-previews/html-reveal-black/slide-3.png",
+      "/html-template-previews/html-reveal-black/slide-4.png",
+      "/html-template-previews/html-reveal-black/slide-5.png"
+    ],
+    "html-reveal-white": [
+      "/html-template-previews/html-reveal-white/slide-1.png",
+      "/html-template-previews/html-reveal-white/slide-2.png",
+      "/html-template-previews/html-reveal-white/slide-3.png",
+      "/html-template-previews/html-reveal-white/slide-4.png",
+      "/html-template-previews/html-reveal-white/slide-5.png"
+    ],
+    "html-reveal-beige": [
+      "/html-template-previews/html-reveal-beige/slide-1.png",
+      "/html-template-previews/html-reveal-beige/slide-2.png",
+      "/html-template-previews/html-reveal-beige/slide-3.png",
+      "/html-template-previews/html-reveal-beige/slide-4.png",
+      "/html-template-previews/html-reveal-beige/slide-5.png"
+    ],
+    "html-reveal-sky": [
+      "/html-template-previews/html-reveal-sky/slide-1.png",
+      "/html-template-previews/html-reveal-sky/slide-2.png",
+      "/html-template-previews/html-reveal-sky/slide-3.png",
+      "/html-template-previews/html-reveal-sky/slide-4.png",
+      "/html-template-previews/html-reveal-sky/slide-5.png"
+    ],
+    "html-reveal-league": [
+      "/html-template-previews/html-reveal-league/slide-1.png",
+      "/html-template-previews/html-reveal-league/slide-2.png",
+      "/html-template-previews/html-reveal-league/slide-3.png",
+      "/html-template-previews/html-reveal-league/slide-4.png",
+      "/html-template-previews/html-reveal-league/slide-5.png"
+    ],
+    "html-reveal-night": [
+      "/html-template-previews/html-reveal-night/slide-1.png",
+      "/html-template-previews/html-reveal-night/slide-2.png",
+      "/html-template-previews/html-reveal-night/slide-3.png",
+      "/html-template-previews/html-reveal-night/slide-4.png",
+      "/html-template-previews/html-reveal-night/slide-5.png"
+    ],
+    "html-reveal-solarized": [
+      "/html-template-previews/html-reveal-solarized/slide-1.png",
+      "/html-template-previews/html-reveal-solarized/slide-2.png",
+      "/html-template-previews/html-reveal-solarized/slide-3.png",
+      "/html-template-previews/html-reveal-solarized/slide-4.png",
+      "/html-template-previews/html-reveal-solarized/slide-5.png"
+    ],
+    "html-reveal-gradient": [
+      "/html-template-previews/html-reveal-gradient/slide-1.png",
+      "/html-template-previews/html-reveal-gradient/slide-2.png",
+      "/html-template-previews/html-reveal-gradient/slide-3.png",
+      "/html-template-previews/html-reveal-gradient/slide-4.png",
+      "/html-template-previews/html-reveal-gradient/slide-5.png"
+    ],
+    "html-editorial-ink": [
+      "/html-template-previews/html-editorial-ink/slide-1.png",
+      "/html-template-previews/html-editorial-ink/slide-2.png",
+      "/html-template-previews/html-editorial-ink/slide-3.png",
+      "/html-template-previews/html-editorial-ink/slide-4.png",
+      "/html-template-previews/html-editorial-ink/slide-5.png"
+    ],
+    "html-neon-grid": [
+      "/html-template-previews/html-neon-grid/slide-1.png",
+      "/html-template-previews/html-neon-grid/slide-2.png",
+      "/html-template-previews/html-neon-grid/slide-3.png",
+      "/html-template-previews/html-neon-grid/slide-4.png",
+      "/html-template-previews/html-neon-grid/slide-5.png"
+    ],
+    "html-terminal-green": [
+      "/html-template-previews/html-terminal-green/slide-1.png",
+      "/html-template-previews/html-terminal-green/slide-2.png",
+      "/html-template-previews/html-terminal-green/slide-3.png",
+      "/html-template-previews/html-terminal-green/slide-4.png",
+      "/html-template-previews/html-terminal-green/slide-5.png"
+    ],
+    "html-gallery-cream": [
+      "/html-template-previews/html-gallery-cream/slide-1.png",
+      "/html-template-previews/html-gallery-cream/slide-2.png",
+      "/html-template-previews/html-gallery-cream/slide-3.png",
+      "/html-template-previews/html-gallery-cream/slide-4.png",
+      "/html-template-previews/html-gallery-cream/slide-5.png"
+    ]
+  }
+}

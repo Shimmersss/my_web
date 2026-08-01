@@ -124,7 +124,7 @@ const caseData = ref({
   summary: '上传论文和可选模板，生成可编辑答辩 PPTX',
   background: '旧样例页已从主入口折叠，但直接访问时仍不应展示无关样板内容。因此这里改为研究工具台的任务样例，说明如何把论文材料转为答辩产物。',
   solution: '用户在 PPT 生成页提交提示词、论文 PDF/DOCX 和可选 PPTX 模板。后端保存任务目录，抽取文本、图片和模板槽位，调用 mimo 规划结构，再用自由 renderer 或模板原生填充链路输出 PPTX。',
-  result: '产物以可下载 PPTX 形式返回，并保留 deck JSON、image-manifest、fill-plan、日志和输出文件，方便复查页面质量、图片使用和资源问题。',
+  result: '产物以可下载 PPTX 或自包含 HTML 返回，并保留 Agent 事件、研究来源、frame map、真实逐页预览和 QA 报告，方便复查模板忠实度、引用与页面质量。',
   stats: {
     efficiency: 60,
     cost: 40,

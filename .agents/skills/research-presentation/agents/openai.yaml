@@ -1,0 +1,6 @@
+interface:
+  display_name: "演示研究 Agent"
+  short_description: "主动检索、核验并组织演示文稿所需的可信资料来源"
+  default_prompt: "Use $research-presentation to research and source this presentation."
+policy:
+  allow_implicit_invocation: true

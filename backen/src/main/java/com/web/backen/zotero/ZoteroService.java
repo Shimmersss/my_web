@@ -177,6 +177,20 @@ public class ZoteroService {
         return !apiKey().isBlank() && !userId().isBlank();
     }
 
+    /** 用最小列表请求验证当前表单中的 Zotero 地址、用户 ID 和密钥。 */
+    public Map<String, Object> testConnection(String baseUrl, String userId, String apiKey) {
+        if (baseUrl == null || baseUrl.isBlank()) throw new IllegalStateException("Zotero Base URL 未配置");
+        if (userId == null || userId.isBlank()) throw new IllegalStateException("Zotero User ID 未配置");
+        if (apiKey == null || apiKey.isBlank()) throw new IllegalStateException("Zotero API Key 未配置");
+
+        List<Map<String, Object>> items = restClient.get()
+                .uri(baseUrl.replaceAll("/+$", "") + "/users/{userId}/items?limit=1&format=json", userId.trim())
+                .header("Zotero-API-Key", apiKey.trim())
+                .retrieve()
+                .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+        return Map.of("message", "连接成功", "sampleCount", items == null ? 0 : items.size());
+    }
+
     private String baseUrl() { return runtimeConfig == null ? config.getBaseUrl() : runtimeConfig.zoteroUrl(); }
     private String userId() { return runtimeConfig == null ? value(config.getUserId()) : runtimeConfig.zoteroUser(); }
     private String apiKey() { return runtimeConfig == null ? value(config.getApiKey()) : runtimeConfig.zoteroKey(); }

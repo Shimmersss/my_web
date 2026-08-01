@@ -8,6 +8,7 @@ import org.springframework.context.annotation.Configuration;
 public class PptGenerationConfig {
 
     private String storageDir = "../.run/ppt-generation-tasks";
+    private String templateCacheDir = "../.run/ppt-generation-tasks/_template-cache";
     private int maxHistory = 5;
     private int queueCapacity = 3;
     private int maxPromptChars = 8000;
@@ -15,25 +16,28 @@ public class PptGenerationConfig {
     private long maxTemplateBytes = 30L * 1024 * 1024;
     private int maxPaperTextChars = 28000;
     private int maxExtractedImages = 24;
-    private int maxVisionImages = 24;
     private int maxArchiveEntries = 2000;
     private long maxArchiveUncompressedBytes = 120L * 1024 * 1024;
     private long maxArchiveEntryBytes = 32L * 1024 * 1024;
     private int maxArchiveCompressionRatio = 120;
-    private int maxTemplateWarnings = 0;
-    private int llmMaxTokens = 16384;
-    private int visionMaxTokens = 4096;
     private String visionModel = "mimo-v2.5";
     private int timeoutSeconds = 900;
-    private String rendererCommand = "uv run --with python-pptx --with pillow python";
-    private String rendererScript = "./scripts/ppt_renderer.py";
-    private String templateFillCommand = "uv run --with python-pptx python";
-    private String templateFillScript = "./scripts/ppt-template-fill/template_fill_pptx.py";
+    private String agentCommand = "node";
+    private String agentScript = "./scripts/ppt-agent/worker.mjs";
+    private String agentProjectRoot = "..";
+    private int agentTimeoutSeconds = 1800;
+    private int agentNodeMaxOldSpaceMb = 384;
+    private int agentMaxSources = 12;
+    private String sofficeCommand = "soffice";
+    private String pdftoppmCommand = "pdftoppm";
+    private String chromeCommand = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
     private String paperParserCommand = "uv run --with docling --with markitdown python";
     private String paperParserScript = "./scripts/ppt_document_parser.py";
 
     public String getStorageDir() { return storageDir; }
     public void setStorageDir(String storageDir) { this.storageDir = storageDir; }
+    public String getTemplateCacheDir() { return templateCacheDir; }
+    public void setTemplateCacheDir(String templateCacheDir) { this.templateCacheDir = templateCacheDir; }
     public int getMaxHistory() { return maxHistory; }
     public void setMaxHistory(int maxHistory) { this.maxHistory = maxHistory; }
     public int getQueueCapacity() { return queueCapacity; }
@@ -48,8 +52,6 @@ public class PptGenerationConfig {
     public void setMaxPaperTextChars(int maxPaperTextChars) { this.maxPaperTextChars = maxPaperTextChars; }
     public int getMaxExtractedImages() { return maxExtractedImages; }
     public void setMaxExtractedImages(int maxExtractedImages) { this.maxExtractedImages = maxExtractedImages; }
-    public int getMaxVisionImages() { return maxVisionImages; }
-    public void setMaxVisionImages(int maxVisionImages) { this.maxVisionImages = maxVisionImages; }
     public int getMaxArchiveEntries() { return maxArchiveEntries; }
     public void setMaxArchiveEntries(int maxArchiveEntries) { this.maxArchiveEntries = maxArchiveEntries; }
     public long getMaxArchiveUncompressedBytes() { return maxArchiveUncompressedBytes; }
@@ -58,24 +60,28 @@ public class PptGenerationConfig {
     public void setMaxArchiveEntryBytes(long maxArchiveEntryBytes) { this.maxArchiveEntryBytes = maxArchiveEntryBytes; }
     public int getMaxArchiveCompressionRatio() { return maxArchiveCompressionRatio; }
     public void setMaxArchiveCompressionRatio(int maxArchiveCompressionRatio) { this.maxArchiveCompressionRatio = maxArchiveCompressionRatio; }
-    public int getMaxTemplateWarnings() { return maxTemplateWarnings; }
-    public void setMaxTemplateWarnings(int maxTemplateWarnings) { this.maxTemplateWarnings = maxTemplateWarnings; }
-    public int getLlmMaxTokens() { return llmMaxTokens; }
-    public void setLlmMaxTokens(int llmMaxTokens) { this.llmMaxTokens = llmMaxTokens; }
-    public int getVisionMaxTokens() { return visionMaxTokens; }
-    public void setVisionMaxTokens(int visionMaxTokens) { this.visionMaxTokens = visionMaxTokens; }
     public String getVisionModel() { return visionModel; }
     public void setVisionModel(String visionModel) { this.visionModel = visionModel; }
     public int getTimeoutSeconds() { return timeoutSeconds; }
     public void setTimeoutSeconds(int timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; }
-    public String getRendererCommand() { return rendererCommand; }
-    public void setRendererCommand(String rendererCommand) { this.rendererCommand = rendererCommand; }
-    public String getRendererScript() { return rendererScript; }
-    public void setRendererScript(String rendererScript) { this.rendererScript = rendererScript; }
-    public String getTemplateFillCommand() { return templateFillCommand; }
-    public void setTemplateFillCommand(String templateFillCommand) { this.templateFillCommand = templateFillCommand; }
-    public String getTemplateFillScript() { return templateFillScript; }
-    public void setTemplateFillScript(String templateFillScript) { this.templateFillScript = templateFillScript; }
+    public String getAgentCommand() { return agentCommand; }
+    public void setAgentCommand(String agentCommand) { this.agentCommand = agentCommand; }
+    public String getAgentScript() { return agentScript; }
+    public void setAgentScript(String agentScript) { this.agentScript = agentScript; }
+    public String getAgentProjectRoot() { return agentProjectRoot; }
+    public void setAgentProjectRoot(String agentProjectRoot) { this.agentProjectRoot = agentProjectRoot; }
+    public int getAgentTimeoutSeconds() { return agentTimeoutSeconds; }
+    public void setAgentTimeoutSeconds(int agentTimeoutSeconds) { this.agentTimeoutSeconds = agentTimeoutSeconds; }
+    public int getAgentNodeMaxOldSpaceMb() { return agentNodeMaxOldSpaceMb; }
+    public void setAgentNodeMaxOldSpaceMb(int agentNodeMaxOldSpaceMb) { this.agentNodeMaxOldSpaceMb = agentNodeMaxOldSpaceMb; }
+    public int getAgentMaxSources() { return agentMaxSources; }
+    public void setAgentMaxSources(int agentMaxSources) { this.agentMaxSources = agentMaxSources; }
+    public String getSofficeCommand() { return sofficeCommand; }
+    public void setSofficeCommand(String sofficeCommand) { this.sofficeCommand = sofficeCommand; }
+    public String getPdftoppmCommand() { return pdftoppmCommand; }
+    public void setPdftoppmCommand(String pdftoppmCommand) { this.pdftoppmCommand = pdftoppmCommand; }
+    public String getChromeCommand() { return chromeCommand; }
+    public void setChromeCommand(String chromeCommand) { this.chromeCommand = chromeCommand; }
     public String getPaperParserCommand() { return paperParserCommand; }
     public void setPaperParserCommand(String paperParserCommand) { this.paperParserCommand = paperParserCommand; }
     public String getPaperParserScript() { return paperParserScript; }

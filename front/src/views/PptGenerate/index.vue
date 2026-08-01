@@ -35,7 +35,7 @@
             </div>
 
             <div class="field-block">
-              <div class="field-label">通用模板</div>
+                <div class="field-label">{{ outputFormat === 'html' ? 'HTML 交互主题' : 'PPTX 通用模板' }}</div>
               <div class="template-picker">
                 <div class="template-groups">
                   <section v-for="group in templateGroups" :key="group.key" class="template-group">
@@ -82,7 +82,15 @@
                   </div>
                   <div v-if="templatePreviewSlides.length" class="template-showcase__stage">
                     <div class="template-showcase__main" :style="templatePreviewStyle(templatePreviewSlides[templatePreviewIndex])">
-                      <div class="template-preview-slide" :class="[`template-preview-slide--${templatePreviewSlides[templatePreviewIndex].kind}`, `template-preview-design--${selectedTemplate?.design || 'academic'}`]">
+                      <img
+                        v-if="templatePreviewImageUrl(templatePreviewIndex)"
+                        :src="templatePreviewImageUrl(templatePreviewIndex)"
+                        :alt="`${selectedTemplate?.name || '通用模板'}第 ${templatePreviewIndex + 1} 页真实预览`"
+                        class="template-preview-image"
+                        loading="eager"
+                        @error="markTemplatePreviewImageError(templatePreviewIndex, selectedTemplate?.key)"
+                      />
+                      <div v-else class="template-preview-slide" :class="[`template-preview-slide--${templatePreviewSlides[templatePreviewIndex].kind}`, `template-preview-design--${selectedTemplate?.design || 'academic'}`]">
                         <span class="template-preview-kicker">{{ templatePreviewSlides[templatePreviewIndex].eyebrow }}</span>
                         <span v-if="templatePreviewSlides[templatePreviewIndex].index" class="template-preview-chapter">{{ templatePreviewSlides[templatePreviewIndex].index }}</span>
                         <h4>{{ templatePreviewSlides[templatePreviewIndex].title }}</h4>
@@ -107,20 +115,36 @@
                         @click="templatePreviewIndex = index"
                       >
                         <div class="template-preview-thumb__canvas" :class="`template-preview-design--${selectedTemplate?.design || 'academic'}`" :style="templatePreviewStyle(slide)">
-                          <span>{{ slide.index || (index + 1).toString().padStart(2, '0') }}</span>
-                          <strong>{{ slide.title }}</strong>
+                          <img
+                            v-if="templatePreviewImageUrl(index)"
+                            :src="templatePreviewImageUrl(index)"
+                            :alt="`${selectedTemplate?.name || '通用模板'}第 ${index + 1} 页缩略图`"
+                            class="template-preview-thumb__image"
+                            loading="lazy"
+                            @error="markTemplatePreviewImageError(index, selectedTemplate?.key)"
+                          />
+                          <template v-else>
+                            <span>{{ slide.index || (index + 1).toString().padStart(2, '0') }}</span>
+                            <strong>{{ slide.title }}</strong>
+                          </template>
                         </div>
                         <small>{{ index + 1 }} · {{ slide.label }}</small>
                       </button>
                     </div>
                   </div>
-                  <p class="template-showcase__note">这里展示的是布局、色彩和页面节奏示意；上传资料后，系统会按内容自动匹配版式。</p>
+                  <p class="template-showcase__note">
+                    {{ selectedTemplate?.category === 'github'
+                      ? '这里展示的是来自 GitHub 成品 PPTX 的真实 5 页样稿；生成时会保留该模板的构图语言并用可编辑内容替换示例文字。'
+                      : outputFormat === 'html'
+                        ? '这里展示的是由 reveal.js HTML 内核真实渲染出的 5 页样稿；生成后支持键盘翻页、全屏和网页二次编辑。'
+                        : '这里展示的是所选源模板真实渲染出的 5 页样稿；Agent 会逐页选择源版式并在原位编辑。' }}
+                  </p>
                 </section>
               </div>
             </div>
 
             <div class="upload-grid">
-              <label class="file-box">
+              <label v-if="outputFormat === 'pptx'" class="file-box">
                 <input type="file" accept=".pptx" aria-label="上传自定义 PPT 模板" @change="handleTemplateSelect" />
                 <n-icon size="34"><EaselOutline /></n-icon>
                 <strong>{{ templateFile ? templateFile.name : '上传自定义 PPT 模板' }}</strong>
@@ -146,6 +170,20 @@
                 placeholder="例如：做成 10 页产品发布会 PPT，面向企业客户，突出核心价值、使用场景、关键数据和下一步行动。不上传资料时，也可以直接用提示词生成。"
               />
               <p class="field-hint">提示词和资料至少提供一个；只上传资料时，系统会自动提炼主题、结构、重点数据和适合的视觉素材。</p>
+            </div>
+
+            <div class="field-block">
+              <div class="field-label">联网研究</div>
+              <div class="output-format-picker" role="radiogroup" aria-label="联网研究">
+                <button type="button" role="radio" :class="['output-format-card', { active: researchMode === 'auto' }]" :aria-checked="researchMode === 'auto'" @click="researchMode = 'auto'">
+                  <strong>自动研究</strong>
+                  <span>检索论文与可信网页，核验事实并生成引用</span>
+                </button>
+                <button type="button" role="radio" :class="['output-format-card', { active: researchMode === 'off' }]" :aria-checked="researchMode === 'off'" @click="researchMode = 'off'">
+                  <strong>关闭联网</strong>
+                  <span>仅使用提示词、上传资料与模板资产</span>
+                </button>
+              </div>
             </div>
 
             <div class="actions">
@@ -197,9 +235,6 @@
               </div>
               <div class="result-toolbar-actions">
                 <n-button size="small" :loading="previewLoading" @click="loadPreview">刷新预览</n-button>
-                <n-button size="small" :type="previewEditing ? 'primary' : 'default'" @click="previewEditing = !previewEditing">
-                  {{ previewEditing ? '完成网页编辑' : '网页编辑' }}
-                </n-button>
               </div>
             </div>
 
@@ -215,43 +250,42 @@
                   :aria-label="`查看第 ${index + 1} 页`"
                   @click="previewSelectedIndex = index"
                 >
-                  <canvas :ref="element => setPreviewThumbCanvas(index, element)" class="preview-thumb__canvas" width="320" height="180"></canvas>
+                  <img :src="previewImageUrls[slide.imageFile]" class="preview-thumb__canvas" :alt="`第 ${index + 1} 页真实预览`" />
                   <span>{{ index + 1 }}</span>
                 </button>
               </div>
               <div class="preview-stage">
                 <div class="preview-stage__canvas-wrap">
-                  <canvas ref="previewCanvas" class="preview-canvas" width="1600" height="900" role="img" :aria-label="`第 ${previewSelectedIndex + 1} 页 PPT 预览`"></canvas>
+                  <img :src="previewImageUrls[selectedPreviewSlide?.imageFile]" class="preview-canvas" :alt="`第 ${previewSelectedIndex + 1} 页真实渲染预览`" />
                 </div>
                 <div class="preview-stage__caption">
                   <div>
                     <strong>{{ selectedPreviewSlide?.title || 'PPT 页面预览' }}</strong>
-                    <span>{{ previewSelectedIndex + 1 }} / {{ previewSlides.length }} · {{ selectedPreviewSlide?.layout || selectedPreviewSlide?.type || '内容页' }}</span>
+                    <span>{{ previewSelectedIndex + 1 }} / {{ previewSlides.length }} · {{ selectedPreviewSlide?.width || 1600 }}×{{ selectedPreviewSlide?.height || 900 }}</span>
                   </div>
-                  <span class="preview-stage__hint">图片式预览 · 固定 16:9{{ previewData?.previewFidelity === 'approximate-native-template' ? ' · 模板原生版式以下载文件为准' : '' }}</span>
+                  <span class="preview-stage__hint">LibreOffice / Chromium 真实全页渲染</span>
                 </div>
               </div>
-              <aside v-if="previewEditing && selectedPreviewSlide" class="preview-editor">
-                <div class="preview-editor__heading">
-                  <strong>编辑第 {{ previewSelectedIndex + 1 }} 页</strong>
-                  <span>修改后提交会生成新版本</span>
-                </div>
-                <n-input :value="selectedPreviewSlide.title" size="small" maxlength="80" placeholder="页面标题" @update:value="updatePreviewField('title', $event)" />
-                <n-input :value="selectedPreviewSlide.headline" size="small" maxlength="140" placeholder="核心句（可选）" @update:value="updatePreviewField('headline', $event)" />
-                <n-input :value="selectedPreviewSlide.bulletText" type="textarea" size="small" :autosize="{ minRows: 5, maxRows: 10 }" placeholder="每行一个要点" @update:value="updatePreviewField('bulletText', $event)" />
-                <div class="preview-editor__nav">
-                  <n-button size="small" :disabled="previewSelectedIndex <= 0" @click="previewSelectedIndex -= 1">上一页</n-button>
-                  <n-button size="small" :disabled="previewSelectedIndex >= previewSlides.length - 1" @click="previewSelectedIndex += 1">下一页</n-button>
-                </div>
-              </aside>
             </div>
             <div v-else class="preview-empty">此任务暂未生成可用的网页预览，但仍可下载 {{ outputFormatLabel(activeTask) }}。</div>
+
+            <div v-if="htmlPreviewUrl" class="html-preview-stage">
+              <iframe :src="htmlPreviewUrl" title="reveal.js HTML 演示预览" class="html-preview-frame" loading="lazy" referrerpolicy="no-referrer" sandbox="allow-scripts allow-presentation"></iframe>
+              <div class="html-preview-stage__caption"><strong>隔离交互预览</strong><span>沙箱中支持翻页与全屏，不共享站点会话。</span></div>
+            </div>
+
+            <section v-if="previewData?.sources?.length" class="revision-box">
+              <div class="revision-box__heading"><div><h3>研究来源</h3><p>共 {{ previewData.sources.length }} 项，已按幻灯片建立引用映射。</p></div><n-tag size="small" type="success">可追溯</n-tag></div>
+              <ul>
+                <li v-for="source in previewData.sources" :key="source.id"><a :href="source.url" target="_blank" rel="noreferrer">{{ source.title }}</a><span v-if="source.year"> · {{ source.year }}</span></li>
+              </ul>
+            </section>
 
             <section class="revision-box">
               <div class="revision-box__heading">
                 <div>
                   <h3>继续修改这份 PPT</h3>
-                  <p>可以写一句修改要求，也可以先打开“网页编辑”改标题和要点，再提交生成新版本。</p>
+                  <p>用自然语言描述要修改的页面、内容与视觉方向；Agent 会精确修改工程并重新完成全页质检。</p>
                 </div>
                 <n-tag size="small" type="info">会生成新版本</n-tag>
               </div>
@@ -259,7 +293,7 @@
               <div class="actions">
                 <n-button type="primary" :loading="revisionSubmitting" @click="submitRevision">
                   <template #icon><n-icon><SparklesOutline /></n-icon></template>
-                  {{ previewEditing ? '保存网页修改并生成' : '按提示词生成新版本' }}
+                  按提示词生成新版本
                 </n-button>
                 <n-button size="large" @click="downloadCurrent">
                   <template #icon><n-icon><DownloadOutline /></n-icon></template>
@@ -295,7 +329,7 @@
 </template>
 
 <script setup>
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import { NAlert, NButton, NEmpty, NIcon, NInput, NProgress, NTag } from 'naive-ui'
 import {
@@ -311,6 +345,7 @@ import {
   createPptGenerationTask,
   downloadGeneratedPpt,
   getQuotaSettings,
+  getPptHtmlPreview,
   getPptPreview,
   getPptPreviewImage,
   getPptGenerationStatus,
@@ -325,8 +360,9 @@ const message = useMessage()
 const auth = useAuthStore()
 const step = ref('form')
 const prompt = ref('')
-const templateKey = ref('academic-blue')
+const templateKey = ref('github-bjtu-blue')
 const outputFormat = ref('pptx')
+const researchMode = ref('auto')
 const templateFile = ref(null)
 const sourceFile = ref(null)
 const templates = ref(defaultTemplates())
@@ -339,15 +375,14 @@ const errorMsg = ref('')
 const activeTask = ref(null)
 const previewData = ref(null)
 const previewImageUrls = ref({})
+const htmlPreviewUrl = ref('')
 const previewLoading = ref(false)
 const previewError = ref('')
-const previewEditing = ref(false)
 const revisionPrompt = ref('')
 const revisionSubmitting = ref(false)
 const templatePreviewIndex = ref(0)
+const templatePreviewImageErrors = ref(new Set())
 const previewSelectedIndex = ref(0)
-const previewCanvas = ref(null)
-const previewThumbCanvases = ref({})
 const taskId = ref('')
 const taskAccessToken = ref('')
 const progress = ref(0)
@@ -366,12 +401,13 @@ const PPT_ACTIVE_TASK_KEY = 'ppt-generation-active-task'
 const pptCreditPerTask = ref(10)
 const pptEstimatedCredits = computed(() => pptCreditPerTask.value)
 const previewSlides = computed(() => previewData.value?.slides || [])
-const selectedTemplate = computed(() => templates.value.find(item => item.key === templateKey.value) || templates.value[0] || null)
+const formatTemplates = computed(() => templates.value.filter(item => !Array.isArray(item.formats) || item.formats.includes(outputFormat.value)))
+const selectedTemplate = computed(() => formatTemplates.value.find(item => item.key === templateKey.value) || formatTemplates.value[0] || null)
 const selectedPreviewSlide = computed(() => previewSlides.value[previewSelectedIndex.value] || null)
 const templatePreviewSlides = computed(() => buildTemplatePreviewSlides(selectedTemplate.value))
 const templateGroups = computed(() => {
   const groups = new Map()
-  templates.value.forEach(template => {
+  formatTemplates.value.forEach(template => {
     const key = templateCategoryKey(template)
     if (!groups.has(key)) groups.set(key, {
       key,
@@ -383,13 +419,13 @@ const templateGroups = computed(() => {
   return [...groups.values()]
 })
 
-const previewImageCache = new Map()
-
 const stageItems = [
   { key: 'queued', label: '排队', icon: TimeOutline },
-  { key: 'extracting', label: '读取资料', icon: DocumentTextOutline },
-  { key: 'planning', label: '规划内容', icon: ColorPaletteOutline },
-  { key: 'rendering', label: '生成输出', icon: EaselOutline }
+  { key: 'researching', label: '联网研究', icon: DocumentTextOutline },
+  { key: 'planning', label: '叙事规划', icon: ColorPaletteOutline },
+  { key: 'authoring', label: '自主创作', icon: SparklesOutline },
+  { key: 'rendering', label: '真实渲染', icon: EaselOutline },
+  { key: 'reviewing', label: '质量审查', icon: EaselOutline }
 ]
 
 const runningTitle = computed(() => activeTask.value?.sourceFileName || activeTask.value?.paperFileName || activeTask.value?.templateFileName || 'PPT 生成任务')
@@ -399,6 +435,14 @@ onMounted(async () => {
   await Promise.all([loadTemplates(), loadRecent(), loadQuotaSettings()])
   authWatchReady = true
   await restoreActiveTask()
+})
+
+watch(outputFormat, () => {
+  if (outputFormat.value === 'html') templateFile.value = null
+  const first = formatTemplates.value[0]
+  if (first && !formatTemplates.value.some(item => item.key === templateKey.value)) templateKey.value = first.key
+  templatePreviewIndex.value = 0
+  if (templateKey.value) ensureTemplateCategoryExpanded(templateKey.value)
 })
 
 onBeforeUnmount(() => {
@@ -413,10 +457,6 @@ watch(() => auth.user?.id || null, (nextId, previousId) => {
     clearActiveTask()
   }
 })
-
-watch([previewData, previewSelectedIndex, previewImageUrls], () => {
-  nextTick(renderPreviewCanvases)
-}, { deep: true })
 
 function handleTemplateSelect(event) {
   const file = event.target.files?.[0] || null
@@ -476,6 +516,7 @@ async function submitTask() {
       prompt: prompt.value.trim(),
       templateKey: templateKey.value,
       outputFormat: outputFormat.value,
+      researchMode: researchMode.value,
       templateFile: templateFile.value,
       sourceFile: sourceFile.value,
       idempotencyKey: pendingIdempotencyKey
@@ -483,6 +524,7 @@ async function submitTask() {
     pendingIdempotencyKey = ''
     rememberTaskToken(res.data.taskId, res.data.accessToken)
     if (typeof res.data.credits !== 'undefined') auth.updateCredits(res.data.credits)
+    clearPreview()
     setActiveTask(res.data)
     step.value = 'running'
     openStream(taskId.value)
@@ -586,7 +628,7 @@ async function loadTemplates() {
   try {
     const res = await getPptTemplates()
     if (Array.isArray(res.data) && res.data.length) templates.value = res.data
-    if (!templates.value.some(item => item.key === templateKey.value)) templateKey.value = templates.value[0]?.key || 'academic-blue'
+    if (!formatTemplates.value.some(item => item.key === templateKey.value)) templateKey.value = formatTemplates.value[0]?.key || 'github-bjtu-blue'
     ensureTemplateCategoryExpanded(templateKey.value)
   } catch {
     templates.value = defaultTemplates()
@@ -599,6 +641,22 @@ function selectTemplate(template) {
   templateKey.value = template.key
   templatePreviewIndex.value = 0
   ensureTemplateCategoryExpanded(template.key)
+}
+
+function templatePreviewAssetKey(index, template = selectedTemplate.value) {
+  return `${template?.key || 'unknown'}:${index}`
+}
+
+function templatePreviewImageUrl(index, template = selectedTemplate.value) {
+  if (!template?.key || templatePreviewImageErrors.value.has(templatePreviewAssetKey(index, template))) return ''
+  const previewRoot = outputFormat.value === 'html' ? '/html-template-previews' : '/ppt-template-previews'
+  return `${previewRoot}/${encodeURIComponent(template.key)}/slide-${index + 1}.png`
+}
+
+function markTemplatePreviewImageError(index, templateKeyValue = selectedTemplate.value?.key) {
+  const next = new Set(templatePreviewImageErrors.value)
+  next.add(templatePreviewAssetKey(index, { key: templateKeyValue }))
+  templatePreviewImageErrors.value = next
 }
 
 function toggleTemplateCategory(key) {
@@ -630,12 +688,7 @@ async function loadPreview() {
     const res = await getPptPreview(requestedTaskId, requestedToken, { signal: controller.signal })
     if (generation !== previewGeneration || taskId.value !== requestedTaskId || taskAccessToken.value !== requestedToken) return
     const data = res.data || {}
-    data.slides = Array.isArray(data.slides) ? data.slides.map(slide => ({
-      ...slide,
-      bullets: Array.isArray(slide.bullets) ? slide.bullets : [],
-      metrics: Array.isArray(slide.metrics) ? slide.metrics : [],
-      bulletText: Array.isArray(slide.bullets) ? slide.bullets.join('\n') : ''
-    })) : []
+    data.slides = Array.isArray(data.slides) ? data.slides : []
     previewData.value = data
     previewSelectedIndex.value = Math.min(previewSelectedIndex.value, Math.max(0, data.slides.length - 1))
     const imageFiles = [...new Set(data.slides.map(slide => slide.imageFile).filter(Boolean))].slice(0, 24)
@@ -653,9 +706,15 @@ async function loadPreview() {
     }))
     if (generation !== previewGeneration || taskId.value !== requestedTaskId || taskAccessToken.value !== requestedToken) return
     previewImageUrls.value = Object.fromEntries(loaded.filter(Boolean))
-    await nextTick()
-    if (generation !== previewGeneration || taskId.value !== requestedTaskId) return
-    renderPreviewCanvases()
+    if (outputFormatLabel(activeTask.value) === 'HTML') {
+      const url = await getPptHtmlPreview(requestedTaskId, requestedToken, { signal: controller.signal })
+      if (generation !== previewGeneration || taskId.value !== requestedTaskId || taskAccessToken.value !== requestedToken) {
+        URL.revokeObjectURL(url)
+        return
+      }
+      if (htmlPreviewUrl.value) URL.revokeObjectURL(htmlPreviewUrl.value)
+      htmlPreviewUrl.value = url
+    }
   } catch (error) {
     if (error?.name === 'AbortError') return
     if (generation !== previewGeneration || taskId.value !== requestedTaskId) return
@@ -676,155 +735,12 @@ function clearPreview() {
     previewAbortController = null
   }
   Object.values(previewImageUrls.value || {}).forEach(url => URL.revokeObjectURL(url))
-  previewImageCache.clear()
   previewImageUrls.value = {}
+  if (htmlPreviewUrl.value) URL.revokeObjectURL(htmlPreviewUrl.value)
+  htmlPreviewUrl.value = ''
   previewData.value = null
   previewError.value = ''
   previewSelectedIndex.value = 0
-  previewThumbCanvases.value = {}
-}
-
-function setPreviewThumbCanvas(index, element) {
-  if (element) previewThumbCanvases.value[index] = element
-  else delete previewThumbCanvases.value[index]
-}
-
-function updatePreviewField(field, value) {
-  const slide = selectedPreviewSlide.value
-  if (slide) slide[field] = value
-}
-
-function renderPreviewCanvases() {
-  if (!previewSlides.value.length) return
-  drawPreviewSlide(previewCanvas.value, selectedPreviewSlide.value, previewSelectedIndex.value)
-  previewSlides.value.forEach((slide, index) => drawPreviewSlide(previewThumbCanvases.value[index], slide, index))
-}
-
-function drawPreviewSlide(canvas, slide, slideIndex = 0) {
-  if (!canvas || !slide) return
-  const width = 1600
-  const height = 900
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')
-  if (!ctx) return
-  const palette = previewPalette()
-  const dark = ['cover', 'section', 'thanks', 'chapter'].includes(String(slide.type || '').toLowerCase())
-  const background = dark ? palette.deep : palette.background
-  const text = dark ? '#ffffff' : palette.text
-  ctx.fillStyle = background
-  ctx.fillRect(0, 0, width, height)
-  ctx.fillStyle = palette.accent
-  ctx.fillRect(0, 0, 22, height)
-  ctx.fillStyle = dark ? palette.highlight : palette.accent
-  ctx.fillRect(70, 86, 140, 10)
-  ctx.fillStyle = dark ? 'rgba(255,255,255,.68)' : palette.muted
-  ctx.font = '700 25px "Noto Sans CJK SC", "PingFang SC", Arial, sans-serif'
-  ctx.fillText(String(slide.section || slide.type || 'CONTENT').toUpperCase().slice(0, 28), 70, 145)
-
-  const title = String(slide.title || '未命名页面')
-  ctx.fillStyle = text
-  ctx.font = `${dark ? '700 78px' : '700 68px'} "Noto Sans CJK SC", "PingFang SC", Arial, sans-serif`
-  const titleY = dark ? 360 : 235
-  drawCanvasText(ctx, title, 70, titleY, dark ? 1250 : 930, dark ? 94 : 82, 2)
-
-  if (slide.headline) {
-    ctx.fillStyle = dark ? 'rgba(255,255,255,.78)' : palette.muted
-    ctx.font = '400 31px "Noto Sans CJK SC", "PingFang SC", Arial, sans-serif'
-    drawCanvasText(ctx, String(slide.headline), 72, dark ? 560 : 355, dark ? 1150 : 920, 45, 3)
-  }
-
-  const imageUrl = slide.imageFile ? previewImageUrls.value[slide.imageFile] : ''
-  if (imageUrl) drawCanvasImage(ctx, imageUrl, 1030, 210, 460, 390)
-
-  const bullets = Array.isArray(slide.bullets) ? slide.bullets.slice(0, 5) : []
-  if (bullets.length) {
-    const startY = dark ? 665 : 485
-    ctx.font = '400 28px "Noto Sans CJK SC", "PingFang SC", Arial, sans-serif'
-    bullets.forEach((bullet, index) => {
-      const y = startY + index * 58
-      ctx.fillStyle = palette.accent
-      ctx.beginPath()
-      ctx.arc(86, y - 9, 7, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = text
-      drawCanvasText(ctx, String(bullet), 112, y, imageUrl ? 760 : 1320, 36, 2)
-    })
-  }
-
-  if (Array.isArray(slide.metrics) && slide.metrics.length) {
-    const metrics = slide.metrics.slice(0, 3)
-    const cardWidth = Math.min(370, 1320 / metrics.length - 22)
-    metrics.forEach((metric, index) => {
-      const x = 70 + index * (cardWidth + 24)
-      const y = 680
-      ctx.fillStyle = dark ? 'rgba(255,255,255,.1)' : 'rgba(255,255,255,.72)'
-      ctx.fillRect(x, y, cardWidth, 128)
-      ctx.strokeStyle = dark ? 'rgba(255,255,255,.24)' : `${palette.accent}55`
-      ctx.strokeRect(x, y, cardWidth, 128)
-      ctx.fillStyle = palette.accent
-      ctx.font = '700 42px "Noto Sans CJK SC", "PingFang SC", Arial, sans-serif'
-      ctx.fillText(String(metric.value || ''), x + 22, y + 52)
-      ctx.fillStyle = text
-      ctx.font = '400 22px "Noto Sans CJK SC", "PingFang SC", Arial, sans-serif'
-      drawCanvasText(ctx, String(metric.label || ''), x + 22, y + 92, cardWidth - 44, 28, 1)
-    })
-  }
-
-  ctx.fillStyle = dark ? 'rgba(255,255,255,.52)' : palette.muted
-  ctx.font = '400 22px Arial, sans-serif'
-  ctx.fillText(`${String(slideIndex + 1).padStart(2, '0')} / ${String(previewSlides.value.length).padStart(2, '0')}`, 1400, 835)
-}
-
-function drawCanvasText(ctx, value, x, y, maxWidth, lineHeight, maxLines) {
-  const text = String(value || '').trim()
-  if (!text) return
-  const chars = Array.from(text)
-  const lines = []
-  let line = ''
-  chars.forEach(char => {
-    const candidate = line + char
-    if (ctx.measureText(candidate).width > maxWidth && line) {
-      lines.push(line)
-      line = char
-    } else {
-      line = candidate
-    }
-  })
-  if (line) lines.push(line)
-  lines.slice(0, maxLines).forEach((item, index) => {
-    let output = item
-    if (index === maxLines - 1 && lines.length > maxLines) output = `${item.slice(0, Math.max(0, item.length - 2))}…`
-    ctx.fillText(output, x, y + index * lineHeight)
-  })
-}
-
-function drawCanvasImage(ctx, url, x, y, width, height) {
-  let image = previewImageCache.get(url)
-  if (!image) {
-    const generation = previewGeneration
-    image = new Image()
-    image.onload = () => {
-      if (generation !== previewGeneration) return
-      previewImageCache.set(url, image)
-      renderPreviewCanvases()
-    }
-    image.onerror = () => {
-      if (generation === previewGeneration) previewImageCache.delete(url)
-    }
-    image.src = url
-    previewImageCache.set(url, image)
-  }
-  if (!image.complete || !image.naturalWidth) return
-  const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight)
-  const drawWidth = image.naturalWidth * scale
-  const drawHeight = image.naturalHeight * scale
-  ctx.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight)
-}
-
-function previewPalette() {
-  const values = (previewData.value?.palette || ['005BAC', '063A78', 'D9A441', 'EFF6FF', '1F2937']).map(color => `#${String(color).replace('#', '')}`)
-  return { accent: values[0], deep: values[1], highlight: values[2], background: values[3], text: values[4], muted: `${values[4]}aa` }
 }
 
 function buildTemplatePreviewSlides(template) {
@@ -853,16 +769,8 @@ function templatePreviewStyle(slide) {
 
 async function submitRevision() {
   const promptText = revisionPrompt.value.trim()
-  const slides = previewEditing.value
-    ? previewSlides.value.map((slide, index) => ({
-        slideIndex: index + 1,
-        title: (slide.title || '').trim(),
-        headline: (slide.headline || '').trim(),
-        bullets: String(slide.bulletText || '').split(/\n+/).map(value => value.trim()).filter(Boolean).slice(0, 6)
-      }))
-    : []
-  if (!promptText && !slides.some(slide => slide.title || slide.headline || slide.bullets.length)) {
-    errorMsg.value = '请输入修改要求，或先打开网页编辑修改页面内容'
+  if (!promptText) {
+    errorMsg.value = '请输入自然语言修改要求'
     return
   }
   revisionSubmitting.value = true
@@ -873,14 +781,13 @@ async function submitRevision() {
   try {
     const res = await revisePptGenerationTask(taskId.value, taskAccessToken.value, {
       prompt: promptText,
-      slides,
       idempotencyKey
     })
     rememberTaskToken(res.data.taskId, res.data.accessToken)
     if (typeof res.data.credits !== 'undefined') auth.updateCredits(res.data.credits)
+    clearPreview()
     setActiveTask(res.data)
     revisionPrompt.value = ''
-    previewEditing.value = false
     step.value = 'running'
     openStream(taskId.value)
     await loadRecent()
@@ -939,6 +846,7 @@ async function downloadCurrent() {
 
 function resetForm() {
   prompt.value = ''
+  researchMode.value = 'auto'
   templateFile.value = null
   sourceFile.value = null
   errorMsg.value = ''
@@ -954,7 +862,6 @@ function backToForm() {
   taskAccessToken.value = ''
   progress.value = 0
   queuePosition.value = 0
-  previewEditing.value = false
   revisionPrompt.value = ''
   clearPreview()
 }
@@ -1061,30 +968,26 @@ function clearActiveTask() {
 
 function defaultTemplates() {
   return [
-    { key: 'academic-blue', name: '学术蓝', description: '清晰克制，适合研究、课程和正式汇报', palette: ['005BAC', '063A78', 'D9A441', 'EFF6FF', '1F2937'], source: 'Marp Core · default', license: 'MIT', sourceUrl: 'https://github.com/marp-team/marp-core', category: 'core', categoryLabel: '基础风格', complexity: 'standard' },
-    { key: 'minimal-ink', name: '极简黑白', description: '高对比、留白充足，适合技术分享和决策简报', palette: ['111827', '374151', '0EA5E9', 'F8FAFC', '1F2937'], source: 'Marp Core · uncover', license: 'MIT', sourceUrl: 'https://github.com/marp-team/marp-core', category: 'core', categoryLabel: '基础风格', complexity: 'standard' },
-    { key: 'emerald-report', name: '数据绿', description: '沉稳、偏报告感，适合项目复盘和经营数据', palette: ['047857', '064E3B', 'F59E0B', 'ECFDF5', '1F2937'], source: 'Marp Core · gaia', license: 'MIT', sourceUrl: 'https://github.com/marp-team/marp-core', category: 'core', categoryLabel: '基础风格', complexity: 'standard' },
-    { key: 'warm-defense', name: '暖色演讲', description: '温和醒目，适合培训、主题分享和答辩', palette: ['B45309', '7C2D12', '2563EB', 'FFF7ED', '1F2937'], source: 'Marp Core · gaia', license: 'MIT', sourceUrl: 'https://github.com/marp-team/marp-core', category: 'core', categoryLabel: '基础风格', complexity: 'standard' },
-    { key: 'gaia-editorial', name: 'Gaia 编辑感', description: '杂志式标题和强章节节奏，适合品牌故事、趋势与案例', palette: ['9A3412', '431407', '0F766E', 'FFF7ED', '292524'], source: 'Marp Core · gaia', license: 'MIT', sourceUrl: 'https://github.com/marp-team/marp-core', category: 'editorial', categoryLabel: '杂志与创意', complexity: 'rich' },
-    { key: 'uncover-contrast', name: 'Uncover 高对比', description: '大字号、强聚焦、演讲现场识别度高', palette: ['0F172A', '020617', 'F97316', 'F8FAFC', 'E2E8F0'], source: 'Marp Core · uncover', license: 'MIT', sourceUrl: 'https://github.com/marp-team/marp-core', category: 'core', categoryLabel: '基础风格', complexity: 'standard' },
-    { key: 'dracula-night', name: 'Dracula 夜色', description: '深色科技感，适合开发者、AI、产品和发布会', palette: ['BD93F9', '282A36', '50FA7B', '282A36', 'F8F8F2'], source: 'Dracula Marp', license: 'MIT', sourceUrl: 'https://github.com/dracula/marp', category: 'core', categoryLabel: '基础风格', complexity: 'standard' },
-    { key: 'slidev-seriph', name: 'Seriph 叙事', description: '优雅的衬线标题和细腻层次，适合长文档与知识分享', palette: ['2563EB', '172554', 'F59E0B', 'F8FAFC', '334155'], source: 'Slidev official theme', license: 'MIT', sourceUrl: 'https://github.com/slidevjs/themes', category: 'core', categoryLabel: '基础风格', complexity: 'standard' },
-    { key: 'slidev-apple-basic', name: 'Apple Basic', description: '黑白极简和大面积留白，适合产品发布和创意提案', palette: ['111827', '000000', '3B82F6', 'FFFFFF', '374151'], source: 'Slidev official theme', license: 'MIT', sourceUrl: 'https://github.com/slidevjs/themes', category: 'product', categoryLabel: '产品与 SaaS', complexity: 'standard' },
-    { key: 'startup-pitch', name: 'Startup Pitch', description: '问题—方案—证据—行动，适合融资、产品和商业计划', palette: ['7C3AED', '312E81', 'F59E0B', 'F5F3FF', '1F2937'], source: 'Marp ecosystem', license: 'MIT', sourceUrl: 'https://github.com/marp-team/awesome-marp', category: 'product', categoryLabel: '产品与 SaaS', complexity: 'standard' },
-    { key: 'product-launch', name: 'Product Launch', description: '大图、指标和场景切换，适合产品发布与增长复盘', palette: ['0E7490', '164E63', 'F43F5E', 'ECFEFF', '164E63'], source: 'Marp ecosystem', license: 'MIT', sourceUrl: 'https://github.com/marp-team/awesome-marp', category: 'product', categoryLabel: '产品与 SaaS', complexity: 'standard' },
-    { key: 'training-canvas', name: 'Training Canvas', description: '清楚的模块化教学节奏，适合课程、培训和工作坊', palette: ['2563EB', '1E3A8A', 'F97316', 'EFF6FF', '1E293B'], source: 'Slidev', license: 'MIT', sourceUrl: 'https://github.com/slidevjs/slidev', category: 'training', categoryLabel: '课程与培训', complexity: 'standard' },
-    { key: 'ppt-master-editorial', name: 'Editorial Magazine', description: '杂志式图文叙事，适合品牌故事、案例和趋势洞察', palette: ['C2410C', '431407', 'F59E0B', 'FFF7ED', '292524'], source: 'PPT Master', license: 'MIT', sourceUrl: 'https://github.com/hugohe3/ppt-master', design: 'editorial', category: 'editorial', categoryLabel: '杂志与创意', complexity: 'rich' },
-    { key: 'ppt-master-memphis', name: 'Memphis Pop', description: '几何图形、强色块和活泼节奏，适合活动、教育和创意提案', palette: ['F43F5E', '312E81', 'FACC15', 'FFF1F2', '1E1B4B'], source: 'PPT Master', license: 'MIT', sourceUrl: 'https://github.com/hugohe3/ppt-master', design: 'memphis', category: 'editorial', categoryLabel: '杂志与创意', complexity: 'rich' },
-    { key: 'ppt-master-data-journalism', name: 'Data Journalism', description: '深色数据新闻风，适合经营分析、行业报告和复杂指标', palette: ['38BDF8', '0F172A', 'FBBF24', '111827', 'E2E8F0'], source: 'PPT Master', license: 'MIT', sourceUrl: 'https://github.com/hugohe3/ppt-master', design: 'data-journalism', category: 'data', categoryLabel: '数据与咨询', complexity: 'rich' },
-    { key: 'ppt-master-swiss-grid', name: 'Swiss Grid', description: '严格网格、红色强调和咨询感结构，适合策略与方案汇报', palette: ['DC2626', '111827', 'FDE047', 'F8FAFC', '1F2937'], source: 'PPT Master', license: 'MIT', sourceUrl: 'https://github.com/hugohe3/ppt-master', design: 'swiss-grid', category: 'data', categoryLabel: '数据与咨询', complexity: 'rich' },
-    { key: 'ppt-master-glassmorphism', name: 'Glassmorphism SaaS', description: '半透明层次、渐变深度和产品界面感，适合 SaaS 与 AI 产品', palette: ['A78BFA', '111827', '22D3EE', '111827', 'F8FAFC'], source: 'PPT Master', license: 'MIT', sourceUrl: 'https://github.com/hugohe3/ppt-master', design: 'glass-saas', category: 'product', categoryLabel: '产品与 SaaS', complexity: 'rich' },
-    { key: 'presenton-glass-saas', name: 'Presenton Glass SaaS', description: '大图、渐变卡片和场景化产品页，适合商业发布与增长复盘', palette: ['8B5CF6', '1E1B4B', '2DD4BF', 'F5F3FF', 'EDE9FE'], source: 'Presenton', license: 'Apache-2.0', sourceUrl: 'https://github.com/presenton/presenton', design: 'glass-saas', category: 'product', categoryLabel: '产品与 SaaS', complexity: 'rich' },
-    { key: 'presenton-gradient-pitch', name: 'Presenton Gradient Pitch', description: '高对比渐变和路演节奏，适合融资、商业计划和产品策略', palette: ['F97316', '4C1D95', 'FDE68A', 'F5F3FF', '312E81'], source: 'Presenton', license: 'Apache-2.0', sourceUrl: 'https://github.com/presenton/presenton', design: 'gradient-pitch', category: 'product', categoryLabel: '产品与 SaaS', complexity: 'rich' },
-    { key: 'presenton-product-studio', name: 'Presenton Product Studio', description: '产品截图、指标和双栏证据页，适合产品方案和客户案例', palette: ['06B6D4', '164E63', 'FB7185', 'ECFEFF', '164E63'], source: 'Presenton', license: 'Apache-2.0', sourceUrl: 'https://github.com/presenton/presenton', design: 'product-studio', category: 'product', categoryLabel: '产品与 SaaS', complexity: 'rich' },
-    { key: 'primer-github-blueprint', name: 'Primer Blueprint', description: '开源项目蓝图风，适合技术架构、开发者和项目路线图', palette: ['0969DA', '1F2328', '54AEFF', 'F6F8FA', '1F2328'], source: 'GitHub Primer', license: 'Design system', sourceUrl: 'https://primer.style/presentations/presentation-formats/powerpoint/', design: 'primer', category: 'corporate', categoryLabel: '企业与开源', complexity: 'rich', openSource: false, usageNote: 'Primer-inspired 风格参考，非官方模板；本项目未分发 Primer 模板文件' },
-    { key: 'primer-data-report', name: 'Primer Data Report', description: '清晰的企业报告结构，适合季度经营、项目复盘和数据说明', palette: ['8250DF', '24292F', 'BF8700', 'FFFFFF', '24292F'], source: 'GitHub Primer', license: 'Design system', sourceUrl: 'https://primer.style/presentations/presentation-formats/powerpoint/', design: 'primer-report', category: 'data', categoryLabel: '数据与咨询', complexity: 'rich', openSource: false, usageNote: 'Primer-inspired 风格参考，非官方模板；本项目未分发 Primer 模板文件' },
-    { key: 'primer-open-source', name: 'Primer Open Source', description: '社区与开源项目叙事，适合技术社区、产品生态和发布说明', palette: ['1A7F37', '24292F', '9A6700', 'F6F8FA', '24292F'], source: 'GitHub Primer', license: 'Design system', sourceUrl: 'https://primer.style/presentations/presentation-formats/powerpoint/', design: 'primer-open-source', category: 'corporate', categoryLabel: '企业与开源', complexity: 'rich', openSource: false, usageNote: 'Primer-inspired 风格参考，非官方模板；本项目未分发 Primer 模板文件' }
-  ]
+    { key: 'github-bjtu-blue', name: 'BJTU 蓝色答辩', description: '北京交通大学开源成品模板，适合答辩、研究汇报与课程展示', palette: ['24539A', '08245C', 'F5C542', 'F8FAFC', '0F172A'], source: 'Allenpandas/BJTU-Slides-Template', license: 'Apache-2.0', sourceUrl: 'https://github.com/Allenpandas/BJTU-Slides-Template', design: 'bjtu-blue', category: 'github', categoryLabel: 'GitHub 成品模板', complexity: 'rich', recommendedFor: ['答辩', '研究汇报', '课程展示'], usageNote: '来源仓库 LICENSE 标注 Apache-2.0，但 README 另有仅供学习、禁止商业使用声明；商用前需确认授权' },
+    { key: 'github-bjtu-green', name: 'BJTU 青绿影像', description: '北京交通大学开源成品模板，强调照片、圆形构图和校园叙事', palette: ['2A807D', '5D948F', 'D7B95D', 'F1F4F0', '173B3A'], source: 'Allenpandas/BJTU-Slides-Template', license: 'Apache-2.0', sourceUrl: 'https://github.com/Allenpandas/BJTU-Slides-Template', design: 'bjtu-green', category: 'github', categoryLabel: 'GitHub 成品模板', complexity: 'rich', recommendedFor: ['校园叙事', '品牌故事', '图片汇报'], usageNote: '来源仓库 LICENSE 标注 Apache-2.0，但 README 另有仅供学习、禁止商业使用声明；商用前需确认授权' },
+    { key: 'github-bjtu-yellow', name: 'BJTU 金色分栏', description: '北京交通大学开源成品模板，左侧图片带与右侧正文分栏', palette: ['F5B400', 'E29A2E', '0F172A', 'FFFDF6', '111827'], source: 'Allenpandas/BJTU-Slides-Template', license: 'Apache-2.0', sourceUrl: 'https://github.com/Allenpandas/BJTU-Slides-Template', design: 'bjtu-yellow', category: 'github', categoryLabel: 'GitHub 成品模板', complexity: 'rich', recommendedFor: ['课程', '项目介绍', '图文报告'], usageNote: '来源仓库 LICENSE 标注 Apache-2.0，但 README 另有仅供学习、禁止商业使用声明；商用前需确认授权' },
+    { key: 'github-bjtu-red-2024', name: 'BJTU 红色舞台', description: '北京交通大学开源成品模板，大面积红色舞台与强标题层级', palette: ['EF4444', '58151C', 'FFFFFF', 'FFF1F2', 'FFFFFF'], source: 'Allenpandas/BJTU-Slides-Template', license: 'Apache-2.0', sourceUrl: 'https://github.com/Allenpandas/BJTU-Slides-Template', design: 'bjtu-red', category: 'github', categoryLabel: 'GitHub 成品模板', complexity: 'rich', recommendedFor: ['发布会', '正式汇报', '主题演讲'], usageNote: '来源仓库 LICENSE 标注 Apache-2.0，但 README 另有仅供学习、禁止商业使用声明；商用前需确认授权' },
+    { key: 'github-bjtu-red-2023', name: 'BJTU 红色拱门', description: '北京交通大学开源成品模板，拱门线稿与年份叙事适合正式汇报', palette: ['EF4444', '4A2029', 'FFFFFF', 'FFF1F2', 'FFFFFF'], source: 'Allenpandas/BJTU-Slides-Template', license: 'Apache-2.0', sourceUrl: 'https://github.com/Allenpandas/BJTU-Slides-Template', design: 'bjtu-2023-red', category: 'github', categoryLabel: 'GitHub 成品模板', complexity: 'rich', recommendedFor: ['年度汇报', '答辩', '正式演讲'], usageNote: '来源仓库 LICENSE 标注 Apache-2.0，但 README 另有仅供学习、禁止商业使用声明；商用前需确认授权' },
+    { key: 'github-bjtu-handdrawn', name: 'BJTU 手绘波形', description: '北京交通大学开源成品模板，柔和波形、插画和手绘感版式', palette: ['7CBFC3', '819FB3', 'E3C6BA', 'EAF5F5', '203B4A'], source: 'Allenpandas/BJTU-Slides-Template', license: 'Apache-2.0', sourceUrl: 'https://github.com/Allenpandas/BJTU-Slides-Template', design: 'bjtu-handdrawn', category: 'github', categoryLabel: 'GitHub 成品模板', complexity: 'rich', recommendedFor: ['创意提案', '活动', '教育内容'], usageNote: '来源仓库 LICENSE 标注 Apache-2.0，但 README 另有仅供学习、禁止商业使用声明；商用前需确认授权' },
+    { key: 'html-reveal-black', name: 'Reveal Black', description: '纯黑演讲主题，适合现场演示、发布和强叙事内容', palette: ['111111', '000000', 'D9A441', '111111', 'F8FAFC'], source: 'reveal.js official theme', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'reveal-black', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
+    { key: 'html-reveal-white', name: 'Reveal White', description: '白底高可读主题，适合文档、课程和知识分享', palette: ['1D4ED8', 'FFFFFF', 'D97706', 'F8FAFC', '1F2937'], source: 'reveal.js official theme', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'reveal-white', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
+    { key: 'html-reveal-beige', name: 'Reveal Beige', description: '暖米色纸张感，适合品牌故事、案例和长内容', palette: ['8C3B1F', 'F7F1E3', 'B7791F', 'FFFDF7', '3D2B1F'], source: 'reveal.js official theme', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'reveal-beige', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
+    { key: 'html-reveal-sky', name: 'Reveal Sky', description: '蓝色渐变舞台感，适合产品发布和工作坊', palette: ['0EA5E9', '075985', 'FDE047', 'E0F2FE', '0F172A'], source: 'reveal.js official theme', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'reveal-sky', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
+    { key: 'html-reveal-league', name: 'Reveal League', description: '高对比杂志式主题，适合观点、趋势和演讲', palette: ['E11D48', '1E293B', 'FACC15', '0F172A', 'F8FAFC'], source: 'reveal.js official theme', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'reveal-league', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
+    { key: 'html-reveal-night', name: 'Reveal Night', description: '夜间舞台主题，适合 AI、技术和现场演示', palette: ['60A5FA', '0B1120', 'A78BFA', '111827', 'E2E8F0'], source: 'reveal.js official theme', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'reveal-night', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
+    { key: 'html-reveal-solarized', name: 'Reveal Solarized', description: '柔和护眼的代码与数据主题，适合技术报告', palette: ['268BD2', '002B36', 'B58900', 'FDF6E3', '586E75'], source: 'reveal.js official theme', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'reveal-solarized', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
+    { key: 'html-reveal-gradient', name: 'Reveal Gradient', description: '独立渐变卡片布局，适合商业计划和产品策略', palette: ['8B5CF6', '312E81', '22D3EE', 'F5F3FF', '1F2937'], source: 'reveal.js custom theme', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'reveal-gradient', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
+    { key: 'html-editorial-ink', name: 'Editorial Ink', description: '纸刊留白、衬线标题与编辑部式红色批注，适合洞察和品牌故事', palette: ['D9482B', 'F5F1E8', 'A16207', 'DED6C8', '171717'], source: 'Agent HTML theme asset', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'editorial-ink', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
+    { key: 'html-neon-grid', name: 'Neon Grid', description: '深色网格与青色霓虹界面，适合 AI、数据产品和技术发布', palette: ['2DD4BF', '070A13', '8B5CF6', '172033', 'ECFEFF'], source: 'Agent HTML theme asset', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'neon-grid', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
+    { key: 'html-terminal-green', name: 'Terminal Green', description: '终端式等宽字体与命令行节奏，适合开发者、架构和开源项目', palette: ['4ADE80', '07120D', 'FACC15', '10261A', 'D1FAE5'], source: 'Agent HTML theme asset', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'terminal-green', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
+    { key: 'html-gallery-cream', name: 'Gallery Cream', description: '画廊米白、酒红强调与高雅衬线排版，适合文化、设计和高端品牌', palette: ['9F1239', 'F4EFE5', 'C08457', 'E7DAC9', '3B2524'], source: 'Agent HTML theme asset', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'gallery-cream', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] }
+  ].filter(template => template.category === 'github' || template.category === 'html')
+    .map(template => ({ formats: template.category === 'html' ? ['html'] : ['pptx'], ...template }))
 }
 
 function normalizeOutputFormat(value) {
@@ -1112,7 +1015,9 @@ function templateCategoryLabel(key) {
     data: '数据与咨询',
     product: '产品与 SaaS',
     corporate: '企业与开源',
-    training: '课程与培训'
+    training: '课程与培训',
+    github: 'GitHub 成品模板',
+    html: 'HTML 交互主题'
   }[key] || '其他风格'
 }
 
@@ -1427,6 +1332,14 @@ p {
   box-shadow: 0 8px 18px rgba(55, 45, 30, .16);
 }
 
+.template-preview-image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #f8fafc;
+}
+
 .template-preview-slide {
   position: relative;
   height: 100%;
@@ -1607,6 +1520,14 @@ p {
   border: 2px solid transparent;
   background: var(--template-bg);
   color: var(--template-text);
+}
+
+.template-preview-thumb__image {
+  display: block;
+  width: calc(100% + 16px);
+  height: calc(100% + 16px);
+  margin: -8px;
+  object-fit: cover;
 }
 
 .template-preview-thumb__canvas::before {
@@ -1843,6 +1764,35 @@ p {
   text-align: center;
 }
 
+.html-preview-stage {
+  margin-top: 22px;
+  border: 1px solid #d2cabc;
+  background: #111827;
+  box-shadow: 0 8px 24px rgba(55, 45, 30, .14);
+}
+
+.html-preview-frame {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  min-height: 560px;
+  border: 0;
+  background: #0f172a;
+}
+
+.html-preview-stage__caption {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 16px;
+  color: #e2e8f0;
+  font-size: 12px;
+}
+
+.html-preview-stage__caption span {
+  color: #94a3b8;
+}
+
 .preview-workbench {
   display: grid;
   grid-template-columns: 112px minmax(0, 1fr);
@@ -1878,7 +1828,9 @@ p {
 .preview-thumb__canvas {
   display: block;
   width: 100%;
+  aspect-ratio: 16 / 9;
   height: auto;
+  object-fit: contain;
   background: #fff;
 }
 
@@ -1907,6 +1859,7 @@ p {
   display: block;
   width: 100%;
   height: 100%;
+  object-fit: contain;
 }
 
 .preview-stage__caption {
@@ -2187,6 +2140,15 @@ p {
   .preview-workbench {
     grid-template-columns: 78px minmax(0, 1fr);
     gap: 10px;
+  }
+
+  .html-preview-frame {
+    min-height: 360px;
+  }
+
+  .html-preview-stage__caption {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .preview-editor {

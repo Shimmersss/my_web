@@ -9,6 +9,7 @@ public class TranslationConfig {
 
     private String storageDir = "../.run/translation-tasks";
     private int maxHistory = 5;
+    private int maxGlobalHistory = 20;
     private int queueCapacity = 5;
     private int maxQps = 4;
     private int stableQps = 2;
@@ -17,6 +18,8 @@ public class TranslationConfig {
     public void setStorageDir(String storageDir) { this.storageDir = storageDir; }
     public int getMaxHistory() { return maxHistory; }
     public void setMaxHistory(int maxHistory) { this.maxHistory = maxHistory; }
+    public int getMaxGlobalHistory() { return maxGlobalHistory; }
+    public void setMaxGlobalHistory(int maxGlobalHistory) { this.maxGlobalHistory = maxGlobalHistory; }
     public int getQueueCapacity() { return queueCapacity; }
     public void setQueueCapacity(int queueCapacity) { this.queueCapacity = queueCapacity; }
     public int getMaxQps() { return maxQps; }

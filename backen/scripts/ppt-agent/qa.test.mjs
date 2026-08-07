@@ -1,26 +1,75 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { deterministicQa } from './qa.mjs';
+import { deterministicQa, ensureReferenceCoverage, hasAcademicSources, isAcademicSource } from './qa.mjs';
 
-test('research sources cannot pass with zero slide citations', () => {
-  const qa = deterministicQa({
-    slides: [{ type: 'references', title: '关键要素回顾', sourceIds: [], bullets: [] }]
-  }, [{ id: 'S01', title: 'Paper', type: 'paper' }], { valid: true });
-  assert.equal(qa.valid, false);
-  assert.ok(qa.citationIssues.some(issue => issue.includes('没有任何')));
-  assert.ok(qa.citationIssues.some(issue => issue.includes('参考文献页缺少来源 S01')));
+test('academic detection accepts paper-like sources consistently', () => {
+  assert.equal(isAcademicSource({ type: 'paper', title: 'Paper' }), true);
+  assert.equal(isAcademicSource({ type: 'web', url: 'https://doi.org/10.1000/example' }), true);
+  assert.equal(isAcademicSource({ type: 'web', url: 'https://example.com/article' }), false);
+  assert.equal(hasAcademicSources([{ type: 'web', url: 'https://doi.org/10.1000/example' }]), true);
 });
 
-test('academic references pages must cover every retained source', () => {
+test('research sources do not force visible citation metadata onto delivery decks', () => {
+  const qa = deterministicQa({
+    slides: [{ type: 'content', title: '关键要素回顾', sourceIds: [], bullets: [] }]
+  }, [{ id: 'S01', title: 'Paper', type: 'paper' }], { valid: true });
+  assert.equal(qa.valid, true);
+  assert.deepEqual(qa.citationIssues, []);
+});
+
+test('academic decks use slide metadata without a visible bibliography page', () => {
   const qa = deterministicQa({
     slides: [
       { type: 'evidence', title: '证据', sourceIds: ['S01'], bullets: [] },
-      { type: 'references', title: '参考文献', sourceIds: ['S01'], bullets: [] }
+      { type: 'content', title: '延伸解读', sourceIds: ['S02'], bullets: [] }
     ]
   }, [
     { id: 'S01', title: 'Paper A', type: 'paper' },
     { id: 'S02', title: 'Paper B', type: 'paper' }
   ], { valid: true });
-  assert.equal(qa.valid, false);
-  assert.ok(qa.citationIssues.some(issue => issue.includes('S02')));
+  assert.equal(qa.valid, true);
+  assert.deepEqual(qa.citationIssues, []);
+});
+
+test('reference normalization removes legacy visible bibliography pages', () => {
+  const plan = {
+    slides: [
+      { type: 'evidence', title: '证据', sourceIds: ['S01', 'S03'], bullets: [] },
+      { type: 'references', title: '参考文献', sourceIds: ['S01'], bullets: [] }
+    ]
+  };
+  const sources = [
+    { id: 'S01', title: 'Paper A', type: 'paper' },
+    { id: 'S02', title: 'Paper B', type: 'paper' },
+    { id: 'S03', title: 'Paper C', type: 'paper' }
+  ];
+
+  ensureReferenceCoverage(plan, sources);
+  const qa = deterministicQa(plan, sources, { valid: true });
+
+  assert.equal(plan.slides.length, 1);
+  assert.equal(plan.slides.some(slide => slide.type === 'references'), false);
+  assert.deepEqual(qa.citationIssues, []);
+  assert.equal(qa.valid, true);
+});
+
+test('reference normalization does not add academic bibliography pages', () => {
+  const plan = { slides: [{ type: 'content', title: '作品主题', sourceIds: ['S01'], bullets: [] }] };
+  const sources = [
+    { id: 'S01', title: 'Paper A', type: 'paper' },
+    { id: 'S02', title: 'Paper B', type: 'paper' }
+  ];
+  ensureReferenceCoverage(plan, sources);
+  assert.equal(plan.slides.length, 1);
+  assert.deepEqual(deterministicQa(plan, sources, { valid: true }).citationIssues, []);
+});
+
+test('a closing slide mentioning references remains delivery content', () => {
+  const plan = {
+    slides: [{ type: 'closing', title: '参考文献 & Q&A', sourceIds: ['S01'], bullets: [] }]
+  };
+  const sources = [{ id: 'S01', title: 'Paper A', type: 'paper' }];
+  ensureReferenceCoverage(plan, sources);
+  assert.equal(plan.slides.length, 1);
+  assert.equal(deterministicQa(plan, sources, { valid: true }).valid, true);
 });

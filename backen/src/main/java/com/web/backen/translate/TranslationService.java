@@ -3,6 +3,7 @@ package com.web.backen.translate;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.QuotaService;
+import com.web.backen.auth.RuntimeConfigService;
 import com.web.backen.config.TranslationConfig;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -16,6 +17,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.channels.FileChannel;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -32,6 +35,8 @@ public class TranslationService {
     private final TranslationConfig config;
     private final ObjectMapper objectMapper;
     private final QuotaService quotaService;
+    private final ImageTranslationService imageTranslationService;
+    private final RuntimeConfigService runtimeConfig;
     private final ConcurrentHashMap<String, TranslationSession> sessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
     private final ThreadPoolExecutor executor;
@@ -39,17 +44,31 @@ public class TranslationService {
 
     public TranslationService(PdfParseService pdfParseService, BabelDocService babelDocService,
                               TranslationConfig config, ObjectMapper objectMapper) {
-        this(pdfParseService, babelDocService, config, objectMapper, null);
+        this(pdfParseService, babelDocService, config, objectMapper, null, null, null);
+    }
+
+    public TranslationService(PdfParseService pdfParseService, BabelDocService babelDocService,
+                              TranslationConfig config, ObjectMapper objectMapper, QuotaService quotaService) {
+        this(pdfParseService, babelDocService, config, objectMapper, quotaService, null, null);
+    }
+
+    public TranslationService(PdfParseService pdfParseService, BabelDocService babelDocService,
+                              TranslationConfig config, ObjectMapper objectMapper, QuotaService quotaService,
+                              ImageTranslationService imageTranslationService) {
+        this(pdfParseService, babelDocService, config, objectMapper, quotaService, imageTranslationService, null);
     }
 
     @Autowired
     public TranslationService(PdfParseService pdfParseService, BabelDocService babelDocService,
-                              TranslationConfig config, ObjectMapper objectMapper, QuotaService quotaService) {
+                              TranslationConfig config, ObjectMapper objectMapper, QuotaService quotaService,
+                              ImageTranslationService imageTranslationService, RuntimeConfigService runtimeConfig) {
         this.pdfParseService = pdfParseService;
         this.babelDocService = babelDocService;
         this.config = config;
         this.objectMapper = objectMapper;
         this.quotaService = quotaService;
+        this.imageTranslationService = imageTranslationService;
+        this.runtimeConfig = runtimeConfig;
         this.executor = new ThreadPoolExecutor(
                 1, 1, 0L, TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(Math.max(1, config.getQueueCapacity())),
@@ -69,8 +88,8 @@ public class TranslationService {
         reconcilePendingRefunds();
         cleanupHistory();
         resumeIncompleteSessions(recoveredSessions);
-        log.info("翻译队列已启动: workers=1, queueCapacity={}, maxHistory={}, storage={}",
-                config.getQueueCapacity(), config.getMaxHistory(), storageDir);
+        log.info("翻译队列已启动: workers=1, queueCapacity={}, maxPerUserHistory={}, maxTotalHistory={}, storage={}",
+                config.getQueueCapacity(), maxPerUserHistory(), maxTotalHistory(), storageDir);
     }
 
     @PreDestroy
@@ -83,29 +102,51 @@ public class TranslationService {
     }
 
     public TranslationSession createSessionPreview(String fileName, InputStream pdfStream, long userId) throws Exception {
+        return createSessionPreview(fileName, "application/pdf", pdfStream, userId);
+    }
+
+    public TranslationSession createSessionPreview(String fileName, String contentType,
+                                                   InputStream inputStream, long userId) throws Exception {
         assertDeploymentNotLocked();
+        TranslationFileSupport.FileDescriptor descriptor = TranslationFileSupport.describe(fileName);
+        if (descriptor.kind() == TranslationFileSupport.InputKind.IMAGE && imageTranslationService == null) {
+            throw new IllegalStateException("图片翻译服务未启用");
+        }
         String taskId = UUID.randomUUID().toString().substring(0, 8);
         Path taskDir = Files.createDirectories(storageDir.resolve(taskId));
-        Path inputPdf = taskDir.resolve("input.pdf");
-        try (InputStream input = pdfStream) {
-            Files.copy(input, inputPdf, StandardCopyOption.REPLACE_EXISTING);
+        Path inputPath = descriptor.kind() == TranslationFileSupport.InputKind.IMAGE
+                ? taskDir.resolve("input-image." + descriptor.extension())
+                : taskDir.resolve("input.pdf");
+        try (InputStream input = inputStream) {
+            Files.copy(input, inputPath, StandardCopyOption.REPLACE_EXISTING);
         }
 
         try {
-            int totalPages = pdfParseService.getTotalPages(inputPdf);
+            int totalPages;
+            if (descriptor.kind() == TranslationFileSupport.InputKind.IMAGE) {
+                imageTranslationService.inspect(inputPath);
+                totalPages = 1;
+            } else {
+                totalPages = pdfParseService.getTotalPages(inputPath);
+            }
             TranslationSession session = new TranslationSession(taskId, fileName, taskDir);
+            session.setInputKind(descriptor.kind() == TranslationFileSupport.InputKind.IMAGE ? "image" : "pdf");
+            session.setInputExtension(descriptor.extension());
             session.setUserId(userId);
             session.setTotalPages(totalPages);
             session.setPageRange(1, totalPages);
-            PdfParseService.PdfTextQuality textQuality = pdfParseService.analyzeTextQuality(inputPdf);
-            if (textQuality != null && textQuality.suspicious()) {
-                session.setTextQualitySuspicious(true);
-                session.setTextQualityWarning(textQuality.warning());
+            if (descriptor.kind() == TranslationFileSupport.InputKind.PDF) {
+                PdfParseService.PdfTextQuality textQuality = pdfParseService.analyzeTextQuality(inputPath);
+                if (textQuality != null && textQuality.suspicious()) {
+                    session.setTextQualitySuspicious(true);
+                    session.setTextQualityWarning(textQuality.warning());
+                }
             }
             sessions.put(taskId, session);
             saveMetadata(session);
             cleanupHistory();
-            log.info("创建翻译预览: taskId={}, file={}, totalPages={}", taskId, fileName, totalPages);
+            log.info("创建翻译预览: taskId={}, file={}, inputKind={}, totalPages={}",
+                    taskId, fileName, session.getInputKind(), totalPages);
             return session;
         } catch (Exception e) {
             deleteRecursively(taskDir);
@@ -245,6 +286,16 @@ public class TranslationService {
 
     public String buildDownloadContent(String taskId) {
         TranslationSession session = requireCompletedSession(taskId);
+        if (session.isImageInput()) {
+            if (!Files.isRegularFile(session.getTranslatedTextPath())) {
+                throw new IllegalStateException("图片翻译文本尚未生成");
+            }
+            try {
+                return Files.readString(session.getTranslatedTextPath());
+            } catch (IOException e) {
+                throw new IllegalStateException("读取图片翻译文本失败: " + e.getMessage(), e);
+            }
+        }
         Path translatedPdf = session.getTranslatedPdfPath();
         if (!Files.isRegularFile(translatedPdf)) {
             throw new IllegalStateException("BabelDOC 翻译 PDF 尚未生成");
@@ -268,6 +319,22 @@ public class TranslationService {
         return pdf;
     }
 
+    public Path getTranslatedImage(String taskId, String mode) {
+        TranslationSession session = requireCompletedSession(taskId);
+        if (!session.isImageInput()) {
+            throw new IllegalArgumentException("当前任务不是图片翻译");
+        }
+        if (!Set.of("translated", "bilingual").contains(mode)) {
+            throw new IllegalArgumentException("不支持的图片模式: " + mode);
+        }
+        Path image = "bilingual".equals(mode)
+                ? session.getBilingualImagePath() : session.getTranslatedImagePath();
+        if (!Files.isRegularFile(image)) {
+            throw new IllegalStateException("图片翻译结果尚未生成");
+        }
+        return image;
+    }
+
     public String buildTextDownloadFileName(String taskId) {
         TranslationSession session = requireCompletedSession(taskId);
         return safeBaseName(session.getFileName()) + "-翻译结果.txt";
@@ -279,6 +346,15 @@ public class TranslationService {
         return safeBaseName(session.getFileName()) + suffix;
     }
 
+    public String buildImageDownloadFileName(String taskId, String mode) {
+        TranslationSession session = requireCompletedSession(taskId);
+        if (!session.isImageInput()) {
+            throw new IllegalArgumentException("当前任务不是图片翻译");
+        }
+        String suffix = "bilingual".equals(mode) ? "-双语对照版.png" : "-翻译版.png";
+        return safeBaseName(session.getFileName()) + suffix;
+    }
+
     private void runTranslation(TranslationSession session) {
         session.setStatus("translating");
         session.setProgressStage("starting");
@@ -286,14 +362,22 @@ public class TranslationService {
         session.setCompletedAt(0);
         saveMetadata(session);
         updateQueuePositions();
-        emit(session, "layout", Map.of("message", "正在使用 BabelDOC 分析版面、翻译并重建 PDF"));
+        emit(session, "layout", Map.of("message", session.isImageInput()
+                ? "正在使用视觉模型识别图片文字并生成译文图像"
+                : "正在使用 BabelDOC 分析版面、翻译并重建 PDF"));
 
         while (true) {
             try {
-                babelDocService.translatePdf(
-                        session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
-                        session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
-                        progress -> sendProgress(session, progress));
+                if (session.isImageInput()) {
+                    imageTranslationService.translateImage(
+                            session.getInputImagePath(), session.getTaskDir(), session.getFileName(), session.getFontFamily(),
+                            progress -> sendProgress(session, progress));
+                } else {
+                    babelDocService.translatePdf(
+                            session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
+                            session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
+                            progress -> sendProgress(session, progress));
+                }
                 session.setProgress(100);
                 session.setProgressStage("completed");
                 session.setCompletedAt(System.currentTimeMillis());
@@ -375,9 +459,7 @@ public class TranslationService {
     private String safeBaseName(String fileName) {
         String name = fileName == null ? "" : fileName;
         name = name.replaceAll("[\\\\/\\r\\n\\t\\p{Cntrl}\"]", "_").trim();
-        if (name.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
-            name = name.substring(0, name.length() - 4).trim();
-        }
+        name = name.replaceFirst("(?i)\\.(pdf|png|jpe?g|gif|bmp)$", "").trim();
         name = name.replaceAll("^[. ]+|[. ]+$", "");
         if (name.isBlank()) {
             name = "翻译结果";
@@ -505,7 +587,7 @@ public class TranslationService {
         if (session.isQuotaRequired() && session.getCreditTransactionId() == null && quotaService != null) {
             session.setCreditTransactionId(quotaService.findSpendTransactionId(session.getTaskId()));
         }
-        if (!session.isCreationReady() || !Files.isRegularFile(session.getInputPdfPath())) {
+        if (!session.isCreationReady() || !Files.isRegularFile(session.getInputPath())) {
             session.setStatus("error");
             session.setProgressStage("error");
             session.setErrorMessage("服务在翻译任务资料写入完成前重启，请重新上传");
@@ -551,11 +633,8 @@ public class TranslationService {
         incompleteSessions.stream()
                 .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt))
                 .forEach(session -> {
-                    if (!Files.isRegularFile(session.getInputPdfPath())) {
-                        session.setStatus("error");
-                        session.setProgressStage("error");
-                        session.setErrorMessage("后端重启后未找到原始 PDF，请重新上传");
-                        saveMetadata(session);
+                    if (!Files.isRegularFile(session.getInputPath())) {
+                        failRecoveredSession(session, "后端重启后未找到原始文件，请重新上传");
                         return;
                     }
 
@@ -569,41 +648,106 @@ public class TranslationService {
                         executor.execute(() -> runTranslation(session));
                         log.info("恢复未完成翻译任务: taskId={}, file={}", session.getTaskId(), session.getFileName());
                     } catch (RejectedExecutionException e) {
-                        session.setStatus("error");
-                        session.setProgressStage("error");
-                        session.setErrorMessage("后端重启后翻译队列已满，请重新提交");
-                        saveMetadata(session);
+                        failRecoveredSession(session, "后端重启后翻译队列已满，请重新提交");
                     }
                 });
         updateQueuePositions();
     }
 
-    private void saveMetadata(TranslationSession session) {
+    /** Recovery runs after the initial pending-refund sweep, so it must compensate immediately. */
+    private void failRecoveredSession(TranslationSession session, String message) {
+        session.setStatus("error");
+        session.setProgressStage("error");
+        session.setErrorMessage(message);
+        saveMetadata(session);
         try {
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(session.getMetadataPath().toFile(), session);
-        } catch (IOException e) {
-            log.warn("保存翻译任务记录失败: taskId={}", session.getTaskId(), e);
+            refundIfNeeded(session, "翻译恢复失败自动退回额度");
+        } catch (RuntimeException refundError) {
+            session.setRefundPending(true);
+            session.setRefundError(refundError.getMessage());
+            saveMetadata(session);
         }
     }
 
-    private void cleanupHistory() {
-        int keep = Math.max(1, config.getMaxHistory());
+    private void saveMetadata(TranslationSession session) {
+        Path metadata = session.getMetadataPath();
+        Path temporary = null;
+        try {
+            Files.createDirectories(metadata.getParent());
+            temporary = Files.createTempFile(metadata.getParent(), "task-", ".json.tmp");
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(temporary.toFile(), session);
+            try (FileChannel channel = FileChannel.open(temporary, java.nio.file.StandardOpenOption.WRITE)) {
+                channel.force(true);
+            }
+            try {
+                Files.move(temporary, metadata, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            } catch (AtomicMoveNotSupportedException unsupported) {
+                Files.move(temporary, metadata, StandardCopyOption.REPLACE_EXISTING);
+            }
+            forceMetadataDirectory(metadata.getParent());
+        } catch (IOException e) {
+            log.warn("保存翻译任务记录失败: taskId={}", session.getTaskId(), e);
+        } finally {
+            if (temporary != null) {
+                try {
+                    Files.deleteIfExists(temporary);
+                } catch (IOException ignored) {
+                    // A later save or normal task-directory cleanup removes an abandoned temp file.
+                }
+            }
+        }
+    }
+
+    /** Best effort: supported Unix filesystems persist the rename's directory entry here. */
+    private void forceMetadataDirectory(Path directory) {
+        try (FileChannel channel = FileChannel.open(directory, java.nio.file.StandardOpenOption.READ)) {
+            channel.force(true);
+        } catch (IOException | UnsupportedOperationException ignored) {
+            // Some local filesystems do not permit opening a directory channel.
+        }
+    }
+
+    public void cleanupHistory() {
         List<TranslationSession> previews = sessions.values().stream()
                 .filter(session -> "preview".equals(session.getStatus()))
                 .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt).reversed())
                 .toList();
-        cleanupSessionsAfter(previews, keep);
+        cleanupSessionsAfter(previews);
 
         List<TranslationSession> terminal = sessions.values().stream()
                 .filter(session -> Set.of("completed", "error").contains(session.getStatus()))
                 .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt).reversed())
                 .toList();
-        cleanupSessionsAfter(terminal, keep);
+        cleanupSessionsAfter(terminal);
     }
 
-    private void cleanupSessionsAfter(List<TranslationSession> orderedSessions, int keep) {
-        for (int index = keep; index < orderedSessions.size(); index++) {
-            TranslationSession session = orderedSessions.get(index);
+    private int maxPerUserHistory() {
+        return runtimeConfig == null ? Math.max(1, config.getMaxHistory()) : runtimeConfig.translationMaxHistory();
+    }
+
+    private int maxTotalHistory() {
+        return runtimeConfig == null ? Math.max(maxPerUserHistory(), config.getMaxGlobalHistory()) : runtimeConfig.translationMaxGlobalHistory();
+    }
+
+    /** Previews and terminal jobs retain independent bounded lists, matching the existing task-state lifecycle. */
+    private void cleanupSessionsAfter(List<TranslationSession> orderedSessions) {
+        Map<Long, Integer> perUserCounts = new HashMap<>();
+        Set<String> keep = new HashSet<>();
+        for (TranslationSession session : orderedSessions) {
+            long userId = session.getUserId();
+            int count = perUserCounts.getOrDefault(userId, 0);
+            if (count >= maxPerUserHistory()) continue;
+            perUserCounts.put(userId, count + 1);
+            keep.add(session.getTaskId());
+        }
+        int globalCount = 0;
+        for (TranslationSession session : orderedSessions) {
+            if (!keep.contains(session.getTaskId())) continue;
+            if (globalCount++ < maxTotalHistory()) continue;
+            keep.remove(session.getTaskId());
+        }
+        for (TranslationSession session : orderedSessions) {
+            if (keep.contains(session.getTaskId())) continue;
             sessions.remove(session.getTaskId(), session);
             deleteRecursively(session.getTaskDir());
         }
@@ -666,6 +810,10 @@ public class TranslationService {
         return switch (stage) {
             case "queued" -> "等待后台翻译";
             case "starting" -> "正在启动 BabelDOC";
+            case "image-loading" -> "正在读取图片";
+            case "image-vision" -> "正在用视觉模型识别并翻译文字";
+            case "image-render" -> "正在把译文覆盖回图片";
+            case "image-export" -> "正在生成译文图像和 PDF";
             case "resource-downgrade" -> "内存压力较高，已切换稳定模式重试";
             case "chunk-wait" -> "正在释放内存，准备下一批";
             case "chunk-completed" -> "已完成一批页面";

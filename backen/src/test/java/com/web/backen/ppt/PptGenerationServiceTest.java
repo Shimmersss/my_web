@@ -14,6 +14,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.Base64;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -83,11 +84,12 @@ class PptGenerationServiceTest {
         try {
             PptGenerationSession first = service.createTask(
                     "First", "html-reveal-white", 100, null, null,
-                    root, "same-request", "html", "auto");
+                    root, "same-request", "html", "auto", "strict", "Microsoft YaHei");
             PptGenerationSession duplicate = service.createTask(
                     "First", "html-reveal-white", 100, null, null,
-                    root, "same-request", "html", "auto");
+                    root, "same-request", "html", "auto", "strict", "Microsoft YaHei");
             assertEquals(first.getTaskId(), duplicate.getTaskId());
+            assertEquals("strict", first.getVisualMode());
             awaitStatus(service, first.getTaskId(), "completed");
 
             assertThrows(IllegalArgumentException.class,
@@ -97,6 +99,7 @@ class PptGenerationServiceTest {
             awaitStatus(service, revision.getTaskId(), "completed");
             assertEquals(first.getTaskId(), revision.getRevisionOfTaskId());
             assertEquals("把结论页改成三项行动计划", revision.getRevisionPrompt());
+            assertEquals("strict", revision.getVisualMode());
             assertTrue(Files.isRegularFile(revision.getTaskDir().resolve("previous-agent-plan.json")));
             assertTrue(Files.isRegularFile(revision.getTaskDir().resolve("previous-sources.json")));
         } finally {
@@ -227,11 +230,47 @@ class PptGenerationServiceTest {
         }
     }
 
+    @Test
+    void historyKeepsFivePerUserAndTwentyGlobally() throws Exception {
+        PptGenerationService service = service(successfulRunner(), null);
+        try {
+            AuthUser root = new AuthUser(1, "root", "ROOT", 0, true);
+            List<AuthUser> firstUsers = java.util.stream.IntStream.rangeClosed(1, 4)
+                    .mapToObj(id -> id == 1 ? root : new AuthUser(id, "user" + id, "USER", 100, true))
+                    .toList();
+            for (AuthUser user : firstUsers) {
+                for (int index = 0; index < 5; index++) {
+                    PptGenerationSession task = service.createTask(
+                            "history-" + user.id() + "-" + index, "html-reveal-white", 100,
+                            null, null, user, null, "html", "off");
+                    awaitStatus(service, task.getTaskId(), "completed");
+                }
+            }
+            for (AuthUser user : firstUsers) {
+                if (!user.isRoot()) assertEquals(5, service.getRecentSessions(user, null).size());
+            }
+            assertEquals(20, service.getRecentSessions(root, null).size());
+
+            AuthUser fifth = new AuthUser(5, "user5", "USER", 100, true);
+            for (int index = 0; index < 5; index++) {
+                PptGenerationSession task = service.createTask(
+                        "history-5-" + index, "html-reveal-white", 100,
+                        null, null, fifth, null, "html", "off");
+                awaitStatus(service, task.getTaskId(), "completed");
+            }
+            assertEquals(5, service.getRecentSessions(fifth, null).size());
+            assertEquals(20, service.getRecentSessions(root, null).size());
+        } finally {
+            service.shutdown();
+        }
+    }
+
     private PptGenerationService service(PptAgentRunner runner, QuotaService quota) throws Exception {
         PptGenerationConfig config = new PptGenerationConfig();
         config.setStorageDir(tempDir.toString());
         config.setQueueCapacity(1);
-        config.setMaxHistory(10);
+        config.setMaxHistory(5);
+        config.setMaxGlobalHistory(20);
         PptInputExtractor extractor = mock(PptInputExtractor.class);
         when(extractor.extractPaperText(any(), any(), any(), anyInt(), anyInt(), anyInt())).thenReturn("");
         PptGenerationService service = new PptGenerationService(

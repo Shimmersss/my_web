@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import JSZip from 'jszip';
 import automizerPackage from 'pptx-automizer';
+import { isTemplatePlaceholder } from './plan-utils.mjs';
 
 const { Automizer, ModifyImageHelper, modify } = automizerPackage;
 const EMU_PER_INCH = 914400;
@@ -113,19 +114,21 @@ function elementNameIndexes(xml) {
   return indexes;
 }
 
-export function imageFillability(shape) {
+export function imageFillability(shape, slideSize = {}) {
   const hint = `${shape.name} ${shape.descr}`.toLowerCase();
   if (/logo|icon|avatar|badge|watermark|qr|二维码|校标|徽标|图标|页脚|装饰/.test(hint)) {
     return { fillable: false, fillableReason: 'decorative-or-brand-element' };
   }
-  const slideArea = 12_192_000 * 6_858_000;
+  const slideWidth = Number(slideSize.width || 12_192_000);
+  const slideHeight = Number(slideSize.height || 6_858_000);
+  const slideArea = slideWidth * slideHeight;
   const areaRatio = shape.width * shape.height / slideArea;
   const reachesSlideEdges = shape.x <= 120_000 && shape.y <= 120_000
-    && shape.x + shape.width >= 12_072_000
-    && shape.y + shape.height >= 6_738_000;
+    && shape.x + shape.width >= slideWidth - 120_000
+    && shape.y + shape.height >= slideHeight - 120_000;
   const outsideSlide = shape.x < 0 || shape.y < 0
-    || shape.x + shape.width > 12_192_000
-    || shape.y + shape.height > 6_858_000;
+    || shape.x + shape.width > slideWidth
+    || shape.y + shape.height > slideHeight;
   if (areaRatio >= 0.55 || reachesSlideEdges || outsideSlide) {
     return { fillable: false, fillableReason: 'background-or-outside-slide-picture' };
   }
@@ -177,6 +180,11 @@ export function physicalSlideNumber(sourceInfo) {
 export async function inspectTemplate(templateFile) {
   const zip = await JSZip.loadAsync(await fs.readFile(templateFile));
   const slideNames = await presentationSlideParts(zip);
+  const presentationXml = await zip.file('ppt/presentation.xml').async('string');
+  const slideSize = {
+    width: Number(presentationXml.match(/<p:sldSz\b[^>]*\bcx="(\d+)"/)?.[1] || 12_192_000),
+    height: Number(presentationXml.match(/<p:sldSz\b[^>]*\bcy="(\d+)"/)?.[1] || 6_858_000)
+  };
   const slides = [];
   for (const [index, name] of slideNames.entries()) {
     const xml = await zip.file(name).async('string');
@@ -192,7 +200,7 @@ export async function inspectTemplate(templateFile) {
       ...shape,
       slotId: `s${index + 1}-i${shapeIndex + 1}`,
       roleHint: shape.width * shape.height > 10_000_000_000_000 ? 'hero' : 'supporting',
-      ...imageFillability(shape)
+      ...imageFillability(shape, slideSize)
     }));
     slides.push({
       slide: index + 1,
@@ -213,25 +221,14 @@ function isFurniture(shape) {
     || (shape.maxFontPt > 0 && shape.maxFontPt < 9 && value.length < 18);
 }
 
-function generatedTextOptions(shape) {
-  // Use the same LibreOffice-visible font on development and production.
-  // macOS UI fonts such as PingFang can be listed by CoreText yet still lose
-  // CJK glyphs in headless LibreOffice exports.
-  const fontFace = process.env.PPT_AGENT_FONT_FACE || 'Noto Sans CJK SC';
-  return {
-    x: shape.x / EMU_PER_INCH,
-    y: shape.y / EMU_PER_INCH,
-    w: shape.width / EMU_PER_INCH,
-    h: shape.height / EMU_PER_INCH,
-    fontFace,
-    lang: 'zh-CN',
-    fontSize: Math.max(10, shape.maxFontPt || 18),
-    color: shape.color,
-    bold: shape.bold,
-    align: shape.align,
-    valign: 'mid',
-    margin: 0,
-    breakLine: false
+function setFontFace(fontFace = 'Microsoft YaHei') {
+  const value = String(fontFace || 'Microsoft YaHei').trim().slice(0, 120) || 'Microsoft YaHei';
+  return element => {
+    for (const tagName of ['a:defRPr', 'a:rPr', 'a:latin', 'a:ea', 'a:cs']) {
+      for (const node of element.getElementsByTagName(tagName)) {
+        node.setAttribute('typeface', value);
+      }
+    }
   };
 }
 
@@ -249,6 +246,106 @@ function nextRelationshipId(xml) {
 function xmlAttribute(tag, name) {
   const match = String(tag).match(new RegExp(`\\b${name}=(["'])(.*?)\\1`));
   return match?.[2] || '';
+}
+
+function elementSpans(xml, elementNames = ['grpSp', 'pic', 'sp']) {
+  const spans = [];
+  const stack = [];
+  const token = /<\/?p:(grpSp|pic|sp)(?:\s[^>]*)?>/g;
+  for (const match of String(xml).matchAll(token)) {
+    const tag = match[1];
+    const source = match[0];
+    if (!elementNames.includes(tag)) continue;
+    if (source.startsWith('</')) {
+      const index = stack.map(item => item.tag).lastIndexOf(tag);
+      if (index < 0) continue;
+      const item = stack.splice(index, 1)[0];
+      spans.push({ ...item, end: match.index + source.length });
+    } else if (!source.endsWith('/>')) {
+      stack.push({ tag, start: match.index, depth: stack.length });
+    }
+  }
+  return spans.sort((left, right) => left.start - right.start);
+}
+
+function relationshipTargets(xml) {
+  return new Map([...String(xml).matchAll(/<Relationship\b[^>]*\/>/g)].map(match => [
+    xmlAttribute(match[0], 'Id'),
+    xmlAttribute(match[0], 'Target')
+  ]));
+}
+
+function embeddedRelationshipIds(element) {
+  return [...String(element).matchAll(/\br:embed=(['"])(.*?)\1/g)].map(match => match[2]);
+}
+
+function pictureKey(element, indexedNames) {
+  const tag = String(element).match(/<p:cNvPr\b[^>]*>/)?.[0] || '';
+  const id = xmlAttribute(tag, 'id');
+  const name = decodeXml(xmlAttribute(tag, 'name'));
+  if (!id || !name) return '';
+  const nameIdx = indexedNames.get(`${id}\u0000${name}`) ?? 0;
+  return `${name}\u0000${nameIdx}`;
+}
+
+function isUserImageTarget(target, sourceImageNames) {
+  const normalized = path.posix.basename(String(target || '').replaceAll('\\\\', '/'));
+  return sourceImageNames.has(normalized);
+}
+
+function isExplicitImagePlaceholder(element) {
+  const metadata = String(element).match(/<p:cNvPr\b[^>]*\b(?:name|descr)="([^"]*)"/g)?.join(' ') || '';
+  return /placeholder|sample|示例图片|图片框|请上传|待补充|替换图片|image frame/i.test(metadata);
+}
+
+function stripStaticPictures(xml, relsXml, sourceImageNames, removablePictureKeys = new Set()) {
+  const targets = relationshipTargets(relsXml);
+  const indexedNames = elementNameIndexes(xml);
+  const spans = elementSpans(xml, ['pic']).sort((left, right) => right.start - left.start);
+  let output = String(xml);
+  for (const span of spans) {
+    const element = output.slice(span.start, span.end);
+    const keep = embeddedRelationshipIds(element).some(id => isUserImageTarget(targets.get(id), sourceImageNames));
+    const isStaticContentPicture = removablePictureKeys.has(pictureKey(element, indexedNames));
+    if (!keep && (isExplicitImagePlaceholder(element) || isStaticContentPicture)) {
+      output = `${output.slice(0, span.start)}${output.slice(span.end)}`;
+    }
+  }
+  return output;
+}
+
+/** Remove source-deck content photos unless the Agent explicitly replaced them. */
+export function stripStaticTemplateArtwork(xml, relsXml, sourceImageNames = [], removablePictureKeys = new Set()) {
+  const names = new Set((sourceImageNames || []).map(name =>
+    path.posix.basename(String(name).replaceAll('\\\\', '/'))));
+  return stripStaticPictures(String(xml), String(relsXml), names, removablePictureKeys);
+}
+
+async function stripStaticTemplateArtworkFromPackage(outputFile, sourceImages = [], plan = null, manifest = null) {
+  const zip = await JSZip.loadAsync(await fs.readFile(outputFile));
+  const sourceImageNames = sourceImages.map(item => path.basename(item.path || item.fileName || ''));
+  const orderedSlides = await presentationSlideParts(zip);
+  for (const [outputIndex, name] of orderedSlides.entries()) {
+    if (!/^ppt\/slides\/slide\d+\.xml$/.test(name)) continue;
+    const relName = name.replace('ppt/slides/', 'ppt/slides/_rels/') + '.rels';
+    const relFile = zip.file(relName);
+    if (!relFile) continue;
+    const slidePlan = plan?.slides?.[outputIndex];
+    const sourceInfo = manifest?.slides?.find(item => Number(item.slide) === Number(slidePlan?.sourceSlide));
+    const removablePictureKeys = new Set((sourceInfo?.imageSlots || [])
+      .filter(item => item.fillable === true)
+      .map(item => `${item.name}\u0000${item.nameIdx ?? 0}`));
+    const [xml, relsXml] = await Promise.all([
+      zip.file(name).async('string'),
+      relFile.async('string')
+    ]);
+    zip.file(name, stripStaticTemplateArtwork(xml, relsXml, sourceImageNames, removablePictureKeys));
+  }
+  await fs.writeFile(outputFile, await zip.generateAsync({
+    type: 'nodebuffer',
+    compression: 'DEFLATE',
+    compressionOptions: { level: 6 }
+  }));
 }
 
 export async function sanitizeGeneratedPptx(outputFile) {
@@ -383,7 +480,7 @@ export async function attachSpeakerNotes(outputFile, plan, sources) {
   await fs.writeFile(outputFile, await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } }));
 }
 
-export async function composeTemplatePptx({ templateFile, outputFile, plan, manifest, sources = [], sourceImages = [] }) {
+export async function composeTemplatePptx({ templateFile, outputFile, plan, manifest, sources = [], sourceImages = [], fontFamily = 'Microsoft YaHei' }) {
   const templateDir = path.dirname(templateFile);
   const outputDir = path.dirname(outputFile);
   const templateName = path.basename(templateFile);
@@ -421,20 +518,26 @@ export async function composeTemplatePptx({ templateFile, outputFile, plan, mani
     });
     presentation.addSlide('source', sourcePhysicalSlide, slide => {
       const edits = new Map((slidePlan.textEdits || []).map(item => [String(item.slotId), String(item.text || '')]));
-      for (const shape of sourceInfo.textShapes.filter(shape => !isFurniture(shape))) {
+      for (const shape of sourceInfo.textShapes) {
         const value = edits.get(shape.slotId);
+        const removableInheritedText = isTemplatePlaceholder(value || shape.text, shape.text);
+        if (shape.furniture && !removableInheritedText) continue;
         if (!value) {
           slide.removeElement({ name: shape.name, nameIdx: shape.nameIdx });
           continue;
         }
-        // Existing source decks commonly embed font subsets. Replacing their XML text
-        // directly makes newly introduced CJK glyphs disappear in LibreOffice. Clear the
-        // inherited text run, then write into the exact inherited frame with a portable
-        // system font. Geometry, background, master, images, and z-order stay inherited.
-        slide.modifyElement({ name: shape.name, nameIdx: shape.nameIdx }, [modify.setText('')]);
-        slide.generate(pptxSlide => {
-          pptxSlide.addText(value, generatedTextOptions(shape));
-        }, `Agent text ${outputIndex + 1}-${shape.slotId}`);
+        if (removableInheritedText) {
+          slide.removeElement({ name: shape.name, nameIdx: shape.nameIdx });
+          continue;
+        }
+        // Edit the inherited text body in place. This keeps the source deck's
+        // geometry, paragraph styling, z-order, master and background intact;
+        // the selectable face is applied to existing runs instead of adding a
+        // new topmost text box that can make the page look unrelated to the template.
+        slide.modifyElement({ name: shape.name, nameIdx: shape.nameIdx }, [
+          modify.setText(value),
+          setFontFace(fontFamily)
+        ]);
       }
       for (const edit of slidePlan.imageEdits || []) {
         const slot = (sourceInfo.imageSlots || []).find(item => item.slotId === edit.slotId);
@@ -449,6 +552,7 @@ export async function composeTemplatePptx({ templateFile, outputFile, plan, mani
   }
 
   await presentation.write(path.basename(outputFile));
+  await stripStaticTemplateArtworkFromPackage(outputFile, sourceImages, plan, manifest);
   await sanitizeGeneratedPptx(outputFile);
   await attachSpeakerNotes(outputFile, plan, sources);
   return frameMap;

@@ -2,8 +2,12 @@ package com.web.backen.auth;
 
 import com.web.backen.config.BabelDocConfig;
 import com.web.backen.config.LlmConfig;
+import com.web.backen.config.PptGenerationConfig;
+import com.web.backen.config.TranslationConfig;
 import com.web.backen.config.ZoteroConfig;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.annotation.PostConstruct;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,7 +38,14 @@ public class RuntimeConfigService {
     private static final String TAVILY_URL = "api.tavily.url";
     private static final String TAVILY_KEY = "api.tavily.key";
     private static final String TAVILY_MAX_SEARCHES = "api.tavily.max-searches";
+    private static final String MIMO_SEARCH_URL = "ppt.mimo-search.url";
+    private static final String MIMO_SEARCH_KEY = "ppt.mimo-search.key";
+    private static final String MIMO_SEARCH_MODEL = "ppt.mimo-search.model";
     private static final String SEMANTIC_SCHOLAR_KEY = "api.semantic-scholar.key";
+    private static final String PPT_MAX_HISTORY = "ppt.history.max-per-user";
+    private static final String PPT_MAX_GLOBAL_HISTORY = "ppt.history.max-total";
+    private static final String TRANSLATION_MAX_HISTORY = "translation.history.max-per-user";
+    private static final String TRANSLATION_MAX_GLOBAL_HISTORY = "translation.history.max-total";
     private static final String GITHUB_RANKING_ENABLED = "github.ranking.enabled";
     private static final String GITHUB_RANKING_INTERVAL_HOURS = "github.ranking.interval.hours";
     private static final String GITHUB_RANKING_MANUAL_COOLDOWN_MINUTES = "github.ranking.manual.cooldown.minutes";
@@ -49,12 +60,23 @@ public class RuntimeConfigService {
     private final LlmConfig llm;
     private final BabelDocConfig babeldoc;
     private final ZoteroConfig zotero;
+    private final PptGenerationConfig pptGeneration;
+    private final TranslationConfig translation;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public RuntimeConfigService(JdbcTemplate jdbc, LlmConfig llm, BabelDocConfig babeldoc, ZoteroConfig zotero) {
+        this(jdbc, llm, babeldoc, zotero, null, null);
+    }
+
+    @Autowired
+    public RuntimeConfigService(JdbcTemplate jdbc, LlmConfig llm, BabelDocConfig babeldoc,
+                                ZoteroConfig zotero, PptGenerationConfig pptGeneration, TranslationConfig translation) {
         this.jdbc = jdbc;
         this.llm = llm;
         this.babeldoc = babeldoc;
         this.zotero = zotero;
+        this.pptGeneration = pptGeneration;
+        this.translation = translation;
     }
 
     /** 将上一轮错误的一刀切登录策略恢复为原有默认值；之后完全由 root 后台配置。 */
@@ -102,6 +124,18 @@ public class RuntimeConfigService {
         int fallback = clamp(intValue(System.getenv("TAVILY_MAX_SEARCHES"), 6), 1, 12);
         return safeInt(TAVILY_MAX_SEARCHES, fallback, 1, 12);
     }
+    /**
+     * MiMo documents an OpenAI-style Base URL ending in /v1, whereas earlier
+     * versions of the admin card asked for the complete endpoint. Accept both
+     * forms so a documented Base URL is not posted directly and rejected as a
+     * 404 by OpenResty.
+     */
+    public String mimoSearchEndpoint() {
+        return llmEndpoint(value(MIMO_SEARCH_URL,
+                pptGeneration == null ? "" : pptGeneration.getMimoSearchEndpoint()), "OPENAI");
+    }
+    public String mimoSearchKey() { return value(MIMO_SEARCH_KEY, pptGeneration == null ? "" : pptGeneration.getMimoSearchKey()); }
+    public String mimoSearchModel() { return value(MIMO_SEARCH_MODEL, pptGeneration == null ? "mimo-v2.5" : pptGeneration.getMimoSearchModel()); }
     public String semanticScholarKey() { return value(SEMANTIC_SCHOLAR_KEY, System.getenv().getOrDefault("SEMANTIC_SCHOLAR_API_KEY", "")); }
     public String visibilityLevel(String feature) { return value("visibility." + feature, VISIBILITY_DEFAULTS.getOrDefault(feature, "PUBLIC")); }
 
@@ -115,6 +149,8 @@ public class RuntimeConfigService {
                 "apiKeyConfigured", !zoteroKey().isBlank(),
                 "apiKeyHint", zoteroKey().isBlank() ? "未配置" : "已配置（" + zoteroKey().substring(Math.max(0, zoteroKey().length() - 4)) + "）")));
         data.put("githubRanking", githubRankingSettings());
+        data.put("pptRetention", pptRetentionSettings());
+        data.put("translationRetention", translationRetentionSettings());
         data.put("research", new LinkedHashMap<>(Map.of(
                 "name", "Tavily / 演示研究",
                 "baseUrl", tavilyUrl(),
@@ -123,6 +159,13 @@ public class RuntimeConfigService {
                 "apiKeyConfigured", !tavilyKey().isBlank(),
                 "apiKeyHint", secretHint(tavilyKey()),
                 "semanticScholarKeyHint", secretHint(semanticScholarKey()))));
+        data.put("mimoSearch", new LinkedHashMap<>(Map.of(
+                "name", "Mimo 原生联网搜索",
+                "baseUrl", mimoSearchEndpoint(),
+                "model", mimoSearchModel(),
+                "configured", !mimoSearchEndpoint().isBlank() && !mimoSearchKey().isBlank(),
+                "apiKeyConfigured", !mimoSearchKey().isBlank(),
+                "apiKeyHint", secretHint(mimoSearchKey()))));
         Map<String, String> visibility = new LinkedHashMap<>();
         VISIBILITY_DEFAULTS.forEach((feature, fallback) -> visibility.put(feature, value("visibility." + feature, fallback)));
         data.put("visibility", visibility);
@@ -151,6 +194,12 @@ public class RuntimeConfigService {
             saveSecret(TAVILY_KEY, researchBody.get("apiKey"), tavilyKey());
             saveSecret(SEMANTIC_SCHOLAR_KEY, researchBody.get("semanticScholarApiKey"), semanticScholarKey());
         }
+        Map<String, Object> mimoSearchBody = map(body.get("mimoSearch"));
+        if (!mimoSearchBody.isEmpty()) {
+            save(MIMO_SEARCH_URL, llmEndpoint(string(mimoSearchBody, "baseUrl"), "OPENAI"));
+            save(MIMO_SEARCH_MODEL, text(string(mimoSearchBody, "model"), mimoSearchModel()));
+            saveSecret(MIMO_SEARCH_KEY, mimoSearchBody.get("apiKey"), mimoSearchKey());
+        }
         Map<String, Object> rankingBody = map(body.get("githubRanking"));
         if (!rankingBody.isEmpty()) {
             save(GITHUB_RANKING_ENABLED, Boolean.toString(booleanValue(rankingBody.get("enabled"), githubRankingEnabled())));
@@ -159,6 +208,22 @@ public class RuntimeConfigService {
             save(GITHUB_RANKING_WEEKLY_LIMIT, Integer.toString(clamp(intValue(rankingBody.get("weeklyLimit"), githubRankingWeeklyLimit()), 1, 20)));
             save(GITHUB_RANKING_MONTHLY_LIMIT, Integer.toString(clamp(intValue(rankingBody.get("monthlyLimit"), githubRankingMonthlyLimit()), 1, 20)));
             save(GITHUB_RANKING_AI_ENABLED, Boolean.toString(booleanValue(rankingBody.get("aiSummaryEnabled"), githubRankingAiEnabled())));
+        }
+        Map<String, Object> pptRetentionBody = map(body.get("pptRetention"));
+        if (!pptRetentionBody.isEmpty()) {
+            int maxPerUser = clamp(intValue(pptRetentionBody.get("maxPerUser"), pptMaxHistory()), 1, 100);
+            int maxTotal = Math.max(maxPerUser,
+                    clamp(intValue(pptRetentionBody.get("maxTotal"), pptMaxGlobalHistory()), 1, 1000));
+            save(PPT_MAX_HISTORY, Integer.toString(maxPerUser));
+            save(PPT_MAX_GLOBAL_HISTORY, Integer.toString(maxTotal));
+        }
+        Map<String, Object> translationRetentionBody = map(body.get("translationRetention"));
+        if (!translationRetentionBody.isEmpty()) {
+            int maxPerUser = clamp(intValue(translationRetentionBody.get("maxPerUser"), translationMaxHistory()), 1, 100);
+            int maxTotal = Math.max(maxPerUser,
+                    clamp(intValue(translationRetentionBody.get("maxTotal"), translationMaxGlobalHistory()), 1, 1000));
+            save(TRANSLATION_MAX_HISTORY, Integer.toString(maxPerUser));
+            save(TRANSLATION_MAX_GLOBAL_HISTORY, Integer.toString(maxTotal));
         }
         Map<String, Object> visibility = map(body.get("visibility"));
         VISIBILITY_DEFAULTS.forEach((feature, fallback) -> {
@@ -200,6 +265,40 @@ public class RuntimeConfigService {
         }
     }
 
+    /** Tests the same native Mimo web_search payload used by the PPT worker. */
+    public Map<String, Object> testMimoSearchConnection(String baseUrl, String apiKey, String model) {
+        if (apiKey == null || apiKey.isBlank()) throw new AuthException(400, "Mimo 联网搜索 API Key 未配置");
+        if (model == null || model.isBlank()) throw new AuthException(400, "Mimo 联网搜索模型未配置");
+        try {
+            URI endpoint = URI.create(llmEndpoint(baseUrl, "OPENAI"));
+            String requestBody = objectMapper.writeValueAsString(Map.of(
+                    "model", model.trim(),
+                    "messages", List.of(Map.of("role", "user", "content", "Use web search and reply only with OK.")),
+                    "max_completion_tokens", 32,
+                    "thinking", Map.of("type", "disabled"),
+                    "tools", List.of(Map.of("type", "web_search", "max_keyword", 1, "force_search", true, "limit", 1)),
+                    "tool_choice", "auto"));
+            HttpRequest request = HttpRequest.newBuilder(endpoint)
+                    .timeout(Duration.ofSeconds(30))
+                    .header("Content-Type", "application/json")
+                    .header("api-key", apiKey)
+                    .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
+                    .build();
+            HttpResponse<String> response = HttpClient.newBuilder()
+                    .connectTimeout(Duration.ofSeconds(10)).build()
+                    .send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new AuthException(502, "Mimo 联网搜索连通性测试失败：HTTP " + response.statusCode()
+                        + "：" + conciseUpstreamError(response.body(), apiKey));
+            }
+            return Map.of("message", "Mimo 原生联网搜索连接成功", "configured", true, "model", model.trim());
+        } catch (AuthException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AuthException(502, "Mimo 联网搜索连通性测试失败：" + (e.getMessage() == null ? "未知错误" : e.getMessage()));
+        }
+    }
+
     private String value(String key, String fallback) {
         List<String> values = jdbc.queryForList("SELECT setting_value FROM app_settings WHERE setting_key=?", String.class, key);
         return values.isEmpty() || values.get(0).isBlank() ? (fallback == null ? "" : fallback) : values.get(0);
@@ -215,6 +314,23 @@ public class RuntimeConfigService {
     }
     private String secretHint(String value) {
         return value == null || value.isBlank() ? "未配置" : "已配置（" + value.substring(Math.max(0, value.length() - 4)) + "）";
+    }
+    /** Root-only connection tests may surface a short provider error, never an API key or whole body. */
+    private String conciseUpstreamError(String responseBody, String apiKey) {
+        String body = responseBody == null ? "" : responseBody.trim();
+        String detail = "";
+        try {
+            Map<String, Object> root = objectMapper.readValue(body, Map.class);
+            Object error = root.get("error");
+            if (error instanceof Map<?, ?> errorMap) {
+                Object message = errorMap.containsKey("message") ? errorMap.get("message") : errorMap.get("msg");
+                detail = message == null ? "" : String.valueOf(message);
+            }
+            if (detail.isBlank()) detail = String.valueOf(root.getOrDefault("message", root.getOrDefault("msg", "")));
+        } catch (Exception ignored) { }
+        if (detail.isBlank()) detail = body;
+        detail = detail.replace(apiKey == null ? "" : apiKey, "***").replaceAll("[\\r\\n\\t]+", " ").trim();
+        return detail.isBlank() ? "上游未返回详情" : detail.substring(0, Math.min(detail.length(), 360));
     }
     private String text(String value, String fallback) { return value == null || value.isBlank() ? fallback : value.trim(); }
     public Map<String, Object> githubRankingSettings() {
@@ -232,6 +348,30 @@ public class RuntimeConfigService {
     public int githubRankingWeeklyLimit() { return safeInt(GITHUB_RANKING_WEEKLY_LIMIT, 10, 1, 20); }
     public int githubRankingMonthlyLimit() { return safeInt(GITHUB_RANKING_MONTHLY_LIMIT, 10, 1, 20); }
     public boolean githubRankingAiEnabled() { return Boolean.parseBoolean(value(GITHUB_RANKING_AI_ENABLED, "true")); }
+    public Map<String, Object> pptRetentionSettings() {
+        return new LinkedHashMap<>(Map.of(
+                "maxPerUser", pptMaxHistory(),
+                "maxTotal", pptMaxGlobalHistory()));
+    }
+    public int pptMaxHistory() {
+        return safeInt(PPT_MAX_HISTORY, pptGeneration == null ? 5 : pptGeneration.getMaxHistory(), 1, 100);
+    }
+    public int pptMaxGlobalHistory() {
+        int fallback = pptGeneration == null ? 20 : pptGeneration.getMaxGlobalHistory();
+        return Math.max(pptMaxHistory(), safeInt(PPT_MAX_GLOBAL_HISTORY, fallback, 1, 1000));
+    }
+    public Map<String, Object> translationRetentionSettings() {
+        return new LinkedHashMap<>(Map.of(
+                "maxPerUser", translationMaxHistory(),
+                "maxTotal", translationMaxGlobalHistory()));
+    }
+    public int translationMaxHistory() {
+        return safeInt(TRANSLATION_MAX_HISTORY, translation == null ? 5 : translation.getMaxHistory(), 1, 100);
+    }
+    public int translationMaxGlobalHistory() {
+        int fallback = translation == null ? 20 : translation.getMaxGlobalHistory();
+        return Math.max(translationMaxHistory(), safeInt(TRANSLATION_MAX_GLOBAL_HISTORY, fallback, 1, 1000));
+    }
     private int safeInt(String key, int fallback, int min, int max) { return clamp(intValue(value(key, Integer.toString(fallback)), fallback), min, max); }
     private int clamp(int value, int min, int max) { return Math.max(min, Math.min(max, value)); }
     private int intValue(Object value, int fallback) { try { return Integer.parseInt(value == null ? "" : value.toString().trim()); } catch (Exception e) { return fallback; } }

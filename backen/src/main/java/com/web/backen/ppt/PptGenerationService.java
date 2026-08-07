@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.QuotaService;
+import com.web.backen.auth.RuntimeConfigService;
 import com.web.backen.config.PptGenerationConfig;
 import com.web.backen.translate.LlmService;
 import jakarta.annotation.PostConstruct;
@@ -69,6 +70,7 @@ public class PptGenerationService {
     private final ObjectMapper objectMapper;
     private final QuotaService quotaService;
     private final PptAgentRunner agentRunner;
+    private final RuntimeConfigService runtimeConfig;
     private final ConcurrentHashMap<String, PptGenerationSession> sessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, String> idempotencyClaims = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
@@ -79,23 +81,30 @@ public class PptGenerationService {
 
     public PptGenerationService(PptGenerationConfig config, PptInputExtractor inputExtractor,
                                 LlmService ignored, ObjectMapper objectMapper) {
-        this(config, inputExtractor, ignored, objectMapper, null, null);
+        this(config, inputExtractor, ignored, objectMapper, null, null, null);
     }
 
     public PptGenerationService(PptGenerationConfig config, PptInputExtractor inputExtractor,
                                 LlmService ignored, ObjectMapper objectMapper, QuotaService quotaService) {
-        this(config, inputExtractor, ignored, objectMapper, quotaService, null);
+        this(config, inputExtractor, ignored, objectMapper, quotaService, null, null);
+    }
+
+    public PptGenerationService(PptGenerationConfig config, PptInputExtractor inputExtractor,
+                                LlmService ignored, ObjectMapper objectMapper, QuotaService quotaService,
+                                PptAgentRunner agentRunner) {
+        this(config, inputExtractor, ignored, objectMapper, quotaService, agentRunner, null);
     }
 
     @Autowired
     public PptGenerationService(PptGenerationConfig config, PptInputExtractor inputExtractor,
                                 LlmService ignored, ObjectMapper objectMapper, QuotaService quotaService,
-                                PptAgentRunner agentRunner) {
+                                PptAgentRunner agentRunner, RuntimeConfigService runtimeConfig) {
         this.config = config;
         this.inputExtractor = inputExtractor;
         this.objectMapper = objectMapper;
         this.quotaService = quotaService;
         this.agentRunner = agentRunner;
+        this.runtimeConfig = runtimeConfig;
         this.executor = new ThreadPoolExecutor(
                 1, 1, 0L, TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(Math.max(1, config.getQueueCapacity())),
@@ -115,8 +124,8 @@ public class PptGenerationService {
         reconcilePendingRefunds();
         recoverPendingSessions();
         cleanupHistory();
-        log.info("PPT Agent 队列已启动: workers=1, queueCapacity={}, maxHistory={}, storage={}",
-                config.getQueueCapacity(), config.getMaxHistory(), storageDir);
+        log.info("PPT Agent 队列已启动: workers=1, queueCapacity={}, maxPerUserHistory={}, maxTotalHistory={}, storage={}",
+                config.getQueueCapacity(), maxPerUserHistory(), maxTotalHistory(), storageDir);
     }
 
     @PreDestroy
@@ -213,6 +222,22 @@ public class PptGenerationService {
     public PptGenerationSession createTask(String prompt, String templateKey, int extractionPercent,
                                            MultipartFile templateFile, MultipartFile sourceFile, AuthUser user,
                                            String clientRequestId, String outputFormat, String researchMode) throws IOException {
+        return createTask(prompt, templateKey, extractionPercent, templateFile, sourceFile, user,
+                clientRequestId, outputFormat, researchMode, "best_effort", "Microsoft YaHei");
+    }
+
+    public PptGenerationSession createTask(String prompt, String templateKey, int extractionPercent,
+                                           MultipartFile templateFile, MultipartFile sourceFile, AuthUser user,
+                                           String clientRequestId, String outputFormat, String researchMode,
+                                           String fontFamily) throws IOException {
+        return createTask(prompt, templateKey, extractionPercent, templateFile, sourceFile, user,
+                clientRequestId, outputFormat, researchMode, "best_effort", fontFamily);
+    }
+
+    public PptGenerationSession createTask(String prompt, String templateKey, int extractionPercent,
+                                           MultipartFile templateFile, MultipartFile sourceFile, AuthUser user,
+                                           String clientRequestId, String outputFormat, String researchMode,
+                                           String visualMode, String fontFamily) throws IOException {
         assertDeploymentNotLocked();
         String cleanPrompt = validatePrompt(prompt);
         String normalizedOutputFormat = normalizeOutputFormat(outputFormat);
@@ -242,6 +267,8 @@ public class PptGenerationService {
         session.setOutputFormat(normalizedOutputFormat);
         session.setTemplateKey(normalizeTemplateKey(templateKey, normalizedOutputFormat));
         session.setResearchMode(normalizeResearchMode(researchMode));
+        session.setVisualMode(normalizeVisualMode(visualMode));
+        session.setFontFamily(normalizeFontFamily(fontFamily));
         session.setQuotaRequired(user != null && quotaService != null && !user.isRoot());
         session.setExtractionPercent(100);
         session.setStatus("creating");
@@ -300,6 +327,8 @@ public class PptGenerationService {
         session.setTemplateKey(original.getTemplateKey());
         session.setOutputFormat(original.getOutputFormat());
         session.setResearchMode(original.getResearchMode());
+        session.setVisualMode(original.getVisualMode());
+        session.setFontFamily(original.getFontFamily());
         session.setTemplateFileName(original.getTemplateFileName());
         session.setPaperFileName(original.getPaperFileName());
         session.setRevisionOfTaskId(original.getTaskId());
@@ -507,24 +536,38 @@ public class PptGenerationService {
         updateQueuePositions();
         Set<String> allowed = parseAccessTokens(accessTokens);
         if (allowed.isEmpty()) return List.of();
-        return sessions.values().stream()
+        return terminalSessions()
                 .filter(session -> allowed.contains(session.getAccessToken()))
-                .sorted(Comparator.comparingLong(PptGenerationSession::getCreatedAt).reversed())
-                .limit(Math.max(1, config.getMaxHistory())).toList();
+                .limit(maxPerUserHistory()).toList();
     }
 
     public List<PptGenerationSession> getRecentSessions(AuthUser user, String accessTokens) {
         Set<String> allowed = parseAccessTokens(accessTokens);
-        return recent().filter(session -> (user != null && (user.isRoot() || session.getUserId() == user.id()))
-                || allowed.contains(session.getAccessToken())).toList();
+        if (user != null && user.isRoot()) return recent().toList();
+        return terminalSessions()
+                .filter(session -> (user != null && session.getUserId() == user.id())
+                        || allowed.contains(session.getAccessToken()))
+                .limit(maxPerUserHistory()).toList();
     }
 
     private Stream<PptGenerationSession> recent() {
+        return terminalSessions().limit(maxTotalHistory());
+    }
+
+    private Stream<PptGenerationSession> terminalSessions() {
         updateQueuePositions();
         return sessions.values().stream()
                 .filter(session -> Set.of("completed", "error").contains(session.getStatus()))
-                .sorted(Comparator.comparingLong(PptGenerationSession::getCreatedAt).reversed())
-                .limit(Math.max(1, config.getMaxHistory()));
+                .sorted(Comparator.comparingLong(PptGenerationSession::getCreatedAt).reversed());
+    }
+
+    private int maxPerUserHistory() {
+        return runtimeConfig == null ? Math.max(1, config.getMaxHistory()) : runtimeConfig.pptMaxHistory();
+    }
+
+    private int maxTotalHistory() {
+        int fallback = Math.max(maxPerUserHistory(), config.getMaxGlobalHistory());
+        return runtimeConfig == null ? fallback : Math.max(maxPerUserHistory(), runtimeConfig.pptMaxGlobalHistory());
     }
 
     Path getOutput(String taskId) {
@@ -659,6 +702,26 @@ public class PptGenerationService {
         String value = researchMode == null ? "auto" : researchMode.trim().toLowerCase(Locale.ROOT);
         if (!Set.of("auto", "off").contains(value)) throw new IllegalArgumentException("联网研究模式只能是 auto 或 off");
         return value;
+    }
+
+    private String normalizeVisualMode(String visualMode) {
+        String value = visualMode == null ? "best_effort" : visualMode.trim().toLowerCase(Locale.ROOT);
+        if (!Set.of("best_effort", "strict").contains(value)) {
+            throw new IllegalArgumentException("配图模式只能是 best_effort 或 strict");
+        }
+        return value;
+    }
+
+    private String normalizeFontFamily(String fontFamily) {
+        String value = fontFamily == null ? "" : fontFamily.trim().toLowerCase(Locale.ROOT);
+        return switch (value) {
+            case "microsoft yahei", "微软雅黑", "microsoft-yahei", "yahei" -> "Microsoft YaHei";
+            case "noto sans cjk sc", "noto-sans-cjk-sc" -> "Noto Sans CJK SC";
+            case "pingfang sc", "苹方", "pingfang-sc" -> "PingFang SC";
+            case "source han sans sc", "思源黑体", "source-han-sans-sc" -> "Source Han Sans SC";
+            case "simsun", "宋体", "simsun-sc" -> "SimSun";
+            default -> "Microsoft YaHei";
+        };
     }
 
     private void assertDeploymentNotLocked() {
@@ -948,13 +1011,29 @@ public class PptGenerationService {
                 });
     }
 
-    private void cleanupHistory() {
+    public void cleanupHistory() {
         List<PptGenerationSession> terminal = sessions.values().stream()
                 .filter(session -> Set.of("completed", "error").contains(session.getStatus()))
                 .filter(session -> !session.isRefundPending())
                 .sorted(Comparator.comparingLong(PptGenerationSession::getCreatedAt).reversed()).toList();
-        for (int index = Math.max(1, config.getMaxHistory()); index < terminal.size(); index++) {
-            PptGenerationSession session = terminal.get(index);
+        Map<Long, Integer> perUserCounts = new LinkedHashMap<>();
+        Set<String> keep = new HashSet<>();
+        for (PptGenerationSession session : terminal) {
+            long userId = session.getUserId();
+            int count = perUserCounts.getOrDefault(userId, 0);
+            if (count < maxPerUserHistory()) {
+                perUserCounts.put(userId, count + 1);
+                keep.add(session.getTaskId());
+            }
+        }
+        int globalCount = 0;
+        for (PptGenerationSession session : terminal) {
+            if (!keep.contains(session.getTaskId())) continue;
+            if (globalCount++ < maxTotalHistory()) continue;
+            keep.remove(session.getTaskId());
+        }
+        for (PptGenerationSession session : terminal) {
+            if (keep.contains(session.getTaskId())) continue;
             sessions.remove(session.getTaskId(), session);
             deleteRecursively(session.getTaskDir());
         }

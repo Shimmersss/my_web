@@ -3,7 +3,44 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { runCommand } from './render.mjs';
+import { captureScreenshot, resolveExecutable, runCommand } from './render.mjs';
+
+test('captureScreenshot retries only the transient Chrome capture protocol failure', async () => {
+  let shots = 0;
+  let paints = 0;
+  const page = {
+    evaluate: async () => { paints += 1; },
+    screenshot: async () => {
+      shots += 1;
+      if (shots === 1) throw new Error('Page.captureScreenshot: Unable to capture screenshot');
+    },
+    waitForTimeout: async () => {}
+  };
+  await captureScreenshot(page, '/tmp/slide.png');
+  assert.equal(shots, 2);
+  assert.equal(paints, 2);
+});
+
+test('captureScreenshot does not hide non-transient screenshot failures', async () => {
+  const page = {
+    evaluate: async () => {},
+    screenshot: async () => { throw new Error('disk write failed'); },
+    waitForTimeout: async () => { throw new Error('must not retry'); }
+  };
+  await assert.rejects(() => captureScreenshot(page, '/tmp/slide.png'), /disk write failed/);
+});
+
+test('resolveExecutable finds binaries that are available on PATH', async () => {
+  const node = await resolveExecutable(process.execPath, 'Node');
+  assert.equal(node, process.execPath);
+});
+
+test('resolveExecutable reports a missing binary before spawn', async () => {
+  await assert.rejects(
+    resolveExecutable('/definitely/missing/ppt-agent-binary', 'LibreOffice'),
+    /LibreOffice不可用.*PPT_GENERATION_\*_COMMAND/
+  );
+});
 
 test('timed out render command kills its process group', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'ppt-agent-process-'));

@@ -63,10 +63,6 @@
               <span v-if="rankingData.updatedAt" class="ranking-updated">
                 更新于 {{ formatDateTime(rankingData.updatedAt) }}
               </span>
-              <n-button secondary :loading="rankingLoading" @click="loadRankings(true)">
-                <template #icon><n-icon><RefreshOutline /></n-icon></template>
-                更新榜单
-              </n-button>
             </div>
           </div>
 
@@ -312,7 +308,6 @@ const rankingData = ref({})
 const rankingPeriod = ref('weekly')
 const rankingLoading = ref(false)
 let rankingRefreshTimer = null
-let rankingWarmupTimer = null
 
 const currentRanking = computed(() => rankingData.value[rankingPeriod.value] || { projects: [] })
 
@@ -430,20 +425,16 @@ async function loadProjectConfigs() {
   }
 }
 
-async function loadRankings(refresh = false) {
+async function loadRankings() {
   rankingLoading.value = true
   try {
-    const res = await getGithubRankings(refresh)
+    const res = await getGithubRankings()
     if (res.code === 200 && res.data) rankingData.value = res.data
   } catch (e) {
     // 榜单失败不影响指定项目展示，下一次定时刷新继续尝试。
     console.warn('GitHub 排行榜读取失败:', e)
   } finally {
     rankingLoading.value = false
-  }
-  if (refresh) {
-    if (rankingWarmupTimer) window.clearTimeout(rankingWarmupTimer)
-    rankingWarmupTimer = window.setTimeout(() => loadRankings(), 2500)
   }
 }
 
@@ -552,7 +543,6 @@ function handleRankingVisibility() {
 
 onBeforeUnmount(() => {
   if (rankingRefreshTimer) window.clearInterval(rankingRefreshTimer)
-  if (rankingWarmupTimer) window.clearTimeout(rankingWarmupTimer)
   document.removeEventListener('visibilitychange', handleRankingVisibility)
 })
 </script>

@@ -62,6 +62,8 @@ public class PptAgentRunner {
         job.put("templateKey", session.getTemplateKey());
         job.put("outputFormat", session.getOutputFormat());
         job.put("researchMode", session.getResearchMode());
+        job.put("visualMode", session.getVisualMode());
+        job.put("fontFamily", session.getFontFamily());
         job.put("maxSources", config.getAgentMaxSources());
         job.put("maxSearches", runtime.tavilyMaxSearches());
         job.put("templateFile", session.getTemplatePath().toAbsolutePath().normalize().toString());
@@ -133,6 +135,9 @@ public class PptAgentRunner {
         env.put("PPT_AGENT_TAVILY_ENDPOINT", runtime.tavilyUrl());
         env.put("PPT_AGENT_TAVILY_KEY", runtime.tavilyKey());
         env.put("PPT_AGENT_SEMANTIC_SCHOLAR_KEY", runtime.semanticScholarKey());
+        putIfConfigured(env, "PPT_AGENT_MIMO_SEARCH_ENDPOINT", runtime.mimoSearchEndpoint());
+        putIfConfigured(env, "PPT_AGENT_MIMO_SEARCH_KEY", runtime.mimoSearchKey());
+        putIfConfigured(env, "PPT_AGENT_MIMO_SEARCH_MODEL", runtime.mimoSearchModel());
         putIfConfigured(env, "PPT_AGENT_SOFFICE", config.getSofficeCommand());
         putIfConfigured(env, "PPT_AGENT_PDFTOPPM", config.getPdftoppmCommand());
         putIfConfigured(env, "PPT_AGENT_CHROME", config.getChromeCommand());

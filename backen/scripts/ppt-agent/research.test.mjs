@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dedupe, fetchText, readBoundedBody, roundRobin, safeEndpoint, setResearchTransportForTest } from './research.mjs';
+import { dedupe, discoverPageImages, fallbackImageQuery, fetchText, isSyntheticDnsAddress, readBoundedBody, relevantPageImageSources, roundRobin, safeEndpoint, setResearchTransportForTest } from './research.mjs';
+
+test('fallback image search keeps the presentation topic', () => {
+  assert.equal(fallbackImageQuery([' Sword Art Online 角色关系 ']), 'Sword Art Online 角色关系');
+  assert.equal(fallbackImageQuery(['', '第二查询']), '第二查询');
+  assert.equal(fallbackImageQuery([]), '');
+});
 
 test('safeEndpoint blocks SSRF targets and credentials', () => {
   for (const url of [
@@ -18,6 +24,13 @@ test('safeEndpoint blocks SSRF targets and credentials', () => {
     'https://search.attacker.example/search'
   ]) assert.throws(() => safeEndpoint(url), /公网 HTTPS/);
   assert.equal(safeEndpoint('https://api.tavily.com/search').hostname, 'api.tavily.com');
+});
+
+test('synthetic public DNS answers are recognized separately from private targets', () => {
+  assert.equal(isSyntheticDnsAddress('198.18.1.80'), true);
+  assert.equal(isSyntheticDnsAddress('198.19.255.254'), true);
+  assert.equal(isSyntheticDnsAddress('198.20.1.1'), false);
+  assert.equal(isSyntheticDnsAddress('10.0.0.1'), false);
 });
 
 test('chunked response is cancelled before exceeding the byte limit', async () => {
@@ -51,6 +64,16 @@ test('provider results are interleaved before the source limit is applied', () =
   ]);
 });
 
+test('source-page image extraction excludes unrelated papers and ranks topical web pages', () => {
+  const selected = relevantPageImageSources([
+    { title: 'Introduction to Electromagnetism', url: 'https://arxiv.org/abs/2109.00606', type: 'paper' },
+    { title: 'Generic virtual reality review', url: 'https://example.com/vr', type: 'web' },
+    { title: 'Sword Art Online official chronology', url: 'https://www.swordart-onlineusa.com/chronology', type: 'web', query: 'Sword Art Online official' },
+    { title: '刀剑神域 - 萌娘百科', url: 'https://zh.moegirl.org.cn/刀剑神域', type: 'web' }
+  ], '生成刀剑神域相关 PPT，要求图文并茂');
+  assert.deepEqual(selected.map(item => item.title), ['Sword Art Online official chronology', '刀剑神域 - 萌娘百科']);
+});
+
 test('trusted loopback proxy remains active for allowlisted research requests', { concurrency: false }, async () => {
   const previous = process.env.PPT_AGENT_PROXY_URL;
   process.env.PPT_AGENT_PROXY_URL = 'http://127.0.0.1:7890';
@@ -65,6 +88,32 @@ test('trusted loopback proxy remains active for allowlisted research requests', 
   try {
     assert.equal(await fetchText('https://api.tavily.com/search'), '{}');
     assert.equal(receivedDispatcher, undefined);
+  } finally {
+    if (previous === undefined) delete process.env.PPT_AGENT_PROXY_URL;
+    else process.env.PPT_AGENT_PROXY_URL = previous;
+    setResearchTransportForTest();
+  }
+});
+
+test('Mimo source pages expose only explicit preview image metadata', { concurrency: false }, async () => {
+  const previous = process.env.PPT_AGENT_PROXY_URL;
+  process.env.PPT_AGENT_PROXY_URL = 'http://127.0.0.1:7890';
+  setResearchTransportForTest({
+    resolve: async value => ({ endpoint: new URL(value), address: '93.184.216.34', family: 4 }),
+    fetch: async (_url, options) => {
+      assert.match(String(options.headers.accept), /text\/html/);
+      return new Response('<html><head><meta property="og:image" content="https://cdn.example.com/sao.jpg"></head></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html; charset=utf-8' }
+      });
+    }
+  });
+  try {
+    const result = await discoverPageImages([{ title: 'Sword Art Online official page', url: 'https://example.com/sao' }]);
+    assert.equal(result.failures.length, 0);
+    assert.equal(result.assets[0].url, 'https://cdn.example.com/sao.jpg');
+    assert.equal(result.assets[0].sourceUrl, 'https://example.com/sao');
+    assert.match(result.assets[0].license, /verification/);
   } finally {
     if (previous === undefined) delete process.env.PPT_AGENT_PROXY_URL;
     else process.env.PPT_AGENT_PROXY_URL = previous;

@@ -34,19 +34,30 @@
               </div>
             </div>
 
+            <div class="field-block font-family-block">
+              <div class="field-label">生成字体</div>
+              <label class="font-family-control">
+                <span class="font-family-control__label">应用于自动填充的文字与 HTML 页面</span>
+                <select v-model="fontFamily" aria-label="生成字体">
+                  <option v-for="font in fontOptions" :key="font.value" :value="font.value">{{ font.label }}</option>
+                </select>
+              </label>
+              <p class="field-hint">默认微软雅黑；PPTX 会直接修改模板原文字框，模板的字号、位置和段落结构保持不变。</p>
+            </div>
+
             <div class="field-block">
                 <div class="field-label">{{ outputFormat === 'html' ? 'HTML 交互主题' : 'PPTX 通用模板' }}</div>
               <div class="template-picker">
                 <div class="template-groups">
                   <section v-for="group in templateGroups" :key="group.key" class="template-group">
-                    <button type="button" class="template-group__header" :aria-expanded="expandedTemplateCategories.has(group.key)" @click="toggleTemplateCategory(group.key)">
+                    <div class="template-group__header">
                       <span>
                         <strong>{{ group.label }}</strong>
-                        <small>{{ group.items.length }} 套模板</small>
+                        <small>从 {{ group.items.length }} 套样式中选择</small>
                       </span>
-                      <span class="template-group__meta">{{ expandedTemplateCategories.has(group.key) ? '收起' : '展开' }} <b>{{ expandedTemplateCategories.has(group.key) ? '−' : '+' }}</b></span>
-                    </button>
-                    <div v-show="expandedTemplateCategories.has(group.key)" class="template-grid">
+                      <span class="template-group__meta">点击缩略图预览</span>
+                    </div>
+                    <div class="template-grid">
                       <button
                         v-for="template in group.items"
                         :key="template.key"
@@ -55,17 +66,27 @@
                         :aria-pressed="templateKey === template.key"
                         @click="selectTemplate(template)"
                       >
-                        <div class="swatches">
-                          <span v-for="color in template.palette" :key="color" :style="{ backgroundColor: `#${color}` }"></span>
+                        <div class="template-card__cover" :style="templatePreviewStyle(buildTemplatePreviewSlides(template)[0])">
+                          <img
+                            v-if="templatePreviewImageUrl(0, template)"
+                            :src="templatePreviewImageUrl(0, template)"
+                            :alt="`${template.name}封面预览`"
+                            loading="lazy"
+                            @error="markTemplatePreviewImageError(0, template.key)"
+                          />
+                          <div v-else class="template-card__fallback" :class="`template-preview-design--${template.design || 'academic'}`">
+                            <span>01</span>
+                            <strong>{{ template.name }}</strong>
+                          </div>
+                          <span v-if="templateKey === template.key" class="template-card__selected">已选择</span>
                         </div>
-                        <strong>{{ template.name }}</strong>
-                        <small>{{ template.description }}</small>
-                        <small class="template-complexity">{{ template.complexity === 'rich' ? '复杂布局 · 图文/数据槽位' : '通用布局' }}</small>
-                        <small v-if="template.recommendedFor?.length" class="template-recommendation">适合：{{ template.recommendedFor.join(' · ') }}</small>
-                        <span v-if="template.source" class="template-source" @click.stop>
-                          <a :href="template.sourceUrl" target="_blank" rel="noreferrer">{{ template.source }} · {{ template.license || '开源' }}</a>
+                        <span class="template-card__body">
+                          <strong>{{ template.name }}</strong>
+                          <small>{{ template.description }}</small>
+                          <span class="swatches" aria-label="模板配色">
+                            <i v-for="color in template.palette.slice(0, 5)" :key="color" :style="{ backgroundColor: `#${color}` }"></i>
+                          </span>
                         </span>
-                        <small v-if="template.usageNote" class="template-usage-note">{{ template.usageNote }}</small>
                       </button>
                     </div>
                   </section>
@@ -77,6 +98,11 @@
                       <span class="template-showcase__eyebrow">STYLE PREVIEW · 5 PAGES</span>
                       <h3>{{ selectedTemplate?.name || '学术蓝' }}</h3>
                       <p>{{ selectedTemplate?.description || '选择模板后查看页面节奏和配色示意。' }}</p>
+                      <div class="template-showcase__facts">
+                        <span>{{ selectedTemplate?.complexity === 'rich' ? '复杂布局 · 图文/数据槽位' : '通用布局' }}</span>
+                        <span v-if="selectedTemplate?.recommendedFor?.length">适合：{{ selectedTemplate.recommendedFor.join(' · ') }}</span>
+                        <a v-if="selectedTemplate?.source" :href="selectedTemplate.sourceUrl" target="_blank" rel="noreferrer">{{ selectedTemplate.source }} · {{ selectedTemplate.license || '开源' }}</a>
+                      </div>
                     </div>
                     <n-tag size="small" type="success">当前选择</n-tag>
                   </div>
@@ -137,8 +163,9 @@
                       ? '这里展示的是来自 GitHub 成品 PPTX 的真实 5 页样稿；生成时会保留该模板的构图语言并用可编辑内容替换示例文字。'
                       : outputFormat === 'html'
                         ? '这里展示的是由 reveal.js HTML 内核真实渲染出的 5 页样稿；生成后支持键盘翻页、全屏和网页二次编辑。'
-                        : '这里展示的是所选源模板真实渲染出的 5 页样稿；Agent 会逐页选择源版式并在原位编辑。' }}
+                      : '这里展示的是所选源模板真实渲染出的 5 页样稿；Agent 会逐页选择源版式并在原位编辑。' }}
                   </p>
+                  <p v-if="selectedTemplate?.usageNote" class="template-showcase__license-note">授权提示：{{ selectedTemplate.usageNote }}</p>
                 </section>
               </div>
             </div>
@@ -186,6 +213,20 @@
               </div>
             </div>
 
+            <div class="field-block">
+              <div class="field-label">网络配图</div>
+              <div class="output-format-picker" role="radiogroup" aria-label="网络配图">
+                <button type="button" role="radio" :class="['output-format-card', { active: visualMode === 'best_effort' }]" :aria-checked="visualMode === 'best_effort'" @click="visualMode = 'best_effort'">
+                  <strong>尽力配图</strong>
+                  <span>默认。优先使用贴题网络图；找不到可靠素材时保留版式，不会因此失败</span>
+                </button>
+                <button type="button" role="radio" :class="['output-format-card', { active: visualMode === 'strict' }]" :aria-checked="visualMode === 'strict'" @click="visualMode = 'strict'">
+                  <strong>严格图文并茂</strong>
+                  <span>要求至少一张贴题网络图成功落到内容页；无可用素材时任务会明确失败</span>
+                </button>
+              </div>
+            </div>
+
             <div class="actions">
               <n-button type="primary" size="large" :loading="isSubmitting" @click="submitTask">
                 <template #icon><n-icon><SparklesOutline /></n-icon></template>
@@ -198,6 +239,33 @@
             </div>
 
             <n-alert v-if="errorMsg" type="error" :title="errorMsg" closable @close="errorMsg = ''" />
+          </section>
+
+          <section v-else-if="step === 'running' && taskFailed" class="panel ppt-failure-panel" role="alert" aria-live="assertive">
+            <div class="failure-hero">
+              <div class="failure-icon" aria-hidden="true">
+                <n-icon size="46"><AlertCircleOutline /></n-icon>
+              </div>
+              <div>
+                <span class="failure-eyebrow">GENERATION FAILED · 生成失败</span>
+                <h2>这份 {{ outputFormatLabel(activeTask) }} 没有生成完成</h2>
+                <p>{{ runningTitle }}</p>
+              </div>
+            </div>
+
+            <div class="failure-reason">
+              <strong>失败原因</strong>
+              <p>{{ errorMsg || activeTask?.errorMessage || '后台任务未能完成，请重新提交。' }}</p>
+            </div>
+
+            <div class="failure-actions">
+              <n-button type="primary" size="large" @click="backToForm">
+                <template #icon><n-icon><RefreshOutline /></n-icon></template>
+                重新生成
+              </n-button>
+              <n-button size="large" @click="resetAndBackToForm">重新选择资料</n-button>
+            </div>
+            <p class="failure-hint">返回生成界面后可以检查提示词、模板和资料，再次提交任务。</p>
           </section>
 
           <section v-else-if="step === 'running'" class="panel progress-panel">
@@ -219,7 +287,6 @@
             <div class="actions">
               <n-button @click="backToForm">返回表单</n-button>
             </div>
-            <n-alert v-if="errorMsg" type="error" :title="errorMsg" />
           </section>
 
           <section v-else class="panel result-panel result-panel--wide">
@@ -337,6 +404,7 @@ import {
   DocumentTextOutline,
   DownloadOutline,
   EaselOutline,
+  AlertCircleOutline,
   RefreshOutline,
   SparklesOutline,
   TimeOutline
@@ -363,10 +431,11 @@ const prompt = ref('')
 const templateKey = ref('github-bjtu-blue')
 const outputFormat = ref('pptx')
 const researchMode = ref('auto')
+const visualMode = ref('best_effort')
+const fontFamily = ref('Microsoft YaHei')
 const templateFile = ref(null)
 const sourceFile = ref(null)
 const templates = ref(defaultTemplates())
-const expandedTemplateCategories = ref(new Set(['core']))
 const isSubmitting = ref(false)
 const isLoadingRecent = ref(false)
 const recentTasks = ref([])
@@ -380,6 +449,7 @@ const previewLoading = ref(false)
 const previewError = ref('')
 const revisionPrompt = ref('')
 const revisionSubmitting = ref(false)
+const taskFailed = ref(false)
 const templatePreviewIndex = ref(0)
 const templatePreviewImageErrors = ref(new Set())
 const previewSelectedIndex = ref(0)
@@ -400,6 +470,13 @@ const PPT_TASK_TOKENS_KEY = 'ppt-generation-task-tokens'
 const PPT_ACTIVE_TASK_KEY = 'ppt-generation-active-task'
 const pptCreditPerTask = ref(10)
 const pptEstimatedCredits = computed(() => pptCreditPerTask.value)
+const fontOptions = [
+  { value: 'Microsoft YaHei', label: '微软雅黑（默认）' },
+  { value: 'Noto Sans CJK SC', label: 'Noto Sans CJK SC' },
+  { value: 'PingFang SC', label: '苹方' },
+  { value: 'Source Han Sans SC', label: '思源黑体' },
+  { value: 'SimSun', label: '宋体' }
+]
 const previewSlides = computed(() => previewData.value?.slides || [])
 const formatTemplates = computed(() => templates.value.filter(item => !Array.isArray(item.formats) || item.formats.includes(outputFormat.value)))
 const selectedTemplate = computed(() => formatTemplates.value.find(item => item.key === templateKey.value) || formatTemplates.value[0] || null)
@@ -442,7 +519,6 @@ watch(outputFormat, () => {
   const first = formatTemplates.value[0]
   if (first && !formatTemplates.value.some(item => item.key === templateKey.value)) templateKey.value = first.key
   templatePreviewIndex.value = 0
-  if (templateKey.value) ensureTemplateCategoryExpanded(templateKey.value)
 })
 
 onBeforeUnmount(() => {
@@ -485,6 +561,7 @@ function handleSourceSelect(event) {
 
 async function submitTask() {
   errorMsg.value = ''
+  taskFailed.value = false
   if (!prompt.value.trim() && !sourceFile.value) {
     errorMsg.value = '请输入提示词，或上传一份资料'
     return
@@ -517,6 +594,8 @@ async function submitTask() {
       templateKey: templateKey.value,
       outputFormat: outputFormat.value,
       researchMode: researchMode.value,
+      visualMode: visualMode.value,
+      fontFamily: fontFamily.value,
       templateFile: templateFile.value,
       sourceFile: sourceFile.value,
       idempotencyKey: pendingIdempotencyKey
@@ -576,6 +655,7 @@ function openStream(id) {
     if (generation !== streamGeneration || taskId.value !== streamTaskId) return
     const data = parseEvent(event)
     errorMsg.value = data.message || 'PPT 生成失败'
+    taskFailed.value = true
     closeStream()
     await refreshStatus()
     if (generation !== streamGeneration || taskId.value !== streamTaskId) return
@@ -593,6 +673,7 @@ async function openRecent(item) {
   stopPolling()
   setActiveTask(item)
   errorMsg.value = item.errorMessage || ''
+  taskFailed.value = item.status === 'error'
   if (item.status === 'completed') {
     step.value = 'result'
     await loadPreview()
@@ -611,10 +692,12 @@ async function refreshStatus() {
     if (taskId.value !== requestedTaskId || taskAccessToken.value !== requestedToken) return
     setActiveTask(res.data)
     if (res.data.status === 'completed') {
+      taskFailed.value = false
       stopPolling()
       step.value = 'result'
       await loadPreview()
     } else if (res.data.status === 'error') {
+      taskFailed.value = true
       stopPolling()
       errorMsg.value = res.data.errorMessage || 'PPT 生成失败'
     }
@@ -629,10 +712,8 @@ async function loadTemplates() {
     const res = await getPptTemplates()
     if (Array.isArray(res.data) && res.data.length) templates.value = res.data
     if (!formatTemplates.value.some(item => item.key === templateKey.value)) templateKey.value = formatTemplates.value[0]?.key || 'github-bjtu-blue'
-    ensureTemplateCategoryExpanded(templateKey.value)
   } catch {
     templates.value = defaultTemplates()
-    ensureTemplateCategoryExpanded(templateKey.value)
   }
 }
 
@@ -640,7 +721,6 @@ function selectTemplate(template) {
   if (!template?.key) return
   templateKey.value = template.key
   templatePreviewIndex.value = 0
-  ensureTemplateCategoryExpanded(template.key)
 }
 
 function templatePreviewAssetKey(index, template = selectedTemplate.value) {
@@ -657,21 +737,6 @@ function markTemplatePreviewImageError(index, templateKeyValue = selectedTemplat
   const next = new Set(templatePreviewImageErrors.value)
   next.add(templatePreviewAssetKey(index, { key: templateKeyValue }))
   templatePreviewImageErrors.value = next
-}
-
-function toggleTemplateCategory(key) {
-  const next = new Set(expandedTemplateCategories.value)
-  if (next.has(key)) next.delete(key)
-  else next.add(key)
-  expandedTemplateCategories.value = next
-}
-
-function ensureTemplateCategoryExpanded(key) {
-  const template = templates.value.find(item => item.key === key)
-  if (!template) return
-  const next = new Set(expandedTemplateCategories.value)
-  next.add(templateCategoryKey(template))
-  expandedTemplateCategories.value = next
 }
 
 async function loadPreview() {
@@ -775,6 +840,7 @@ async function submitRevision() {
   }
   revisionSubmitting.value = true
   errorMsg.value = ''
+  taskFailed.value = false
   const idempotencyKey = typeof globalThis.crypto?.randomUUID === 'function'
     ? globalThis.crypto.randomUUID()
     : `ppt-revise-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -823,12 +889,14 @@ async function loadRecent() {
 function setActiveTask(data) {
   if (!data?.taskId) return
   activeTask.value = data
+  taskFailed.value = data.status === 'error'
   taskId.value = data.taskId
   taskAccessToken.value = data.accessToken || tokenForTask(data.taskId)
   persistActiveTask()
   templateKey.value = data.templateKey || templateKey.value
   outputFormat.value = normalizeOutputFormat(data.outputFormat || outputFormat.value)
-  ensureTemplateCategoryExpanded(templateKey.value)
+  visualMode.value = data.visualMode === 'strict' ? 'strict' : 'best_effort'
+  fontFamily.value = data.fontFamily || fontFamily.value
   progress.value = Number(data.progress || 0)
   progressStage.value = data.progressStage || 'queued'
   progressStageLabel.value = data.progressStageLabel || statusLabel(data)
@@ -847,9 +915,16 @@ async function downloadCurrent() {
 function resetForm() {
   prompt.value = ''
   researchMode.value = 'auto'
+  visualMode.value = 'best_effort'
+  fontFamily.value = 'Microsoft YaHei'
   templateFile.value = null
   sourceFile.value = null
   errorMsg.value = ''
+}
+
+function resetAndBackToForm() {
+  resetForm()
+  backToForm()
 }
 
 function backToForm() {
@@ -858,6 +933,8 @@ function backToForm() {
   clearActiveTask()
   step.value = 'form'
   activeTask.value = null
+  taskFailed.value = false
+  errorMsg.value = ''
   taskId.value = ''
   taskAccessToken.value = ''
   progress.value = 0
@@ -1173,6 +1250,31 @@ p {
   color: #334155;
 }
 
+.font-family-control {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 15px;
+  border: 1px solid #d2cabc;
+  background: #fbf9f3;
+}
+
+.font-family-control__label {
+  color: #64748b;
+  font-size: 13px;
+}
+
+.font-family-control select {
+  min-width: 190px;
+  padding: 9px 32px 9px 11px;
+  border: 1px solid #cbd5e1;
+  border-radius: 2px;
+  background: #fff;
+  color: #0f172a;
+  font: inherit;
+}
+
 .output-format-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1209,7 +1311,7 @@ p {
 }
 
 .output-format-card:focus-visible,
-.template-group__header:focus-visible {
+.template-card:focus-visible {
   outline: 3px solid rgba(37, 99, 235, .28);
   outline-offset: 3px;
 }
@@ -1217,41 +1319,36 @@ p {
 .template-grid,
 .upload-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
 .template-picker {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(340px, .95fr);
-  gap: 18px;
+  grid-template-columns: minmax(410px, 1.12fr) minmax(360px, .88fr);
+  gap: 22px;
   align-items: start;
 }
 
 .template-groups {
   display: grid;
-  gap: 8px;
+  gap: 18px;
   min-width: 0;
 }
 
 .template-group {
   min-width: 0;
-  border: 1px solid #d2cabc;
-  background: rgba(255, 255, 255, .38);
 }
 
 .template-group__header {
-  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 11px 13px;
-  border: 0;
-  background: transparent;
+  padding: 0 0 10px;
+  border-bottom: 1px solid #ded6c7;
   color: #334155;
   text-align: left;
-  cursor: pointer;
 }
 
 .template-group__header > span:first-child {
@@ -1270,28 +1367,13 @@ p {
   white-space: nowrap;
 }
 
-.template-group__meta b {
-  display: inline-grid;
-  width: 18px;
-  height: 18px;
-  margin-left: 5px;
-  place-items: center;
-  border: 1px solid #cbd5e1;
-  border-radius: 999px;
-  color: #8f2a22;
-  font-size: 15px;
-  line-height: 1;
-}
-
-.template-group .template-grid {
-  padding: 0 10px 10px;
-}
-
 .template-showcase {
   min-width: 0;
-  padding: 14px;
+  padding: 16px;
   border: 1px solid #d2cabc;
-  background: #f4efe7;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #f8f3eb, #f1eadf);
+  box-shadow: 0 12px 28px rgba(95, 55, 31, .08);
 }
 
 .template-showcase__heading {
@@ -1311,6 +1393,33 @@ p {
   max-width: 330px;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.template-showcase__facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.template-showcase__facts span,
+.template-showcase__facts a {
+  padding: 4px 7px;
+  border: 1px solid rgba(126, 105, 76, .18);
+  border-radius: 999px;
+  color: #6c5d4c;
+  background: rgba(255, 255, 255, .56);
+  font-size: 10px;
+  line-height: 1.2;
+  text-decoration: none;
+}
+
+.template-showcase__facts a {
+  color: #9d3329;
+}
+
+.template-showcase__facts a:hover {
+  border-color: #b83126;
 }
 
 .template-showcase__eyebrow {
@@ -1574,39 +1683,131 @@ p {
   line-height: 1.45;
 }
 
+.template-showcase__license-note {
+  margin-top: 8px;
+  padding: 8px 9px;
+  border-left: 3px solid #c48d30;
+  color: #7a5c30;
+  background: rgba(255, 248, 226, .72);
+  font-size: 11px;
+  line-height: 1.45;
+}
+
 .template-card,
 .file-box {
   border: 1px solid #d2cabc;
-  border-radius: 2px;
+  border-radius: 10px;
   background: #fbf9f3;
-  padding: 16px;
+  padding: 0;
   text-align: left;
   cursor: pointer;
-  transition: border-color 0.18s ease, box-shadow 0.18s ease;
+  font: inherit;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background .18s ease;
   min-width: 0;
 }
 
 .template-card.active {
   border-color: #b83126;
-  background: #f3eadf;
-  box-shadow: 0 0 0 3px rgba(184, 49, 38, 0.1);
+  background: #fffaf5;
+  box-shadow: 0 0 0 3px rgba(184, 49, 38, .11), 0 12px 24px rgba(95, 55, 31, .12);
 }
 
-.template-card:focus-visible,
-.file-box:focus-within {
-  outline: 3px solid rgba(37, 99, 235, 0.28);
-  outline-offset: 3px;
+.template-card:hover {
+  transform: translateY(-2px);
+  border-color: #bda88f;
+  box-shadow: 0 10px 20px rgba(95, 55, 31, .1);
 }
 
-.template-card strong,
+.template-card__cover {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border-radius: 9px 9px 0 0;
+  background: var(--template-bg);
+}
+
+.template-card__cover img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.template-card__fallback {
+  position: relative;
+  display: grid;
+  align-content: end;
+  height: 100%;
+  padding: 13px;
+  overflow: hidden;
+  color: var(--template-text);
+  background: var(--template-bg);
+}
+
+.template-card__fallback::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 4px;
+  background: var(--template-accent);
+}
+
+.template-card__fallback span {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  color: var(--template-highlight);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.template-card__fallback strong {
+  position: relative;
+  z-index: 1;
+  color: inherit;
+  font-size: 16px;
+  line-height: 1.15;
+}
+
+.template-card__selected {
+  position: absolute;
+  top: 9px;
+  left: 9px;
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: #fff;
+  background: #b83126;
+  box-shadow: 0 2px 8px rgba(78, 20, 15, .28);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .04em;
+}
+
+.template-card__body {
+  display: grid;
+  gap: 5px;
+  padding: 11px 12px 12px;
+}
+
+.template-card__body > strong,
 .file-box strong {
   display: block;
-  margin-top: 8px;
   color: #0f172a;
   overflow-wrap: anywhere;
 }
 
-.template-card small,
+.template-card__body > small {
+  display: block;
+  color: #64748b;
+  font-size: 11px;
+  line-height: 1.35;
+  display: -webkit-box;
+  min-height: 30px;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
 .file-box span,
 .field-hint {
   display: block;
@@ -1616,33 +1817,15 @@ p {
   line-height: 1.5;
 }
 
-.template-source {
-  display: block;
-  margin-top: 8px;
-  font-size: 11px;
-}
-
-.template-recommendation {
-  color: #8f2a22 !important;
-}
-
-.template-source a {
-  color: #2563eb;
-  text-decoration: none;
-}
-
-.template-source a:hover {
-  text-decoration: underline;
-}
-
 .swatches {
   display: flex;
-  gap: 5px;
+  gap: 4px;
+  margin-top: 2px;
 }
 
-.swatches span {
-  width: 22px;
-  height: 22px;
+.swatches i {
+  width: 13px;
+  height: 13px;
   border-radius: 999px;
   border: 1px solid rgba(15, 23, 42, 0.08);
 }
@@ -1650,10 +1833,15 @@ p {
 .file-box {
   position: relative;
   min-height: 138px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: flex-start;
+}
+
+.file-box strong {
+  margin-top: 8px;
 }
 
 .file-box input {
@@ -1681,6 +1869,91 @@ p {
 .progress-panel,
 .result-panel {
   min-height: 420px;
+}
+
+.ppt-failure-panel {
+  min-height: 420px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 2px solid #d84a3a;
+  background: linear-gradient(135deg, #fff7f5 0%, #fbf9f3 76%);
+  box-shadow: 4px 4px 0 rgba(184, 49, 38, 0.1), 0 12px 28px rgba(184, 49, 38, 0.12);
+}
+
+.failure-hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.failure-icon {
+  flex: 0 0 auto;
+  width: 78px;
+  height: 78px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #b83126;
+  background: #ffe1dc;
+  box-shadow: inset 0 0 0 8px rgba(255, 255, 255, 0.66);
+}
+
+.failure-eyebrow {
+  color: #b83126;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.failure-hero h2 {
+  margin: 5px 0 0;
+  color: #7d211b;
+  font-size: 25px;
+}
+
+.failure-hero p {
+  margin-top: 6px;
+  color: #7b645f;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.failure-reason {
+  margin-top: 26px;
+  padding: 16px 18px;
+  border-left: 4px solid #d84a3a;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.failure-reason strong {
+  color: #7d211b;
+  font-size: 13px;
+}
+
+.failure-reason p {
+  margin: 7px 0 0;
+  color: #5f4843;
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.failure-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.failure-actions :deep(.n-button) {
+  min-width: 148px;
+}
+
+.failure-hint {
+  margin: 14px 0 0;
+  color: #8c716b;
+  font-size: 13px;
 }
 
 .progress-title {
@@ -2166,6 +2439,28 @@ p {
 
   .progress-title {
     align-items: center;
+  }
+
+  .ppt-failure-panel {
+    align-items: stretch;
+  }
+
+  .failure-hero {
+    align-items: flex-start;
+  }
+
+  .failure-icon {
+    width: 60px;
+    height: 60px;
+  }
+
+  .failure-hero h2 {
+    font-size: 21px;
+  }
+
+  .failure-actions,
+  .failure-actions :deep(.n-button) {
+    width: 100%;
   }
 
   .stage-item {

@@ -63,6 +63,7 @@ llm:
   vision-image-max-bytes: ${LLM_VISION_IMAGE_MAX_BYTES:4194304}
   vision-batch-max-bytes: ${LLM_VISION_BATCH_MAX_BYTES:16777216}
   vision-image-max-pixels: ${LLM_VISION_IMAGE_MAX_PIXELS:4000000}
+  vision-max-tokens: ${LLM_VISION_MAX_TOKENS:12000}
 
 babeldoc:
   # 排版版 PDF 由 BabelDOC CLI 生成；首次运行 uvx 会自动下载运行时和模型资源
@@ -83,6 +84,7 @@ translation:
   # 2 核 / 4 GB 服务器只运行一个 BabelDOC 子进程，结果落盘避免长期占用 JVM 堆
   storage-dir: ${TRANSLATION_STORAGE_DIR:../.run/translation-tasks}
   max-history: ${TRANSLATION_MAX_HISTORY:5}
+  max-global-history: ${TRANSLATION_MAX_GLOBAL_HISTORY:20}
   queue-capacity: ${TRANSLATION_QUEUE_CAPACITY:5}
   max-qps: ${TRANSLATION_MAX_QPS:4}
   stable-qps: ${TRANSLATION_STABLE_QPS:2}
@@ -92,6 +94,7 @@ ppt-generation:
   storage-dir: ${PPT_GENERATION_STORAGE_DIR:../.run/ppt-generation-tasks}
   template-cache-dir: ${PPT_GENERATION_TEMPLATE_CACHE_DIR:../.run/ppt-generation-tasks/_template-cache}
   max-history: ${PPT_GENERATION_MAX_HISTORY:5}
+  max-global-history: ${PPT_GENERATION_MAX_GLOBAL_HISTORY:20}
   queue-capacity: ${PPT_GENERATION_QUEUE_CAPACITY:3}
   max-prompt-chars: ${PPT_GENERATION_MAX_PROMPT_CHARS:8000}
   max-paper-bytes: ${PPT_GENERATION_MAX_PAPER_BYTES:31457280}
@@ -109,6 +112,10 @@ ppt-generation:
   agent-node-max-old-space-mb: ${PPT_GENERATION_AGENT_NODE_MAX_OLD_SPACE_MB:384}
   agent-max-sources: ${PPT_GENERATION_AGENT_MAX_SOURCES:12}
   vision-model: ${PPT_GENERATION_VISION_MODEL:mimo-v2.5}
+  # 可选的 Mimo 原生联网搜索；需开通联网插件的按量开放平台 sk- Key，不能使用 Token Plan tp- Key
+  mimo-search-endpoint: ${PPT_GENERATION_MIMO_SEARCH_ENDPOINT:https://api.xiaomimimo.com/v1/chat/completions}
+  mimo-search-key: ${PPT_GENERATION_MIMO_SEARCH_KEY:}
+  mimo-search-model: ${PPT_GENERATION_MIMO_SEARCH_MODEL:mimo-v2.5}
   soffice-command: ${PPT_GENERATION_SOFFICE_COMMAND:soffice}
   pdftoppm-command: ${PPT_GENERATION_PDFTOPPM_COMMAND:pdftoppm}
   # 本机未配置时由 Node worker 按平台选择 Chrome；生产部署显式设置 /usr/bin/chromium

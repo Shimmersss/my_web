@@ -5,12 +5,15 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import java.nio.file.Path;
 
 /**
- * 一个翻译任务的轻量状态。PDF 文件只保存路径，不长期驻留 JVM 堆。
+ * 一个翻译任务的轻量状态。原文件和结果只保存磁盘路径，不长期驻留 JVM 堆。
  */
 public class TranslationSession {
 
     private String taskId;
     private String fileName;
+    /** pdf / image；历史任务没有该字段时按 pdf 兼容。 */
+    private String inputKind = "pdf";
+    private String inputExtension = "pdf";
     private int totalPages;
     private int startPage = 1;
     private int endPage = 1;
@@ -54,6 +57,10 @@ public class TranslationSession {
 
     public String getTaskId() { return taskId; }
     public String getFileName() { return fileName; }
+    public String getInputKind() { return inputKind == null || inputKind.isBlank() ? "pdf" : inputKind; }
+    public String getInputExtension() { return inputExtension == null || inputExtension.isBlank() ? "pdf" : inputExtension; }
+    @JsonIgnore
+    public boolean isImageInput() { return "image".equalsIgnoreCase(getInputKind()); }
     public int getTotalPages() { return totalPages; }
     public int getStartPage() { return startPage; }
     public int getEndPage() { return endPage; }
@@ -86,14 +93,26 @@ public class TranslationSession {
     @JsonIgnore
     public Path getInputPdfPath() { return taskDir.resolve("input.pdf"); }
     @JsonIgnore
+    public Path getInputImagePath() { return taskDir.resolve("input-image." + getInputExtension()); }
+    @JsonIgnore
+    public Path getInputPath() { return isImageInput() ? getInputImagePath() : getInputPdfPath(); }
+    @JsonIgnore
     public Path getTranslatedPdfPath() { return taskDir.resolve("translated.pdf"); }
     @JsonIgnore
     public Path getBilingualPdfPath() { return taskDir.resolve("bilingual.pdf"); }
+    @JsonIgnore
+    public Path getTranslatedImagePath() { return taskDir.resolve("translated.png"); }
+    @JsonIgnore
+    public Path getBilingualImagePath() { return taskDir.resolve("bilingual.png"); }
+    @JsonIgnore
+    public Path getTranslatedTextPath() { return taskDir.resolve("translated.txt"); }
     @JsonIgnore
     public Path getMetadataPath() { return taskDir.resolve("task.json"); }
 
     public void setTaskId(String taskId) { this.taskId = taskId; }
     public void setFileName(String fileName) { this.fileName = fileName; }
+    public void setInputKind(String inputKind) { this.inputKind = inputKind; touch(); }
+    public void setInputExtension(String inputExtension) { this.inputExtension = inputExtension; touch(); }
     public void setTaskDir(Path taskDir) { this.taskDir = taskDir; }
     public void setStatus(String status) { this.status = status; touch(); }
     public void setTotalPages(int totalPages) { this.totalPages = totalPages; touch(); }

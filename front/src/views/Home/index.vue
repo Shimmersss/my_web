@@ -1,28 +1,86 @@
 <template>
   <div class="home-page">
     <section class="desk-hero">
-      <div class="container desk-grid">
-        <article class="paper-panel current-work">
-          <p class="section-kicker">01 / 当前工作</p>
-          <h1>把研究资料，整理成可以继续推进的工作。</h1>
-          <p class="lead">集中管理文献、翻译论文、生成答辩 PPT，并随时回到你的开源项目。</p>
+      <div class="container hero-layout">
+        <article class="hero-copy">
+          <p class="section-kicker">01 / 首页</p>
+          <h1>闪闪的个人小站</h1>
+          <p class="lead">网站试运营中</p>
 
-          <div class="topic-tags" aria-label="研究主题">
-            <span>文献综述</span>
-            <span>论文翻译</span>
-            <span>学术表达</span>
+          <div class="hero-actions" aria-label="首页快捷操作">
+            <a class="primary-action" href="/publications" @click.prevent="navigateTo('/publications')">
+              进入工作台 <span aria-hidden="true">→</span>
+            </a>
+            <a class="text-action" href="/publications" @click.prevent="navigateTo('/publications')">
+              进入文献库 <span aria-hidden="true">→</span>
+            </a>
           </div>
 
-          <nav class="quick-actions" aria-label="核心工具快捷入口">
-            <a v-for="tool in tools" :key="tool.path" :href="tool.path" @click.prevent="navigateTo(tool.path)">
-              <n-icon size="25"><component :is="tool.icon" /></n-icon>
-              <span><strong>{{ tool.title }}</strong><small>{{ tool.description }}</small></span>
+          <div class="hero-status" aria-label="网站状态">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>站点状态</span>
+            <strong>试运营中</strong>
+          </div>
+        </article>
+
+        <div
+          class="hero-visual"
+          :style="{
+            '--pointer-x': `${heroPointer.x}px`,
+            '--pointer-y': `${heroPointer.y}px`
+          }"
+          @pointermove="handleHeroMove"
+          @pointerleave="resetHeroMove"
+        >
+          <div class="visual-signal" aria-hidden="true"></div>
+          <img
+            class="workspace-image"
+            :src="workspaceImage"
+            alt="研究工作台预览，包含文献阅读、研究网络和进度信息"
+          />
+          <div class="visual-status">
+            <span class="status-dot" aria-hidden="true"></span>
+            <span>同步中</span>
+            <strong>68%</strong>
+          </div>
+          <div class="visual-caption">
+            <span>LIVE WORKSPACE</span>
+            <strong>从阅读，到输出</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="workflow-section" aria-labelledby="workflow-title">
+      <div class="container workflow-layout">
+        <article class="paper-panel workflow-panel">
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">02 / 快速入口</p>
+              <h2 id="workflow-title">研究工作流</h2>
+            </div>
+            <a href="/publications" @click.prevent="navigateTo('/publications')">打开文献库 <span aria-hidden="true">→</span></a>
+          </div>
+
+          <nav class="workflow-list" aria-label="研究工作流入口">
+            <a v-for="(tool, index) in tools" :key="tool.path" :href="tool.path" @click.prevent="navigateTo(tool.path)">
+              <span class="row-index">{{ String(index + 1).padStart(2, '0') }}</span>
+              <span class="tool-icon"><n-icon size="22"><component :is="tool.icon" /></n-icon></span>
+              <span class="tool-copy"><strong>{{ tool.title }}</strong><small>{{ tool.description }}</small></span>
+              <span class="row-arrow" aria-hidden="true">→</span>
             </a>
           </nav>
         </article>
 
         <aside class="paper-panel progress-panel">
-          <p class="section-kicker">02 / 研究进度</p>
+          <div class="panel-heading">
+            <div>
+              <p class="section-kicker">03 / 研究进度</p>
+              <h2>正在进行</h2>
+            </div>
+            <span class="panel-pulse" aria-hidden="true"></span>
+          </div>
+
           <div v-for="item in progress" :key="item.label" class="progress-row">
             <div class="progress-head">
               <span>{{ item.label }}</span>
@@ -34,31 +92,13 @@
           <div class="paper-note">本周目标：完成论文整理，并把核心结果汇总为可分享材料。</div>
         </aside>
 
-        <article class="paper-panel recent-panel">
-          <div class="panel-heading">
-            <div>
-              <p class="section-kicker">03 / 快速入口</p>
-              <h2>研究工作流</h2>
-            </div>
-            <a href="/publications" @click.prevent="navigateTo('/publications')">打开文献库 →</a>
-          </div>
-          <div class="workflow-list">
-            <a v-for="(tool, index) in tools" :key="tool.path" :href="tool.path" @click.prevent="navigateTo(tool.path)">
-              <span class="row-index">{{ String(index + 1).padStart(2, '0') }}</span>
-              <n-icon size="22"><component :is="tool.icon" /></n-icon>
-              <span><strong>{{ tool.title }}</strong><small>{{ tool.description }}</small></span>
-              <span class="row-arrow">→</span>
-            </a>
-          </div>
-        </article>
-
         <article class="paper-panel github-panel">
           <div class="panel-heading">
             <div>
               <p class="section-kicker">04 / GitHub</p>
               <h2>我的开源项目</h2>
             </div>
-            <a href="/news" @click.prevent="navigateTo('/news')">查看全部 →</a>
+            <a href="/news" @click.prevent="navigateTo('/news')">查看全部 <span aria-hidden="true">→</span></a>
           </div>
 
           <div v-if="featuredProject" class="featured-repo">
@@ -75,7 +115,7 @@
               <span>★ {{ formatNumber(featuredProject.stargazers_count) }}</span>
               <span>⑂ {{ formatNumber(featuredProject.forks_count) }}</span>
             </div>
-            <a class="repo-link" href="/news" @click.prevent="navigateTo('/news')">浏览项目与 README <span>→</span></a>
+            <a class="repo-link" href="/news" @click.prevent="navigateTo('/news')">浏览项目与 README <span aria-hidden="true">→</span></a>
           </div>
           <div v-else class="featured-repo repo-loading">正在整理 GitHub 项目索引…</div>
         </article>
@@ -96,9 +136,11 @@ import {
 } from '@vicons/ionicons5'
 import { getGithubProjects } from '@/api'
 import { defaultGithubProjects, githubProjectFallback } from '@/config/githubProjects'
+import workspaceImage from '@/assets/images/home-workspace-aurora.png'
 
 const router = useRouter()
 const projects = ref([])
+const heroPointer = ref({ x: 0, y: 0 })
 
 const tools = [
   { title: '文献库', description: '管理与阅读学术文献', path: '/publications', icon: BookOutline },
@@ -133,6 +175,18 @@ onMounted(async () => {
   }
 })
 
+function handleHeroMove(event) {
+  const rect = event.currentTarget.getBoundingClientRect()
+  heroPointer.value = {
+    x: ((event.clientX - rect.left) / rect.width - 0.5) * 18,
+    y: ((event.clientY - rect.top) / rect.height - 0.5) * 12
+  }
+}
+
+function resetHeroMove() {
+  heroPointer.value = { x: 0, y: 0 }
+}
+
 function navigateTo(path) {
   router.push(path)
 }
@@ -147,18 +201,247 @@ function formatNumber(value) {
 @use '@/assets/styles/variables' as *;
 
 .home-page {
+  min-height: calc(100vh - 81px);
+  overflow: hidden;
   background: #eee9df;
   color: #25251f;
 }
 
 .desk-hero {
-  min-height: calc(100vh - 81px);
-  padding: 28px 0 42px;
+  position: relative;
+  min-height: 650px;
+  padding: 76px 0 92px;
+  isolation: isolate;
+
+  &::before {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: #f8f5ee;
+    content: '';
+  }
 }
 
-.desk-grid {
+.hero-layout {
   display: grid;
-  grid-template-columns: 1.42fr 1fr;
+  grid-template-columns: minmax(430px, 0.88fr) minmax(0, 1.12fr);
+  gap: 24px;
+  align-items: center;
+}
+
+.hero-copy {
+  position: relative;
+  z-index: 2;
+  padding: 28px 0 28px 54px;
+
+  &::before {
+    position: absolute;
+    left: 0;
+    top: 40px;
+    width: 3px;
+    height: 102px;
+    background: #b83126;
+    content: '';
+  }
+
+  h1 {
+    max-width: 600px;
+    margin: 0;
+    color: #25251f;
+    font-family: Georgia, 'Noto Serif SC', 'Songti SC', serif;
+    font-size: clamp(52px, 5.1vw, 74px);
+    font-weight: 500;
+    letter-spacing: -0.075em;
+    line-height: 1.08;
+  }
+
+  .lead {
+    margin: 22px 0 0;
+    color: #756f64;
+    font-family: Georgia, 'Noto Serif SC', serif;
+    font-size: clamp(20px, 2vw, 27px);
+    letter-spacing: 0.02em;
+  }
+}
+
+.section-kicker {
+  margin: 0 0 18px;
+  color: #b83126;
+  font: 700 12px/1.2 $font-en;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 26px;
+  margin-top: 54px;
+}
+
+.primary-action,
+.text-action {
+  text-decoration: none;
+  transition: color $transition-fast, transform $transition-fast, background $transition-fast;
+}
+
+.primary-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 22px;
+  min-height: 52px;
+  padding: 0 22px;
+  background: #b83126;
+  color: #fffaf1;
+  font-size: 15px;
+  font-weight: 700;
+  box-shadow: 4px 5px 0 rgba(95, 86, 65, 0.12);
+
+  span { font-size: 21px; line-height: 1; }
+
+  &:hover {
+    background: #92271f;
+    transform: translateY(-2px);
+  }
+}
+
+.text-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid #9c9488;
+  color: #4f4b43;
+  font-size: 14px;
+
+  &:hover {
+    border-color: #b83126;
+    color: #b83126;
+  }
+}
+
+.hero-status,
+.visual-status {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: #8a8377;
+  font-size: 12px;
+}
+
+.hero-status {
+  margin-top: 34px;
+
+  strong {
+    color: #607b56;
+    font-weight: 600;
+  }
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #607b56;
+  box-shadow: 0 0 0 4px rgba(96, 123, 86, 0.1);
+  animation: statusPulse 2.8s ease-in-out infinite;
+}
+
+.hero-visual {
+  position: relative;
+  min-height: 570px;
+  margin-right: 0;
+  cursor: crosshair;
+  transform: translate(calc(var(--pointer-x) * -0.16), calc(var(--pointer-y) * -0.16));
+  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.workspace-image {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 1;
+  width: min(650px, 100%);
+  max-width: none;
+  transform: translate(calc(-50% + var(--pointer-x)), calc(-50% + var(--pointer-y))) rotate(-1deg);
+  filter: drop-shadow(0 22px 20px rgba(98, 83, 58, 0.14));
+  transition: transform 0.8s cubic-bezier(0.22, 1, 0.36, 1), filter 0.8s ease;
+  animation: workspaceFloat 9s ease-in-out infinite;
+}
+
+.hero-visual:hover .workspace-image {
+  filter: drop-shadow(0 30px 30px rgba(98, 83, 58, 0.2));
+}
+
+.visual-signal {
+  position: absolute;
+  inset: 14% 3% 11% 8%;
+  z-index: 0;
+  border: 1px solid rgba(188, 137, 93, 0.22);
+  border-radius: 50%;
+  transform: rotate(-13deg) scaleX(1.2);
+  animation: signalDrift 10s ease-in-out infinite;
+
+  &::before,
+  &::after {
+    position: absolute;
+    inset: 8% 4%;
+    border: inherit;
+    border-radius: inherit;
+    content: '';
+  }
+
+  &::after {
+    inset: 16% -2%;
+    border-color: rgba(96, 123, 86, 0.15);
+  }
+}
+
+.visual-status {
+  position: absolute;
+  top: 18%;
+  right: 14%;
+  z-index: 2;
+  padding: 9px 12px;
+  border: 1px solid rgba(207, 199, 183, 0.9);
+  background: rgba(251, 249, 243, 0.88);
+  box-shadow: 3px 4px 0 rgba(95, 86, 65, 0.08);
+  backdrop-filter: blur(7px);
+
+  strong {
+    color: #b83126;
+    font-weight: 700;
+  }
+}
+
+.visual-caption {
+  position: absolute;
+  bottom: 8%;
+  left: 9%;
+  z-index: 2;
+  display: grid;
+  gap: 5px;
+  color: #767064;
+  font: 11px/1.2 $font-en;
+  letter-spacing: 0.12em;
+
+  strong {
+    color: #25251f;
+    font-family: Georgia, 'Noto Serif SC', serif;
+    font-size: 17px;
+    font-weight: 400;
+    letter-spacing: 0;
+  }
+}
+
+.workflow-section {
+  padding: 34px 0 76px;
+  background: #eee9df;
+}
+
+.workflow-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(320px, 0.8fr);
   gap: 14px;
 }
 
@@ -168,95 +451,91 @@ function formatNumber(value) {
   border-radius: 2px;
   background: #fbf9f3;
   box-shadow: 2px 3px 0 rgba(95, 86, 65, 0.12);
-  padding: 28px;
+  padding: 26px 28px;
 }
 
-.section-kicker {
-  margin: 0 0 14px;
-  color: #b83126;
-  font: 700 12px/1.2 $font-en;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-.current-work {
-  min-height: 390px;
-  padding-left: 72px;
-
-  &::before {
-    content: '01';
-    position: absolute;
-    left: 25px;
-    top: 74px;
-    color: #c04a3e;
-    font: 400 20px/1 Georgia, serif;
-  }
-
-  h1 {
-    max-width: 700px;
-    margin: 0;
-    font-family: Georgia, 'Noto Serif SC', 'Songti SC', serif;
-    font-size: clamp(34px, 4vw, 58px);
-    line-height: 1.16;
-    letter-spacing: -0.035em;
-  }
-
-  .lead {
-    max-width: 690px;
-    margin: 22px 0;
-    color: #68645b;
-    font-size: 16px;
-    line-height: 1.8;
-  }
-}
-
-.topic-tags {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-
-  span {
-    border: 1px solid #bfc4b6;
-    background: #edf0e8;
-    color: #52624e;
-    padding: 4px 9px;
-    font-size: 12px;
-  }
-}
-
-.quick-actions {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  margin-top: 46px;
-  border-top: 1px solid #d9d2c5;
-
-  a {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    color: inherit;
-    padding: 20px 14px 0;
-    text-decoration: none;
-    border-right: 1px solid #ded7ca;
-
-    &:first-child { padding-left: 0; }
-    &:last-child { border-right: 0; }
-    &:hover strong { color: #b83126; }
-  }
-
-  strong, small { display: block; }
-  strong { margin-bottom: 4px; font-size: 14px; }
-  small { color: #858077; font-size: 11px; }
-}
+.workflow-panel { grid-row: span 2; }
 
 .progress-panel {
   display: grid;
   align-content: start;
-  gap: 22px;
+  gap: 20px;
 }
 
+.github-panel { min-height: 292px; }
+
+.panel-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #d8d1c5;
+
+  .section-kicker { margin-bottom: 10px; }
+
+  h2 {
+    margin: 0;
+    color: #25251f;
+    font-family: Georgia, 'Noto Serif SC', serif;
+    font-size: 25px;
+    font-weight: 500;
+  }
+
+  a {
+    color: #656158;
+    font-size: 13px;
+    text-decoration: none;
+  }
+
+  a:hover { color: #b83126; }
+}
+
+.panel-pulse {
+  width: 8px;
+  height: 8px;
+  margin: 8px 5px 0 0;
+  border: 1px solid #607b56;
+  border-radius: 50%;
+  animation: statusPulse 2.8s ease-in-out infinite;
+}
+
+.workflow-list {
+  a {
+    display: grid;
+    grid-template-columns: 34px 28px minmax(0, 1fr) auto;
+    gap: 10px;
+    align-items: center;
+    min-height: 68px;
+    color: inherit;
+    text-decoration: none;
+    border-bottom: 1px solid #e3ddd2;
+    transition: padding 0.25s ease, color 0.25s ease;
+  }
+
+  a:hover {
+    padding-left: 5px;
+    color: #b83126;
+  }
+
+  strong,
+  small { display: block; }
+  strong { font-size: 14px; }
+  small { margin-top: 3px; color: #89847a; font-size: 11px; }
+}
+
+.row-index { color: #a49d90; font: 12px/1 Georgia, serif; }
+.tool-icon { color: #4f5f4b; }
+.row-arrow { transition: transform 0.25s ease; }
+.workflow-list a:hover .row-arrow { transform: translateX(4px); }
+
 .progress-row {
-  small { display: block; margin-top: 7px; color: #8b867c; text-align: right; }
+  small {
+    display: block;
+    margin-top: 7px;
+    color: #8b867c;
+    text-align: right;
+  }
 }
 
 .progress-head {
@@ -264,13 +543,22 @@ function formatNumber(value) {
   justify-content: space-between;
   margin-bottom: 8px;
   font-size: 14px;
+
+  strong { font-family: $font-en; }
 }
 
 .progress-track {
   height: 5px;
+  overflow: hidden;
   background: #e4dfd4;
 
-  span { display: block; height: 100%; background: #607b56; }
+  span {
+    display: block;
+    height: 100%;
+    background: #607b56;
+    transform-origin: left center;
+    animation: progressReveal 1.2s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
 }
 
 .paper-note {
@@ -282,40 +570,6 @@ function formatNumber(value) {
   font-family: Georgia, 'Noto Serif SC', serif;
   font-size: 13px;
 }
-
-.panel-heading {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 20px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid #d8d1c5;
-
-  h2 { margin: 0; font-family: Georgia, 'Noto Serif SC', serif; font-size: 25px; }
-  a { color: #656158; text-decoration: none; font-size: 13px; }
-  a:hover { color: #b83126; }
-}
-
-.workflow-list {
-  a {
-    display: grid;
-    grid-template-columns: 34px 28px 1fr auto;
-    gap: 10px;
-    align-items: center;
-    min-height: 64px;
-    color: inherit;
-    text-decoration: none;
-    border-bottom: 1px solid #e3ddd2;
-  }
-
-  strong, small { display: block; }
-  strong { font-size: 14px; }
-  small { margin-top: 3px; color: #89847a; font-size: 11px; }
-  a:hover .row-arrow { color: #b83126; transform: translateX(3px); }
-}
-
-.row-index { color: #a49d90; font: 12px/1 Georgia, serif; }
-.row-arrow { transition: 0.2s ease; }
 
 .featured-repo {
   margin-top: 18px;
@@ -330,7 +584,8 @@ function formatNumber(value) {
   align-items: center;
   gap: 10px;
 
-  strong, small { display: block; }
+  strong,
+  small { display: block; }
   strong { overflow-wrap: anywhere; font: 700 16px/1.3 $font-en; }
   small { margin-top: 3px; color: #999287; font-size: 11px; }
 }
@@ -338,10 +593,10 @@ function formatNumber(value) {
 .repo-meta {
   display: flex;
   gap: 18px;
+  border-top: 1px solid #e3ddd2;
+  padding: 12px 0;
   color: #6c7565;
   font-size: 12px;
-  padding: 12px 0;
-  border-top: 1px solid #e3ddd2;
 }
 
 .repo-link {
@@ -354,73 +609,74 @@ function formatNumber(value) {
   text-decoration: none;
 }
 
+.repo-link:hover { background: #f7efe2; }
 .repo-loading { color: #817b70; }
 
-@media (max-width: 1000px) {
-  .desk-grid { grid-template-columns: 1fr; }
+@keyframes workspaceFloat {
+  0%, 100% { margin-top: 0; }
+  50% { margin-top: -10px; }
 }
 
-@media (max-width: 700px) {
-  .desk-hero { padding-top: 14px; }
+@keyframes signalDrift {
+  0%, 100% { transform: rotate(-13deg) scaleX(1.2) translateX(0); opacity: 0.72; }
+  50% { transform: rotate(-9deg) scaleX(1.24) translateX(12px); opacity: 1; }
+}
+
+@keyframes statusPulse {
+  0%, 100% { opacity: 0.5; transform: scale(0.86); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes progressReveal {
+  from { transform: scaleX(0); }
+  to { transform: scaleX(1); }
+}
+
+@media (max-width: 1100px) {
+  .hero-layout { grid-template-columns: minmax(360px, 0.9fr) minmax(0, 1.1fr); }
+  .hero-copy { padding-left: 38px; }
+  .workspace-image { width: min(620px, 100%); }
+}
+
+@media (max-width: 900px) {
+  .desk-hero { padding: 48px 0 58px; }
+  .hero-layout,
+  .workflow-layout { grid-template-columns: 1fr; }
+  .hero-copy { padding: 14px 0 0 34px; }
+  .hero-copy::before { top: 22px; }
+  .hero-visual { min-height: 470px; margin: -8px 0 -20px; }
+  .workspace-image { width: min(720px, 110vw); }
+  .workflow-panel { grid-row: auto; }
+}
+
+@media (max-width: 640px) {
+  .desk-hero { padding: 30px 0 18px; }
+  .hero-copy { padding: 12px 20px 0 28px; }
+  .hero-copy::before { top: 20px; width: 2px; height: 70px; }
+  .hero-copy h1 { font-size: clamp(48px, 15vw, 72px); letter-spacing: -0.06em; }
+  .hero-copy .lead { margin-top: 14px; font-size: 19px; }
+  .hero-actions { align-items: flex-start; flex-direction: column; gap: 18px; margin-top: 34px; }
+  .hero-status { margin-top: 26px; }
+  .hero-visual { min-height: 320px; margin: 8px -28px -8px; }
+  .workspace-image { width: 680px; }
+  .visual-status { top: 18%; right: 6%; transform: scale(0.86); transform-origin: top right; }
+  .visual-caption { bottom: 7%; left: 14%; }
   .paper-panel { padding: 20px; }
-  .current-work { min-height: auto; padding-left: 20px; }
-  .current-work::before { display: none; }
-  .current-work h1 { font-size: 34px; }
-  .quick-actions { grid-template-columns: 1fr 1fr; margin-top: 26px; }
-  .quick-actions a {
-    padding: 15px 8px;
-    border-bottom: 1px solid #ded7ca;
-    min-width: 0;
-  }
-
-  .panel-heading {
-    gap: 12px;
-  }
+  .panel-heading { gap: 12px; }
+  .workflow-list a { grid-template-columns: 28px 26px minmax(0, 1fr) auto; min-height: 62px; }
+  .github-panel { min-height: auto; }
 }
 
-@media (max-width: 360px) {
-  .desk-hero {
-    padding-top: 12px;
+@media (prefers-reduced-motion: reduce) {
+  .status-dot,
+  .panel-pulse,
+  .workspace-image,
+  .visual-signal,
+  .progress-track span {
+    animation: none;
   }
 
-  .paper-panel {
-    padding: 16px;
-  }
-
-  .current-work {
-    padding-left: 16px;
-  }
-
-  .current-work h1 {
-    font-size: 30px;
-    line-height: 1.18;
-    letter-spacing: 0;
-  }
-
-  .current-work .lead {
-    margin: 16px 0;
-    font-size: 14px;
-  }
-
-  .quick-actions {
-    grid-template-columns: 1fr;
-  }
-
-  .quick-actions a {
-    padding: 13px 0;
-    border-right: 0;
-  }
-
-  .panel-heading {
-    display: grid;
-  }
-
-  .workflow-list a {
-    grid-template-columns: 28px 24px minmax(0, 1fr);
-  }
-
-  .row-arrow {
-    display: none;
-  }
+  .hero-visual,
+  .workspace-image { transition: none; }
 }
 </style>

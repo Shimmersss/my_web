@@ -1,8 +1,8 @@
 # Research Workbench / 研究工具台
 
-一个面向个人工作与研究流程的全栈工具台，整合 Zotero 文献库、论文 PDF 翻译、通用资料到 PPT 生成和 GitHub 项目展示。
+一个面向个人工作与研究流程的全栈工具台，整合 Zotero 文献库、PDF/图片翻译、通用资料到 PPT 生成和 GitHub 项目展示。
 
-A full-stack personal workbench that brings together a Zotero library browser, PDF paper translation, general-material-to-PPT generation and GitHub project showcases.
+A full-stack personal workbench that brings together a Zotero library browser, PDF/image translation, general-material-to-PPT generation and GitHub project showcases.
 
 ![Research Workbench home](front/public/readme/home.jpg)
 
@@ -10,7 +10,7 @@ A full-stack personal workbench that brings together a Zotero library browser, P
 
 - **文献库展示 / Zotero library**：后端从 Zotero Web API 拉取私有文献库，启动预热并缓存；前端按 collection、关键词和附件状态浏览。
 - **附件代理 / Attachment proxy**：PDF、Markdown 和网页快照附件统一由后端代理，支持 Zotero S3 跳转、ZIP 附件解包、流式传输和真实下载进度。
-- **PDF 论文翻译 / PDF translation**：上传 PDF 后选择页码范围、字体族和速度模式，由后端排队调用 BabelDOC 生成保留版式的纯中文 / 双语 PDF。
+- **PDF/图片翻译 / PDF and image translation**：上传 PDF 后选择页码范围、字体族和速度模式，由后端排队调用 BabelDOC 生成保留版式的纯中文 / 双语 PDF；PNG/JPG 等常见图片使用视觉模型生成中文译图和双语译图。
 - **PPT 生成 / Materials to PPT**：provider-neutral Agent 读取仓库级 Skills，自主完成研究、事实核验、叙事规划、PPTX/HTML 创作、真实逐页渲染、视觉审查和最多两轮返修。PPTX 复用 6 套 GitHub 源 deck 的真实页面与文字框几何，HTML 使用 12 套独立 reveal.js theme assets；没有相似配色重绘或旧 renderer 回退。BJTU 来源仓库虽标注 Apache-2.0，但 README 另有学习/非商业声明。
 - **GitHub 项目展示 / GitHub showcase**：前端只访问站内接口，后端代理 GitHub API 和 README raw 内容，避免浏览器直连外部接口。
 
@@ -24,11 +24,11 @@ The publications page combines Zotero items, collections, tags, attachments and 
 
 ![Zotero publications](front/public/readme/publications.jpg)
 
-### PDF Translation / PDF 翻译
+### PDF/Image Translation / PDF 与图片翻译
 
-翻译页采用上传、配置、翻译中、结果预览四态流程。BabelDOC 负责保留论文版式、图片和公式位置。
+翻译页采用上传、配置、翻译中、结果预览四态流程。PDF 由 BabelDOC 负责保留论文版式、图片和公式位置；图片由视觉模型识别文字后覆盖译文。
 
-The translation view follows a four-state flow: upload, configure, translate and preview results. BabelDOC preserves layout, images and formula positions.
+The translation view follows a four-state flow: upload, configure, translate and preview results. BabelDOC preserves PDF layout, images and formula positions, while image inputs are translated through vision and rendered back to PNG.
 
 ![PDF translation](front/public/readme/translate.jpg)
 

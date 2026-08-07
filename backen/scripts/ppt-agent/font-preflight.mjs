@@ -3,7 +3,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { composeTemplatePptx, inspectTemplate } from './template-pptx.mjs';
-import { renderPptx } from './render.mjs';
+import { renderPptx, resolveStableLibreOffice } from './render.mjs';
 
 const templateFile = path.resolve(process.env.PPT_AGENT_FONT_CHECK_TEMPLATE
   || '../.run/ppt-generation-tasks/_template-cache/github-bjtu-blue.pptx');
@@ -11,7 +11,9 @@ const outputRoot = path.resolve(process.env.PPT_AGENT_FONT_CHECK_DIR
   || '../.run/deployment-font-check');
 const execFileAsync = promisify(execFile);
 
-const soffice = process.env.PPT_GENERATION_SOFFICE_COMMAND || process.env.PPT_AGENT_SOFFICE || 'soffice';
+const soffice = await resolveStableLibreOffice(
+  process.env.PPT_GENERATION_SOFFICE_COMMAND || process.env.PPT_AGENT_SOFFICE || 'soffice'
+);
 const { stdout: officeVersion = '', stderr: officeVersionError = '' } = await execFileAsync(soffice, ['--version']);
 const versionText = `${officeVersion} ${officeVersionError}`.trim();
 if (/dev|alpha|beta|rc\d*/i.test(versionText)) {

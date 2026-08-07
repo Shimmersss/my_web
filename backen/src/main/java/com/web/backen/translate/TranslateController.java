@@ -39,7 +39,7 @@ public class TranslateController {
     }
 
     /**
-     * 上传 PDF 文件，获取页数信息（不立即翻译）
+     * 上传 PDF 或常见图片，获取页数/图片信息（不立即翻译）
      */
     @PostMapping("/upload")
     public ResponseEntity<?> upload(HttpServletRequest request, @RequestParam("file") MultipartFile file) {
@@ -51,12 +51,15 @@ public class TranslateController {
             return authError(e);
         }
         if (file == null || file.isEmpty()) {
-            return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "请上传 PDF 文件"));
+            return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "请上传 PDF 或图片文件"));
         }
 
         String fileName = file.getOriginalFilename();
-        if (fileName == null || !fileName.toLowerCase().endsWith(".pdf")) {
-            return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "仅支持 PDF 文件格式"));
+        TranslationFileSupport.FileDescriptor descriptor;
+        try {
+            descriptor = TranslationFileSupport.describe(fileName);
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("code", 400, "message", e.getMessage()));
         }
 
         if (file.getSize() > 50 * 1024 * 1024) {
@@ -64,24 +67,26 @@ public class TranslateController {
         }
 
         try {
-            TranslationSession session = translationService.createSessionPreview(fileName, file.getInputStream(), user.id());
+            TranslationSession session = translationService.createSessionPreview(
+                    fileName, file.getContentType(), file.getInputStream(), user.id());
 
             return ResponseEntity.ok(Map.of(
                     "code", 200,
                     "data", Map.of(
                             "taskId", session.getTaskId(),
                             "fileName", session.getFileName(),
+                            "inputKind", session.getInputKind(),
                             "totalPages", session.getTotalPages(),
                             "textQualitySuspicious", session.isTextQualitySuspicious(),
                             "textQualityWarning", session.getTextQualityWarning() != null ? session.getTextQualityWarning() : ""
                     )
             ));
         } catch (IllegalArgumentException e) {
-            log.warn("PDF 解析失败: {}", e.getMessage());
+            log.warn("翻译文件解析失败: file={}, kind={}, message={}", fileName, descriptor.kind(), e.getMessage());
             return ResponseEntity.badRequest().body(Map.of("code", 400, "message", e.getMessage()));
         } catch (Exception e) {
             log.error("上传处理失败", e);
-            return ResponseEntity.internalServerError().body(Map.of("code", 500, "message", "PDF 处理失败: " + e.getMessage()));
+            return ResponseEntity.internalServerError().body(Map.of("code", 500, "message", "文件处理失败: " + e.getMessage()));
         }
     }
 
@@ -180,6 +185,7 @@ public class TranslateController {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("taskId", session.getTaskId());
         data.put("fileName", session.getFileName());
+        data.put("inputKind", session.getInputKind());
         data.put("status", session.getStatus());
         data.put("textQualitySuspicious", session.isTextQualitySuspicious());
         data.put("textQualityWarning", session.getTextQualityWarning() != null ? session.getTextQualityWarning() : "");
@@ -285,10 +291,44 @@ public class TranslateController {
         }
     }
 
+    /**
+     * 下载图片翻译结果。图片任务同时生成 PNG 和 PDF，前端优先使用 PNG 保留图片语义。
+     */
+    @GetMapping("/download-image/{taskId}")
+    public ResponseEntity<?> downloadImage(@PathVariable String taskId,
+                                           @RequestParam(defaultValue = "translated") String mode,
+                                           HttpServletRequest request) {
+        try {
+            AuthUser user = authService.requireUser(request);
+            TranslationSession session = translationService.getSession(taskId);
+            if (!translationService.canAccess(session, user)) {
+                return ResponseEntity.status(404).body(Map.of("code", 404, "message", "任务不存在"));
+            }
+            Path image = translationService.getTranslatedImage(taskId, mode);
+            String encodedFileName = URLEncoder.encode(
+                    translationService.buildImageDownloadFileName(taskId, mode),
+                    StandardCharsets.UTF_8).replace("+", "%20");
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename*=UTF-8''" + encodedFileName)
+                    .contentType(MediaType.IMAGE_PNG)
+                    .body(new FileSystemResource(image));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("code", 404, "message", e.getMessage()));
+        } catch (IllegalStateException e) {
+            return ResponseEntity.badRequest().body(Map.of("code", 400, "message", e.getMessage()));
+        } catch (AuthException e) {
+            return authError(e);
+        } catch (Exception e) {
+            log.error("生成图片翻译结果失败: taskId={}", taskId, e);
+            return ResponseEntity.internalServerError().body(Map.of("code", 500, "message", "生成图片翻译结果失败: " + e.getMessage()));
+        }
+    }
+
     private Map<String, Object> toSummary(TranslationSession session) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("taskId", session.getTaskId());
         data.put("fileName", session.getFileName());
+        data.put("inputKind", session.getInputKind());
         data.put("status", session.getStatus());
         data.put("textQualitySuspicious", session.isTextQualitySuspicious());
         data.put("textQualityWarning", session.getTextQualityWarning() != null ? session.getTextQualityWarning() : "");

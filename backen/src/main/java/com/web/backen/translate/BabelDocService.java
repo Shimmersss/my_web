@@ -156,6 +156,7 @@ public class BabelDocService {
                                                Consumer<ProgressUpdate> progressConsumer) {
 
         Path workDir = null;
+        Process process = null;
         try {
             workDir = Files.createTempDirectory("web-babeldoc-");
             Path inputFile = workDir.resolve(sanitizeFileName(fileName));
@@ -171,9 +172,10 @@ public class BabelDocService {
                     .directory(workDir.toFile())
                     .redirectErrorStream(true);
             processBuilder.environment().put("BABELDOC_OPENAI_API_KEY", runtimeConfig.babelKey());
-            Process process = processBuilder.start();
+            process = processBuilder.start();
+            Process runningProcess = process;
             StringBuilder output = new StringBuilder();
-            Thread outputReader = new Thread(() -> readOutput(process, output, progressConsumer), "babeldoc-output-reader");
+            Thread outputReader = new Thread(() -> readOutput(runningProcess, output, progressConsumer), "babeldoc-output-reader");
             outputReader.setDaemon(true);
             outputReader.start();
 
@@ -207,6 +209,9 @@ public class BabelDocService {
         } catch (Exception e) {
             throw new IllegalStateException("BabelDOC 生成翻译 PDF 失败: " + e.getMessage(), e);
         } finally {
+            if (process != null && process.isAlive()) {
+                terminateProcessTree(process);
+            }
             deleteRecursively(workDir);
         }
     }

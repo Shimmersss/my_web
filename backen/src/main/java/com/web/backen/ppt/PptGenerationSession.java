@@ -15,6 +15,8 @@ public class PptGenerationSession {
     private String templateKey = "github-bjtu-blue";
     private String outputFormat = "pptx";
     private String researchMode = "auto";
+    private String visualMode = "best_effort";
+    private String fontFamily = "Microsoft YaHei";
     private String templateFileName;
     private int extractionPercent = 50;
     private String paperFileName;
@@ -66,6 +68,10 @@ public class PptGenerationSession {
     public void setOutputFormat(String outputFormat) { this.outputFormat = outputFormat; touch(); }
     public String getResearchMode() { return researchMode; }
     public void setResearchMode(String researchMode) { this.researchMode = researchMode; touch(); }
+    public String getVisualMode() { return "strict".equals(visualMode) ? "strict" : "best_effort"; }
+    public void setVisualMode(String visualMode) { this.visualMode = visualMode; touch(); }
+    public String getFontFamily() { return fontFamily == null || fontFamily.isBlank() ? "Microsoft YaHei" : fontFamily; }
+    public void setFontFamily(String fontFamily) { this.fontFamily = fontFamily; touch(); }
     public String getTemplateFileName() { return templateFileName; }
     public void setTemplateFileName(String templateFileName) { this.templateFileName = templateFileName; touch(); }
     public int getExtractionPercent() { return extractionPercent; }

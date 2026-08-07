@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { completeJson, detectImageMediaType, extractJson, resetAgentLimitsForTest, setModelFetchForTest } from './model.mjs';
+import { completeJson, completeMimoWebSearch, detectImageMediaType, extractJson, resetAgentLimitsForTest, setModelFetchForTest } from './model.mjs';
 
 test('vision MIME is detected from image bytes', () => {
   assert.equal(detectImageMediaType(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])), 'image/png');
@@ -50,6 +50,36 @@ test('provider-neutral adapter parses OpenAI and Claude responses', { concurrenc
       const result = await completeJson({ system: 'system', user: 'user' });
       assert.equal(result.args.protocol, 'ok');
     });
+  }
+});
+
+test('Mimo native web search sends the documented tool payload', { concurrency: false }, async () => {
+  const previous = { ...process.env };
+  let requestBody;
+  setModelFetchForTest(async (_url, options) => {
+    requestBody = JSON.parse(options.body);
+    return new Response(JSON.stringify({
+      choices: [{ message: {
+        content: '搜索结果',
+        annotations: [{ type: 'url_citation', url: 'https://example.com/source', title: 'Example source' }]
+      } }],
+      usage: { total_tokens: 12 }
+    }), { status: 200, headers: { 'content-type': 'application/json' } });
+  });
+  process.env.PPT_AGENT_MIMO_SEARCH_ENDPOINT = 'https://mimo.test/v1/chat/completions';
+  process.env.PPT_AGENT_MIMO_SEARCH_KEY = 'test-search-key';
+  process.env.PPT_AGENT_MIMO_SEARCH_MODEL = 'mimo-v2.5-pro';
+  try {
+    const result = await completeMimoWebSearch({ system: 'system', user: 'search this', maxKeyword: 3, limit: 6 });
+    assert.equal(result.content, '搜索结果');
+    assert.equal(result.annotations[0].url, 'https://example.com/source');
+    assert.equal(requestBody.model, 'mimo-v2.5-pro');
+    assert.equal(requestBody.thinking.type, 'disabled');
+    assert.equal(requestBody.tool_choice, 'auto');
+    assert.deepEqual(requestBody.tools, [{ type: 'web_search', max_keyword: 3, force_search: true, limit: 6 }]);
+  } finally {
+    process.env = previous;
+    setModelFetchForTest();
   }
 });
 

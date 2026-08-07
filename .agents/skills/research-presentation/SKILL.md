@@ -13,7 +13,7 @@ description: Research and source presentation content from a prompt or uploaded 
 6. Separate sourced facts from recommendations. Never invent metrics, quotations, authors, dates, or results.
 7. Attach source IDs to every externally sourced claim and visual. Keep the canonical URL, title, authors, year, DOI, source type, and access time.
 8. Use external images only when reuse rights or an explicit first-party media policy can be recorded. Otherwise use uploaded assets, template assets, or native charts.
-9. For academic decks, reserve enough reference pages to cover every retained source and add `[Sources]` blocks to speaker notes. A non-empty research set with zero slide citations is a hard failure.
+9. Keep source IDs on slides with externally sourced claims and add `[Sources]` blocks to their speaker notes. Do not add visible reference pages unless the user explicitly requests them; a research set alone does not require audience-visible citations.
 10. If general web search is unavailable, continue with open academic APIs and explicitly record the degradation.
 
 Use the shared Agent tools exposed by the presentation worker. Do not call arbitrary URLs or write outside the assigned task directory.

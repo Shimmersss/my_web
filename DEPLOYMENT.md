@@ -65,9 +65,14 @@ BABELDOC_TIMEOUT_SECONDS=21600
 BABELDOC_MAX_PAGES_PER_CHUNK=5
 BABELDOC_RESOURCE_RECOVERY_TIMEOUT_SECONDS=120
 
+TRANSLATION_STORAGE_DIR=../.run/translation-tasks
+TRANSLATION_MAX_HISTORY=5
+TRANSLATION_MAX_GLOBAL_HISTORY=20
+
 PPT_GENERATION_STORAGE_DIR=../.run/ppt-generation-tasks
 PPT_GENERATION_TEMPLATE_CACHE_DIR=../.run/ppt-generation-tasks/_template-cache
 PPT_GENERATION_MAX_HISTORY=5
+PPT_GENERATION_MAX_GLOBAL_HISTORY=20
 PPT_GENERATION_QUEUE_CAPACITY=3
 PPT_GENERATION_MAX_ARCHIVE_ENTRIES=2000
 PPT_GENERATION_MAX_ARCHIVE_UNCOMPRESSED_BYTES=125829120
@@ -80,18 +85,26 @@ PPT_GENERATION_AGENT_TIMEOUT_SECONDS=1800
 PPT_GENERATION_AGENT_NODE_MAX_OLD_SPACE_MB=384
 PPT_GENERATION_AGENT_MAX_SOURCES=12
 PPT_GENERATION_VISION_MODEL=mimo-v2.5
+# 可选：Mimo 原生联网搜索。需开通联网服务插件的按量开放平台 sk- Key；Token Plan 的 tp- Key 不支持此工具。
+PPT_GENERATION_MIMO_SEARCH_ENDPOINT=https://api.xiaomimimo.com/v1/chat/completions
+# PPT_GENERATION_MIMO_SEARCH_KEY=
+PPT_GENERATION_MIMO_SEARCH_MODEL=mimo-v2.5
 PPT_GENERATION_SOFFICE_COMMAND=soffice
 PPT_GENERATION_PDFTOPPM_COMMAND=pdftoppm
 PPT_GENERATION_CHROME_COMMAND=/usr/bin/chromium
+# 需要经本机代理访问研究/图片源时（仅回环地址）：
+# HTTPS_PROXY=http://127.0.0.1:7890
 PPT_GENERATION_PAPER_PARSER_COMMAND="uv run --with docling --with markitdown python"
 PPT_GENERATION_PAPER_PARSER_SCRIPT=./scripts/ppt_document_parser.py
 TAVILY_API_URL=https://api.tavily.com/search
 TAVILY_API_KEY=
 TAVILY_MAX_SEARCHES=6
 SEMANTIC_SCHOLAR_API_KEY=
+# 搜图优先级：Tavily（配置 Key 时）→ Wikimedia Commons → Openverse → Unsplash。
+# 最后一层仅用于版权角色素材缺失时的主题关联实景视觉。
 ```
 
-`project.sh` sources `.env.local` automatically for local development. For production systemd, put equivalent values in an environment file or in the service unit. PPTX/HTML generation requires Node.js 20+, stable LibreOffice, Poppler, Chromium, fontconfig and Noto CJK. The deploy installer treats these as hard preconditions and runs `npm ci --omit=dev` under the backend directory.
+`project.sh` sources `.env.local` automatically for local development and turns locally discovered `soffice`/`pdftoppm` binaries into absolute paths when those variables are not explicitly set. For production systemd, put equivalent values in an environment file or in the service unit; set `PPT_GENERATION_SOFFICE_COMMAND` and `PPT_GENERATION_PDFTOPPM_COMMAND` to absolute paths so the service does not depend on an interactive shell PATH. PPTX/HTML generation requires Node.js 20+, stable LibreOffice, Poppler, Chromium, fontconfig and Noto CJK. The deploy installer treats these as hard preconditions and runs `npm ci --omit=dev` under the backend directory.
 
 The PPT generator accepts `outputFormat=pptx|html` and `researchMode=auto|off`. Spring Boot only owns authentication, quota, queueing, recovery, task storage and SSE; `backen/scripts/ppt-agent/worker.mjs` performs research, narrative planning, authoring, real rendering, screenshot review and at most two repair rounds. The worker reads the repository Skills in `.agents/skills/`. PPTX clones an explicitly mapped source page with `pptx-automizer`; there is no recolored PptxGenJS or Python template-fill fallback. HTML remains a self-contained reveal.js artifact, authored independently from PPTX. Missing renderers, missing templates or failed QA make the task fail explicitly.
 
@@ -304,7 +317,7 @@ Important points:
 
 - Keep `/api/translate/stream/` and `/api/ppt-generate/stream/` unbuffered for SSE.
 - Keep `/api/zotero/file/` unbuffered so PDF attachment progress reflects real bytes.
-- Allow large uploads for PDF/PPTX inputs.
+- Allow large uploads for PDF/image/PPTX inputs.
 
 Minimal sketch:
 

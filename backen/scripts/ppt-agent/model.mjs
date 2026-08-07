@@ -38,15 +38,104 @@ export function extractJson(text) {
   const fenced = raw.match(JSON_BLOCK)?.[1]?.trim();
   const candidate = fenced || raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1);
   if (!candidate || !candidate.startsWith('{')) throw new Error('模型没有返回 JSON 对象');
-  return JSON.parse(candidate);
+  try {
+    return JSON.parse(candidate);
+  } catch (error) {
+    try {
+      return JSON.parse(repairJsonCandidate(candidate));
+    } catch {
+      throw error;
+    }
+  }
 }
 
-export async function completeJson({ system, user, maxTokens = 12000, repairContext = '' }) {
-  return completeStructured({ system, user, maxTokens, repairContext, imageFiles: [] });
+function repairJsonCandidate(candidate) {
+  let output = '';
+  let inString = false;
+  let escaped = false;
+  for (let index = 0; index < candidate.length; index += 1) {
+    const char = candidate[index];
+    if (!inString) {
+      output += char;
+      if (char === '"') inString = true;
+      continue;
+    }
+    if (escaped) {
+      output += char;
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      output += char;
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      const next = candidate.slice(index + 1).match(/\S/)?.[0] || '';
+      // Model responses occasionally contain an unescaped ASCII quote in a
+      // Chinese text value. Treat it as content unless it closes a JSON value.
+      if (next && ![':', ',', '}', ']', '"'].includes(next)) {
+        output += '\\"';
+      } else {
+        output += char;
+        inString = false;
+      }
+      continue;
+    }
+    if (char === '\n') output += '\\n';
+    else if (char === '\r') output += '\\r';
+    else if (char === '\t') output += '\\t';
+    else if (char.charCodeAt(0) < 0x20) output += `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`;
+    else output += char;
+  }
+  return output.replace(/,\s*([}\]])/g, '$1');
 }
 
-export async function completeVisionJson({ system, user, imageFiles, maxTokens = 4000, repairContext = '' }) {
-  return completeStructured({ system, user, maxTokens, repairContext, imageFiles: imageFiles || [] });
+export async function completeJson({ system, user, maxTokens = 12000, repairContext = '', requestTimeoutMs = 180_000, maxAttempts = 3 }) {
+  return completeStructured({ system, user, maxTokens, repairContext, imageFiles: [], requestTimeoutMs, maxAttempts });
+}
+
+export async function completeVisionJson({ system, user, imageFiles, maxTokens = 4000, repairContext = '', requestTimeoutMs = 180_000, maxAttempts = 3 }) {
+  return completeStructured({ system, user, maxTokens, repairContext, imageFiles: imageFiles || [], requestTimeoutMs, maxAttempts });
+}
+
+/** Call MiMo's native OpenAI-compatible web-search tool. This requires the
+ * pay-as-you-go API plugin and its matching sk- key, not a Token Plan tp- key. */
+export async function completeMimoWebSearch({ system, user, maxTokens = 1800, maxKeyword = 3, limit = 6 }) {
+  const endpoint = process.env.PPT_AGENT_MIMO_SEARCH_ENDPOINT || '';
+  const key = process.env.PPT_AGENT_MIMO_SEARCH_KEY || '';
+  const model = process.env.PPT_AGENT_MIMO_SEARCH_MODEL || 'mimo-v2.5';
+  if (!endpoint || !key) throw new Error('Mimo 原生联网搜索未配置 endpoint/key');
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 90_000);
+  try {
+    const response = await modelFetch(endpoint, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'api-key': key },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user }
+        ],
+        max_completion_tokens: maxTokens,
+        thinking: { type: 'disabled' },
+        tools: [{ type: 'web_search', max_keyword: maxKeyword, force_search: true, limit }],
+        tool_choice: 'auto'
+      }),
+      signal: controller.signal
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(`Mimo 搜索 HTTP ${response.status}: ${JSON.stringify(payload).slice(0, 800)}`);
+    const message = payload?.choices?.[0]?.message || {};
+    return {
+      content: String(message.content || ''),
+      annotations: Array.isArray(message.annotations) ? message.annotations : [],
+      usage: payload.usage || null
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function detectImageMediaType(buffer, file = '') {
@@ -59,7 +148,7 @@ export function detectImageMediaType(buffer, file = '') {
   throw new Error(`视觉输入不是受支持的 PNG/JPEG/GIF: ${file}`);
 }
 
-async function completeStructured({ system, user, maxTokens, repairContext, imageFiles }) {
+async function completeStructured({ system, user, maxTokens, repairContext, imageFiles, requestTimeoutMs, maxAttempts }) {
   actionCount += 1;
   if (actionCount > MAX_AGENT_ACTIONS) throw new Error(`Agent 超过 ${MAX_AGENT_ACTIONS} 个回合`);
   const endpoint = process.env.PPT_AGENT_LLM_ENDPOINT || '';
@@ -72,7 +161,9 @@ async function completeStructured({ system, user, maxTokens, repairContext, imag
 
   let lastError;
   let prompt = user;
-  for (let attempt = 0; attempt < 3; attempt += 1) {
+  const timeoutMs = Math.max(1_000, Number(requestTimeoutMs) || 180_000);
+  const attempts = Math.max(1, Math.min(3, Number(maxAttempts) || 3));
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     requestCount += 1;
     if (requestCount > MAX_MODEL_REQUESTS) throw new Error(`Agent 超过 ${MAX_MODEL_REQUESTS} 次模型/工具调用`);
     const imageBlocks = await Promise.all(imageFiles.map(async file => {
@@ -103,7 +194,7 @@ async function completeStructured({ system, user, maxTokens, repairContext, imag
         : { authorization: `Bearer ${key}` })
     };
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), 180_000);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await modelFetch(endpoint, { method: 'POST', headers, body: JSON.stringify(body), signal: controller.signal });
       const payload = await response.json().catch(() => ({}));

@@ -3,7 +3,7 @@
     <div class="container">
       <div class="tool-page__header">
         <h1>论文翻译</h1>
-        <p>上传英文 PDF，配置页面范围后进入后台队列，并生成中文或双语 PDF。</p>
+        <p>上传 PDF 或 PNG、JPG 等常见图片，翻译后生成中文或双语结果。</p>
         <p class="quota-line">余额：{{ auth.isLoggedIn ? `${auth.credits} credits` : '未登录' }} · 预计 {{ estimatedCredits }} credits</p>
       </div>
 
@@ -24,10 +24,10 @@
               <CloudUploadOutline />
             </n-icon>
           </div>
-          <p class="drop-text">拖拽 PDF 到此处，或点击选择文件</p>
-          <p id="translate-upload-hint" class="drop-hint">支持 .pdf 格式，最大 50MB</p>
+          <p class="drop-text">拖拽 PDF 或图片到此处，或点击选择文件</p>
+          <p id="translate-upload-hint" class="drop-hint">支持 .pdf、.png、.jpg、.jpeg、.gif、.bmp，最大 50MB</p>
         </button>
-        <input ref="fileInput" class="visually-hidden" type="file" accept=".pdf" aria-label="选择需要翻译的 PDF 文件" @change="handleFileSelect" />
+        <input ref="fileInput" class="visually-hidden" type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.bmp" aria-label="选择需要翻译的 PDF 或图片文件" @change="handleFileSelect" />
 
         <n-alert v-if="errorMsg" type="error" :title="errorMsg" closable @close="errorMsg = ''" style="margin-top: 16px" />
       </div>
@@ -41,7 +41,7 @@
             </n-icon>
             <div>
               <h2>{{ fileName }}</h2>
-              <p v-if="isUploading">正在上传并读取 PDF 页数...</p>
+              <p v-if="isUploading">正在上传并读取{{ isImageInput ? '图片' : 'PDF 页数' }}...</p>
               <p v-else>共 {{ totalPages }} 页</p>
             </div>
           </div>
@@ -51,8 +51,8 @@
               文件正在上传到服务器并读取页数，完成后即可选择翻译范围。
             </n-alert>
 
-            <n-alert
-              v-if="textQualityWarning"
+              <n-alert
+                v-if="textQualityWarning"
               type="warning"
               title="PDF 文本层可能不可用"
               style="margin-bottom: 20px"
@@ -60,8 +60,8 @@
               {{ textQualityWarning }}
             </n-alert>
 
-            <div class="range-label">翻译页面范围</div>
-            <div class="range-row">
+            <div v-if="!isImageInput" class="range-label">翻译页面范围</div>
+            <div v-if="!isImageInput" class="range-row">
               <n-input-number
                 v-model:value="startPage"
                 aria-label="翻译起始页"
@@ -85,25 +85,27 @@
                 全选
               </n-button>
             </div>
-            <p v-if="isUploading" class="range-hint">页数读取完成后可选择翻译范围</p>
-            <p v-else class="range-hint">将翻译第 {{ startPage }} 到 {{ endPage }} 页的内容</p>
+            <p v-if="!isImageInput && isUploading" class="range-hint">页数读取完成后可选择翻译范围</p>
+            <p v-else-if="!isImageInput" class="range-hint">将翻译第 {{ startPage }} 到 {{ endPage }} 页的内容</p>
+            <p v-else class="range-hint">将识别图片中的文字并生成一张中文译文图。</p>
 
-            <div class="range-label option-label">译文字体风格</div>
+            <div v-if="!isImageInput" class="range-label option-label">译文字体风格</div>
             <n-select
+              v-if="!isImageInput"
               v-model:value="fontFamily"
               aria-label="译文字体风格"
               :options="fontFamilyOptions"
               :disabled="isUploading || !taskId"
               style="width: 100%"
             />
-            <p class="range-hint">字号由 BabelDOC 根据原始文本框自动适配，以尽量保持版式。</p>
+            <p v-if="!isImageInput" class="range-hint">字号由 BabelDOC 根据原始文本框自动适配，以尽量保持版式。</p>
 
-            <div class="range-label option-label">翻译速度</div>
-            <n-radio-group v-model:value="translationQps" size="small" :disabled="isUploading || !taskId">
+            <div v-if="!isImageInput" class="range-label option-label">翻译速度</div>
+            <n-radio-group v-if="!isImageInput" v-model:value="translationQps" size="small" :disabled="isUploading || !taskId">
               <n-radio-button :value="2">稳定模式</n-radio-button>
               <n-radio-button :value="4">加速模式</n-radio-button>
             </n-radio-group>
-            <p class="range-hint">加速模式会监控服务器内存，压力较高时自动切换稳定模式重试。</p>
+            <p v-if="!isImageInput" class="range-hint">加速模式会监控服务器内存，压力较高时自动切换稳定模式重试。</p>
 
             <n-button
               type="primary"
@@ -113,7 +115,7 @@
               @click="handleStartTranslate"
               style="margin-top: 24px; width: 100%"
             >
-              {{ isUploading ? '正在读取 PDF...' : '开始翻译' }}
+              {{ isUploading ? `正在读取${isImageInput ? '图片' : 'PDF'}...` : '开始翻译' }}
             </n-button>
 
             <n-button text :disabled="isUploading" @click="resetToUpload" style="margin-top: 12px; width: 100%">
@@ -125,6 +127,34 @@
         <n-alert v-if="errorMsg" type="error" :title="errorMsg" closable @close="errorMsg = ''" style="margin-top: 16px" />
       </div>
 
+      <!-- 翻译失败态：单独突出恢复入口，避免失败原因被进度条和普通提示淹没 -->
+      <section v-else-if="step === 'translating' && errorMsg" class="translation-failure-panel" role="alert" aria-live="assertive">
+        <div class="failure-hero">
+          <div class="failure-icon" aria-hidden="true">
+            <n-icon size="46"><AlertCircleOutline /></n-icon>
+          </div>
+          <div>
+            <span class="failure-eyebrow">TRANSLATION FAILED · 翻译失败</span>
+            <h2>这次翻译没有完成</h2>
+            <p>{{ fileName || (isImageInput ? '当前图片' : '当前 PDF') }}<span v-if="!isImageInput && totalPages"> · 第 {{ translateStartPage }}-{{ translateEndPage }} 页</span></p>
+          </div>
+        </div>
+
+        <div class="failure-reason">
+          <strong>失败原因</strong>
+          <p>{{ errorMsg }}</p>
+        </div>
+
+        <div class="failure-actions">
+          <n-button type="primary" size="large" @click="retryTranslation">
+            <template #icon><n-icon><RefreshOutline /></n-icon></template>
+            重新翻译
+          </n-button>
+          <n-button size="large" @click="resetToUpload">重新上传文件</n-button>
+        </div>
+        <p class="failure-hint">原文件和页面设置仍已保留，可以直接调整参数后再次提交。</p>
+      </section>
+
       <!-- 翻译中态 -->
       <div v-else-if="step === 'translating'" class="progress-section">
         <div class="progress-header">
@@ -133,8 +163,8 @@
           </n-icon>
           <div>
             <h2>{{ fileName }}</h2>
-            <p v-if="queuePosition > 0">第 {{ translateStartPage }}-{{ translateEndPage }} 页 · 队列第 {{ queuePosition }} 位</p>
-            <p v-else>第 {{ translateStartPage }}-{{ translateEndPage }} 页 · BabelDOC 保留版式翻译</p>
+            <p v-if="queuePosition > 0">{{ isImageInput ? '图片' : `第 ${translateStartPage}-${translateEndPage} 页` }} · 队列第 {{ queuePosition }} 位</p>
+            <p v-else>{{ isImageInput ? '视觉模型图片翻译' : `第 ${translateStartPage}-${translateEndPage} 页 · BabelDOC 保留版式翻译` }}</p>
           </div>
         </div>
 
@@ -159,11 +189,6 @@
           服务器内存压力较高，已停止加速翻译并使用稳定模式重新处理当前任务。
         </n-alert>
 
-        <n-alert v-if="errorMsg" type="error" :title="errorMsg" closable @close="errorMsg = ''" style="margin-top: 16px">
-          <template #default>
-            <n-button size="small" @click="resetToUpload" style="margin-top: 8px">重新上传</n-button>
-          </template>
-        </n-alert>
       </div>
 
       <!-- 结果态 -->
@@ -173,13 +198,13 @@
             <n-icon size="24" color="#52c41a">
               <CheckmarkCircleOutline />
             </n-icon>
-            <span>翻译完成 · 第 {{ translateStartPage }}-{{ translateEndPage }} 页</span>
+            <span>翻译完成<span v-if="!isImageInput"> · 第 {{ translateStartPage }}-{{ translateEndPage }} 页</span></span>
           </div>
 
           <div class="result-actions">
             <n-radio-group v-model:value="pdfPreviewMode" size="small" @update:value="loadPdfPreview">
-              <n-radio-button value="translated">纯中文</n-radio-button>
-              <n-radio-button value="bilingual">双语对照</n-radio-button>
+              <n-radio-button value="translated">{{ isImageInput ? '中文译图' : '纯中文' }}</n-radio-button>
+              <n-radio-button value="bilingual">{{ isImageInput ? '双语译图' : '双语对照' }}</n-radio-button>
             </n-radio-group>
             <n-button size="small" @click="downloadResult">
               <template #icon><n-icon><DownloadOutline /></n-icon></template>
@@ -187,7 +212,7 @@
             </n-button>
             <n-button size="small" type="primary" @click="downloadPdf">
               <template #icon><n-icon><DownloadOutline /></n-icon></template>
-              下载当前 PDF
+              下载当前{{ isImageInput ? '图片' : 'PDF' }}
             </n-button>
             <n-button size="small" @click="resetToUpload">
               <template #icon><n-icon><RefreshOutline /></n-icon></template>
@@ -196,7 +221,7 @@
           </div>
         </div>
 
-        <div class="pdf-preview-panel">
+        <div v-if="!isImageInput" class="pdf-preview-panel">
           <div class="pdf-preview-header">
             <div>
               <h3>{{ pdfPreviewMode === 'bilingual' ? '双语对照 PDF 预览' : '纯中文 PDF 预览' }}</h3>
@@ -217,6 +242,21 @@
             title="翻译 PDF 预览"
           ></iframe>
           <n-alert v-else type="warning" title="PDF 预览暂不可用">
+            {{ pdfPreviewError || '请刷新预览或稍后重试。' }}
+          </n-alert>
+        </div>
+
+        <div v-else class="image-preview-panel">
+          <div class="pdf-preview-header">
+            <div>
+              <h3>{{ pdfPreviewMode === 'bilingual' ? '双语译图预览' : '中文译图预览' }}</h3>
+              <p>视觉模型会覆盖识别到的原文区域；如有文字位置不准确，可调整图片后重新翻译。</p>
+            </div>
+            <n-button size="small" :loading="isLoadingPdfPreview" @click="loadPdfPreview">刷新预览</n-button>
+          </div>
+          <div v-if="isLoadingPdfPreview" class="pdf-preview-loading">正在生成图片预览...</div>
+          <img v-else-if="pdfPreviewUrl" class="image-preview" :src="pdfPreviewUrl" alt="翻译后的图片预览" />
+          <n-alert v-else type="warning" title="图片预览暂不可用">
             {{ pdfPreviewError || '请刷新预览或稍后重试。' }}
           </n-alert>
         </div>
@@ -281,17 +321,20 @@ import {
   DocumentTextOutline,
   CheckmarkCircleOutline,
   DownloadOutline,
+  AlertCircleOutline,
   RefreshOutline
 } from '@vicons/ionicons5'
 import {
-  uploadPdf,
+  uploadTranslationFile,
   startTranslation,
   getTranslationStatus,
   getRecentTranslations,
   getQuotaSettings,
   downloadTranslation,
   downloadTranslatedPdf,
-  getTranslatedPdfBlob
+  getTranslatedPdfBlob,
+  getTranslatedImageBlob,
+  downloadTranslatedImage
 } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 
@@ -305,6 +348,7 @@ const errorMsg = ref('')
 const fileInput = ref(null)
 const fileName = ref('')
 const taskId = ref('')
+const inputKind = ref('pdf')
 const textQualitySuspicious = ref(false)
 const textQualityWarning = ref('')
 const totalPages = ref(0)
@@ -339,6 +383,7 @@ let eventSource = null
 let recentRefreshTimer = null
 const translationCreditPerPage = ref(1)
 const estimatedCredits = computed(() => Math.max(1, Number(endPage.value || 1) - Number(startPage.value || 1) + 1) * translationCreditPerPage.value)
+const isImageInput = computed(() => inputKind.value === 'image')
 
 // 触发文件选择
 function triggerFileInput() {
@@ -363,16 +408,18 @@ function handleFileSelect(e) {
   e.target.value = ''
 }
 
-// 处理文件上传（只获取页数，不开始翻译）
+// 处理文件上传（只获取页数/图片信息，不开始翻译）
 async function processFile(file) {
   errorMsg.value = ''
   if (!auth.isLoggedIn) {
-    errorMsg.value = '请先登录账号再上传 PDF'
+    errorMsg.value = '请先登录账号再上传文件'
     return
   }
 
-  if (!file.name.toLowerCase().endsWith('.pdf')) {
-    errorMsg.value = '仅支持 PDF 文件格式'
+  const extension = file.name.toLowerCase().split('.').pop()
+  const supportedExtensions = ['pdf', 'png', 'jpg', 'jpeg', 'gif', 'bmp']
+  if (!supportedExtensions.includes(extension)) {
+    errorMsg.value = '仅支持 PDF、PNG、JPG、JPEG、GIF、BMP 文件格式'
     return
   }
   if (file.size > 50 * 1024 * 1024) {
@@ -381,6 +428,7 @@ async function processFile(file) {
   }
 
   fileName.value = file.name
+  inputKind.value = extension === 'pdf' ? 'pdf' : 'image'
   taskId.value = ''
   textQualitySuspicious.value = false
   textQualityWarning.value = ''
@@ -391,12 +439,13 @@ async function processFile(file) {
   step.value = 'config'
 
   try {
-    const res = await uploadPdf(file)
+    const res = await uploadTranslationFile(file)
     if (res.code !== 200) {
       throw new Error(res.message || '上传失败')
     }
 
     taskId.value = res.data.taskId
+    inputKind.value = res.data.inputKind || inputKind.value
     textQualitySuspicious.value = Boolean(res.data.textQualitySuspicious)
     textQualityWarning.value = res.data.textQualityWarning || ''
     totalPages.value = res.data.totalPages
@@ -449,7 +498,7 @@ async function handleStartTranslate() {
     resourceDowngraded.value = false
     isGeneratingPdf.value = false
     translationProgress.value = 0
-    progressStageLabel.value = '正在启动 BabelDOC...'
+    progressStageLabel.value = isImageInput.value ? '正在准备视觉模型翻译...' : '正在启动 BabelDOC...'
     queuePosition.value = res.data.queuePosition || 0
     if (typeof res.data.credits !== 'undefined') auth.updateCredits(res.data.credits)
 
@@ -487,7 +536,9 @@ function startSSE() {
   eventSource.addEventListener('layout', () => {
     isGeneratingPdf.value = true
     queuePosition.value = 0
-    progressStageLabel.value = '正在使用 BabelDOC 分析版面、翻译并重建 PDF...'
+    progressStageLabel.value = isImageInput.value
+      ? '正在使用视觉模型识别图片文字并生成译文图像...'
+      : '正在使用 BabelDOC 分析版面、翻译并重建 PDF...'
   })
 
   eventSource.addEventListener('queued', (e) => {
@@ -508,7 +559,7 @@ function startSSE() {
       translationQps.value = data.qps || translationQps.value
       resourceDowngraded.value = Boolean(data.resourceDowngraded)
     } catch (err) {
-      console.error('解析 BabelDOC 进度失败:', err)
+      console.error('解析翻译进度失败:', err)
     }
   })
 
@@ -579,6 +630,18 @@ async function reconnectSSE() {
   }
 }
 
+// 复用已经上传的 PDF 和任务目录，只重新打开配置界面；后端允许 error 任务重新入队，避免用户再次上传大文件。
+function retryTranslation() {
+  eventSource?.close()
+  eventSource = null
+  errorMsg.value = ''
+  isGeneratingPdf.value = false
+  translationProgress.value = 0
+  queuePosition.value = 0
+  progressStageLabel.value = '准备重新翻译...'
+  step.value = 'config'
+}
+
 // 下载结果
 function downloadResult() {
   downloadTranslation(taskId.value)
@@ -586,7 +649,11 @@ function downloadResult() {
 
 // 下载翻译 PDF
 function downloadPdf() {
-  downloadTranslatedPdf(taskId.value, pdfPreviewMode.value)
+  if (isImageInput.value) {
+    downloadTranslatedImage(taskId.value, pdfPreviewMode.value)
+  } else {
+    downloadTranslatedPdf(taskId.value, pdfPreviewMode.value)
+  }
 }
 
 async function loadPdfPreview() {
@@ -595,13 +662,15 @@ async function loadPdfPreview() {
   pdfPreviewError.value = ''
 
   try {
-    const blob = await getTranslatedPdfBlob(taskId.value, pdfPreviewMode.value)
+    const blob = isImageInput.value
+      ? await getTranslatedImageBlob(taskId.value, pdfPreviewMode.value)
+      : await getTranslatedPdfBlob(taskId.value, pdfPreviewMode.value)
     if (pdfPreviewUrl.value) {
       URL.revokeObjectURL(pdfPreviewUrl.value)
     }
     pdfPreviewUrl.value = URL.createObjectURL(blob)
   } catch (e) {
-    pdfPreviewError.value = e.message || '生成 PDF 预览失败'
+    pdfPreviewError.value = e.message || (isImageInput.value ? '生成图片预览失败' : '生成 PDF 预览失败')
   } finally {
     isLoadingPdfPreview.value = false
   }
@@ -629,6 +698,7 @@ function resetToUpload() {
   progressStageLabel.value = '正在启动 BabelDOC...'
   pdfPreviewMode.value = 'translated'
   totalPages.value = 0
+  inputKind.value = 'pdf'
   taskId.value = ''
   textQualitySuspicious.value = false
   textQualityWarning.value = ''
@@ -692,6 +762,7 @@ async function restoreTask(savedTaskId, notify = false) {
   }
   taskId.value = savedTaskId
   fileName.value = data.fileName
+  inputKind.value = data.inputKind || 'pdf'
   textQualitySuspicious.value = Boolean(data.textQualitySuspicious)
   textQualityWarning.value = data.textQualityWarning || ''
   totalPages.value = data.totalPages || 0
@@ -1009,6 +1080,89 @@ onBeforeUnmount(() => {
 }
 
 /* ===== 翻译中态 ===== */
+.translation-failure-panel {
+  padding: 32px;
+  border: 2px solid #d84a3a;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #fff7f5 0%, #fff 72%);
+  box-shadow: 0 10px 28px rgba(184, 49, 38, 0.14), 4px 4px 0 rgba(184, 49, 38, 0.08);
+}
+
+.failure-hero {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.failure-icon {
+  flex: 0 0 auto;
+  width: 78px;
+  height: 78px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #b83126;
+  background: #ffe1dc;
+  box-shadow: inset 0 0 0 8px rgba(255, 255, 255, 0.66);
+}
+
+.failure-eyebrow {
+  color: #b83126;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+.failure-hero h2 {
+  margin: 5px 0 0;
+  color: #7d211b;
+  font-size: 25px;
+}
+
+.failure-hero p {
+  margin-top: 6px;
+  color: #7b645f;
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.failure-reason {
+  margin-top: 26px;
+  padding: 16px 18px;
+  border-left: 4px solid #d84a3a;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.failure-reason strong {
+  color: #7d211b;
+  font-size: 13px;
+}
+
+.failure-reason p {
+  margin: 7px 0 0;
+  color: #5f4843;
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+.failure-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 26px;
+}
+
+.failure-actions :deep(.n-button) {
+  min-width: 148px;
+}
+
+.failure-hint {
+  margin: 14px 0 0;
+  color: #8c716b;
+  font-size: 13px;
+}
+
 .progress-section {
   background: #fff;
   border-radius: 16px;
@@ -1120,6 +1274,23 @@ onBeforeUnmount(() => {
   border-radius: 8px;
   overflow: hidden;
   background: #fff;
+}
+
+.image-preview-panel {
+  margin-bottom: 24px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f8fafc;
+}
+
+.image-preview {
+  display: block;
+  max-width: 100%;
+  max-height: 72vh;
+  margin: 0 auto;
+  object-fit: contain;
+  background: #f8fafc;
 }
 
 .pdf-preview-header {
@@ -1244,8 +1415,27 @@ onBeforeUnmount(() => {
   }
 
   .progress-section,
+  .translation-failure-panel,
   .result-section {
     padding: 20px 16px;
+  }
+
+  .failure-hero {
+    align-items: flex-start;
+  }
+
+  .failure-icon {
+    width: 60px;
+    height: 60px;
+  }
+
+  .failure-hero h2 {
+    font-size: 21px;
+  }
+
+  .failure-actions,
+  .failure-actions :deep(.n-button) {
+    width: 100%;
   }
 
   .result-toolbar {

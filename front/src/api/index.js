@@ -180,8 +180,8 @@ export function getGithubProjects() {
   return get('/github-projects')
 }
 
-export function getGithubRankings(refresh = false) {
-  return get('/github-projects/rankings', refresh ? { refresh: true } : {})
+export function getGithubRankings() {
+  return get('/github-projects/rankings')
 }
 
 export function loginGithubProjectsAdmin(key) {
@@ -248,6 +248,10 @@ export function testAdminApiSettings(provider, config) {
   return post('/admin/accounts/api-settings/test', { provider, config })
 }
 
+export function requestGithubRankingRefresh() {
+  return post('/admin/accounts/github-ranking/refresh')
+}
+
 export function updateInviteStatus(id, enabled, expiresAt = '') {
   return requestWithOptions(`/admin/accounts/invites/${id}`, {
     method: 'PATCH',
@@ -268,14 +272,14 @@ export async function getGithubProjectReadme(fullName) {
   return res.text()
 }
 
-// ==================== PDF 翻译 API ====================
+// ==================== PDF / 图片翻译 API ====================
 
 /**
  * 上传 PDF 文件（获取页数信息，不立即翻译）
  * @param {File} file - PDF 文件
  * @returns {Promise}
  */
-export async function uploadPdf(file) {
+export async function uploadTranslationFile(file) {
   const formData = new FormData()
   formData.append('file', file)
   const csrfToken = localStorage.getItem('csrfToken')
@@ -287,6 +291,9 @@ export async function uploadPdf(file) {
   })
   return res.json()
 }
+
+// 兼容旧调用方；新页面使用 uploadTranslationFile 支持 PDF 和常见图片。
+export const uploadPdf = uploadTranslationFile;
 
 /**
  * 开始翻译（指定页面范围）
@@ -354,6 +361,28 @@ export async function getTranslatedPdfBlob(taskId, mode = 'translated') {
 }
 
 /**
+ * 获取图片翻译后的 PNG Blob（用于页面内预览）
+ */
+export async function getTranslatedImageBlob(taskId, mode = 'translated') {
+  const res = await fetch(`/api/translate/download-image/${taskId}?mode=${encodeURIComponent(mode)}`, {
+    credentials: 'same-origin'
+  })
+  if (!res.ok) {
+    let message = '生成翻译图片失败'
+    try {
+      const data = await res.json()
+      message = data.message || message
+    } catch {}
+    throw new Error(message)
+  }
+  return res.blob()
+}
+
+export function downloadTranslatedImage(taskId, mode = 'translated') {
+  window.open(`/api/translate/download-image/${taskId}?mode=${encodeURIComponent(mode)}`)
+}
+
+/**
  * 下载翻译后的 PDF（译文填回原位置）
  * @param {string} taskId
  */
@@ -363,12 +392,14 @@ export function downloadTranslatedPdf(taskId, mode = 'translated') {
 
 // ==================== PPT 生成 API ====================
 
-export async function createPptGenerationTask({ prompt, templateKey, outputFormat = 'pptx', researchMode = 'auto', templateFile, sourceFile, paperFile, idempotencyKey }) {
+export async function createPptGenerationTask({ prompt, templateKey, outputFormat = 'pptx', researchMode = 'auto', visualMode = 'best_effort', fontFamily = 'Microsoft YaHei', templateFile, sourceFile, paperFile, idempotencyKey }) {
   const formData = new FormData()
   if (prompt?.trim()) formData.append('prompt', prompt.trim())
   if (templateKey) formData.append('templateKey', templateKey)
   if (outputFormat) formData.append('outputFormat', outputFormat)
   formData.append('researchMode', researchMode === 'off' ? 'off' : 'auto')
+  formData.append('visualMode', visualMode === 'strict' ? 'strict' : 'best_effort')
+  if (fontFamily) formData.append('fontFamily', fontFamily)
   if (templateFile) formData.append('templateFile', templateFile)
   if (sourceFile || paperFile) formData.append('sourceFile', sourceFile || paperFile)
 

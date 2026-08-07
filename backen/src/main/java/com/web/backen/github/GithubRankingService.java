@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.time.Duration;
 import java.time.Instant;
@@ -85,19 +86,22 @@ public class GithubRankingService {
         boolean due = refreshDue();
         if (!force && (!runtimeConfig.githubRankingEnabled() || !due)) return;
         if (force && !manualRefreshAllowed()) return;
-        if (!refreshRunning.compareAndSet(false, true)) return;
-        if (force) lastManualRequestAt = Instant.now();
-        boolean refreshSnapshot = force || due;
-        refreshExecutor.submit(() -> {
-            try {
-                refreshPeriod("weekly", refreshSnapshot);
-                refreshPeriod("monthly", refreshSnapshot);
-            } catch (Exception e) {
-                log.warn("GitHub 周榜/月榜刷新失败: {}", e.getMessage());
-            } finally {
-                refreshRunning.set(false);
-            }
-        });
+        enqueueRefresh(force || due, force);
+    }
+
+    /** 仅供 root 后台调用；请求本身不等待 GitHub/LLM 上游完成。 */
+    public ManualRefreshResult requestManualRefresh() {
+        if (refreshRunning.get()) {
+            return new ManualRefreshResult(false, true, 0, "排行榜正在后台刷新，请稍后查看最新快照");
+        }
+        long retryAfterSeconds = manualRefreshRetryAfterSeconds();
+        if (retryAfterSeconds > 0) {
+            return new ManualRefreshResult(false, false, retryAfterSeconds, "手动刷新仍在冷却中，请稍后再试");
+        }
+        if (!enqueueRefresh(true, true)) {
+            return new ManualRefreshResult(false, true, 0, "排行榜已被其他后台任务抢先刷新");
+        }
+        return new ManualRefreshResult(true, true, 0, "排行榜刷新已在后台启动");
     }
 
     @PreDestroy
@@ -125,8 +129,34 @@ public class GithubRankingService {
     }
 
     private boolean manualRefreshAllowed() {
-        return Duration.between(lastManualRequestAt, Instant.now()).toMinutes()
-                >= runtimeConfig.githubRankingManualCooldownMinutes();
+        return manualRefreshRetryAfterSeconds() == 0;
+    }
+
+    private long manualRefreshRetryAfterSeconds() {
+        long cooldownSeconds = runtimeConfig.githubRankingManualCooldownMinutes() * 60L;
+        long elapsedSeconds = Duration.between(lastManualRequestAt, Instant.now()).getSeconds();
+        return Math.max(0, cooldownSeconds - elapsedSeconds);
+    }
+
+    private boolean enqueueRefresh(boolean refreshSnapshot, boolean manual) {
+        if (!refreshRunning.compareAndSet(false, true)) return false;
+        if (manual) lastManualRequestAt = Instant.now();
+        try {
+            refreshExecutor.submit(() -> {
+                try {
+                    refreshPeriod("weekly", refreshSnapshot);
+                    refreshPeriod("monthly", refreshSnapshot);
+                } catch (Exception e) {
+                    log.warn("GitHub 周榜/月榜刷新失败: {}", e.getMessage());
+                } finally {
+                    refreshRunning.set(false);
+                }
+            });
+            return true;
+        } catch (RejectedExecutionException e) {
+            refreshRunning.set(false);
+            throw e;
+        }
     }
 
     private void refreshPeriod(String type, boolean force) {
@@ -139,8 +169,7 @@ public class GithubRankingService {
             return;
         }
 
-        String query = "created:" + DATE.format(start) + ".." + DATE.format(end)
-                + " fork:false stars:>0";
+        String query = buildSearchQuery(type, today);
         int limit = "weekly".equals(type)
                 ? runtimeConfig.githubRankingWeeklyLimit()
                 : runtimeConfig.githubRankingMonthlyLimit();
@@ -239,14 +268,21 @@ public class GithubRankingService {
         data.put(historyKey, history);
     }
 
-    private LocalDate periodStart(String type, LocalDate date) {
+    static LocalDate periodStart(String type, LocalDate date) {
         if ("monthly".equals(type)) return date.with(TemporalAdjusters.firstDayOfMonth());
         return date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
     }
 
-    private LocalDate periodEnd(String type, LocalDate date) {
-        if ("monthly".equals(type)) return YearMonth.from(date).atEndOfMonth();
-        return periodStart(type, date).plusDays(6);
+    static String buildSearchQuery(String type, LocalDate date) {
+        return "created:" + DATE.format(periodStart(type, date)) + ".." + DATE.format(periodEnd(type, date))
+                + " fork:false stars:>0";
+    }
+
+    static LocalDate periodEnd(String type, LocalDate date) {
+        LocalDate configuredEnd = "monthly".equals(type)
+                ? YearMonth.from(date).atEndOfMonth()
+                : periodStart(type, date).plusDays(6);
+        return configuredEnd.isAfter(date) ? date : configuredEnd;
     }
 
     private String periodKey(String type, LocalDate date) {
@@ -275,4 +311,6 @@ public class GithubRankingService {
     private String string(Object value) {
         return value == null ? "" : value.toString().trim();
     }
+
+    public record ManualRefreshResult(boolean accepted, boolean running, long retryAfterSeconds, String message) {}
 }

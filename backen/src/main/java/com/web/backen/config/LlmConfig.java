@@ -22,6 +22,7 @@ public class LlmConfig {
     private long visionImageMaxBytes = 4L * 1024 * 1024;
     private long visionBatchMaxBytes = 16L * 1024 * 1024;
     private int visionImageMaxPixels = 4_000_000;
+    private int visionMaxTokens = 12_000;
 
     public String getApiUrl() {
         return apiUrl;
@@ -73,6 +74,8 @@ public class LlmConfig {
     public void setVisionBatchMaxBytes(long visionBatchMaxBytes) { this.visionBatchMaxBytes = visionBatchMaxBytes; }
     public int getVisionImageMaxPixels() { return visionImageMaxPixels; }
     public void setVisionImageMaxPixels(int visionImageMaxPixels) { this.visionImageMaxPixels = visionImageMaxPixels; }
+    public int getVisionMaxTokens() { return visionMaxTokens; }
+    public void setVisionMaxTokens(int visionMaxTokens) { this.visionMaxTokens = visionMaxTokens; }
 
     @Bean
     public RestClient llmRestClient() {

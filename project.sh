@@ -45,6 +45,31 @@ export ROOT_PASSWORD="${ROOT_PASSWORD:-}"
 export JAVA_HOME="${JAVA_HOME:-/opt/homebrew/opt/openjdk@17}"
 export PATH="$JAVA_HOME/bin:$PATH"
 
+# PPT Agent 由后台 Java 进程启动 Node worker。把本地可发现的渲染工具固化为
+# 绝对路径，避免桌面启动或不同 shell 环境没有继承完整 PATH 时出现 spawn ENOENT。
+if [[ -z "${PPT_GENERATION_SOFFICE_COMMAND:-}" ]] && command -v soffice >/dev/null 2>&1; then
+  export PPT_GENERATION_SOFFICE_COMMAND="$(command -v soffice)"
+fi
+if [[ -z "${PPT_GENERATION_PDFTOPPM_COMMAND:-}" ]] && command -v pdftoppm >/dev/null 2>&1; then
+  export PPT_GENERATION_PDFTOPPM_COMMAND="$(command -v pdftoppm)"
+fi
+
+# macOS 的系统代理不会自动传给从终端启动的 Java/Node 子进程。PPT Agent 的
+# 研究与图片下载只能信任 loopback 代理；若用户已在系统设置中启用本机代理，则
+# 让本地后端继承该设置，避免检索引擎在直连受限网络中全部超时。
+if [[ -z "${HTTPS_PROXY:-}" && "$(uname -s)" == "Darwin" ]] && command -v scutil >/dev/null 2>&1; then
+  SYSTEM_PROXY="$(scutil --proxy 2>/dev/null || true)"
+  SYSTEM_PROXY_ENABLED="$(awk '$1 == "HTTPSEnable" { print $3 }' <<<"$SYSTEM_PROXY")"
+  SYSTEM_PROXY_HOST="$(awk '$1 == "HTTPSProxy" { print $3 }' <<<"$SYSTEM_PROXY")"
+  SYSTEM_PROXY_PORT="$(awk '$1 == "HTTPSPort" { print $3 }' <<<"$SYSTEM_PROXY")"
+  if [[ "$SYSTEM_PROXY_ENABLED" == "1" && ( "$SYSTEM_PROXY_HOST" == "127.0.0.1" || "$SYSTEM_PROXY_HOST" == "localhost" || "$SYSTEM_PROXY_HOST" == "::1" )
+      && "$SYSTEM_PROXY_PORT" =~ ^[0-9]+$ ]]; then
+    export HTTPS_PROXY="http://$SYSTEM_PROXY_HOST:$SYSTEM_PROXY_PORT"
+    export HTTP_PROXY="${HTTP_PROXY:-$HTTPS_PROXY}"
+    printf '[i] 检测到本机系统代理，PPT Agent 将通过 %s:%s 联网\n' "$SYSTEM_PROXY_HOST" "$SYSTEM_PROXY_PORT"
+  fi
+fi
+
 if [[ -z "$ZOTERO_API_KEY" || -z "$ZOTERO_USER_ID" ]]; then
   echo "[!] 未检测到 Zotero 凭证，请在 $ROOT/.env.local 中设置 ZOTERO_API_KEY 和 ZOTERO_USER_ID"
 fi

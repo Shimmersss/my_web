@@ -3,8 +3,7 @@
     <div class="header-content">
       <button class="logo" type="button" aria-label="返回首页" @click="navigateTo('/')">
         <span class="logo-mark" aria-hidden="true"></span>
-        <span class="logo-text">Research Desk</span>
-        <small>个人研究工具台</small>
+        <span class="logo-text">闪闪的个人小站</span>
       </button>
 
       <div class="header-right">

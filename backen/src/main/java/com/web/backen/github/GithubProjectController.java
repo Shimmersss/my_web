@@ -32,10 +32,7 @@ public class GithubProjectController {
     }
 
     @GetMapping("/rankings")
-    public Map<String, Object> rankings(@RequestParam(required = false) Boolean refresh) {
-        if (Boolean.TRUE.equals(refresh)) {
-            githubRankingService.requestRefresh(true);
-        }
+    public Map<String, Object> rankings() {
         return ok(githubRankingService.getRankings());
     }
 

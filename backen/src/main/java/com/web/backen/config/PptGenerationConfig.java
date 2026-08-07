@@ -10,6 +10,7 @@ public class PptGenerationConfig {
     private String storageDir = "../.run/ppt-generation-tasks";
     private String templateCacheDir = "../.run/ppt-generation-tasks/_template-cache";
     private int maxHistory = 5;
+    private int maxGlobalHistory = 20;
     private int queueCapacity = 3;
     private int maxPromptChars = 8000;
     private long maxPaperBytes = 30L * 1024 * 1024;
@@ -28,6 +29,10 @@ public class PptGenerationConfig {
     private int agentTimeoutSeconds = 1800;
     private int agentNodeMaxOldSpaceMb = 384;
     private int agentMaxSources = 12;
+    /** Native web_search is currently available through the pay-as-you-go API plugin. */
+    private String mimoSearchEndpoint = "https://api.xiaomimimo.com/v1/chat/completions";
+    private String mimoSearchKey = "";
+    private String mimoSearchModel = "mimo-v2.5";
     private String sofficeCommand = "soffice";
     private String pdftoppmCommand = "pdftoppm";
     private String chromeCommand = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -40,6 +45,8 @@ public class PptGenerationConfig {
     public void setTemplateCacheDir(String templateCacheDir) { this.templateCacheDir = templateCacheDir; }
     public int getMaxHistory() { return maxHistory; }
     public void setMaxHistory(int maxHistory) { this.maxHistory = maxHistory; }
+    public int getMaxGlobalHistory() { return maxGlobalHistory; }
+    public void setMaxGlobalHistory(int maxGlobalHistory) { this.maxGlobalHistory = maxGlobalHistory; }
     public int getQueueCapacity() { return queueCapacity; }
     public void setQueueCapacity(int queueCapacity) { this.queueCapacity = queueCapacity; }
     public int getMaxPromptChars() { return maxPromptChars; }
@@ -76,6 +83,12 @@ public class PptGenerationConfig {
     public void setAgentNodeMaxOldSpaceMb(int agentNodeMaxOldSpaceMb) { this.agentNodeMaxOldSpaceMb = agentNodeMaxOldSpaceMb; }
     public int getAgentMaxSources() { return agentMaxSources; }
     public void setAgentMaxSources(int agentMaxSources) { this.agentMaxSources = agentMaxSources; }
+    public String getMimoSearchEndpoint() { return mimoSearchEndpoint; }
+    public void setMimoSearchEndpoint(String mimoSearchEndpoint) { this.mimoSearchEndpoint = mimoSearchEndpoint; }
+    public String getMimoSearchKey() { return mimoSearchKey; }
+    public void setMimoSearchKey(String mimoSearchKey) { this.mimoSearchKey = mimoSearchKey; }
+    public String getMimoSearchModel() { return mimoSearchModel; }
+    public void setMimoSearchModel(String mimoSearchModel) { this.mimoSearchModel = mimoSearchModel; }
     public String getSofficeCommand() { return sofficeCommand; }
     public void setSofficeCommand(String sofficeCommand) { this.sofficeCommand = sofficeCommand; }
     public String getPdftoppmCommand() { return pdftoppmCommand; }

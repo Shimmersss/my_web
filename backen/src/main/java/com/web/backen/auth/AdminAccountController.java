@@ -2,6 +2,9 @@ package com.web.backen.auth;
 
 import com.web.backen.translate.LlmService;
 import com.web.backen.zotero.ZoteroService;
+import com.web.backen.github.GithubRankingService;
+import com.web.backen.ppt.PptGenerationService;
+import com.web.backen.translate.TranslationService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -17,15 +20,22 @@ public class AdminAccountController {
     private final RuntimeConfigService runtimeConfigService;
     private final LlmService llmService;
     private final ZoteroService zoteroService;
+    private final GithubRankingService githubRankingService;
+    private final PptGenerationService pptGenerationService;
+    private final TranslationService translationService;
 
     public AdminAccountController(AuthService authService, QuotaService quotaService,
                                   RuntimeConfigService runtimeConfigService, LlmService llmService,
-                                  ZoteroService zoteroService) {
+                                  ZoteroService zoteroService, GithubRankingService githubRankingService,
+                                  PptGenerationService pptGenerationService, TranslationService translationService) {
         this.authService = authService;
         this.quotaService = quotaService;
         this.runtimeConfigService = runtimeConfigService;
         this.llmService = llmService;
         this.zoteroService = zoteroService;
+        this.githubRankingService = githubRankingService;
+        this.pptGenerationService = pptGenerationService;
+        this.translationService = translationService;
     }
 
     @GetMapping
@@ -88,8 +98,22 @@ public class AdminAccountController {
             authService.requireCsrf(request);
             authService.requireRoot(request);
             runtimeConfigService.update(body);
+            pptGenerationService.cleanupHistory();
+            translationService.cleanupHistory();
             return ResponseEntity.ok(Map.of("code", 200, "data", runtimeConfigService.publicSettings(), "message", "success"));
         } catch (AuthException e) { return error(e); }
+    }
+
+    @PostMapping("/github-ranking/refresh")
+    public ResponseEntity<?> refreshGithubRanking(HttpServletRequest request) {
+        try {
+            authService.requireCsrf(request);
+            authService.requireRoot(request);
+            GithubRankingService.ManualRefreshResult result = githubRankingService.requestManualRefresh();
+            return ResponseEntity.ok(Map.of("code", 200, "data", result, "message", result.message()));
+        } catch (AuthException e) {
+            return error(e);
+        }
     }
 
     @PostMapping("/api-settings/test")
@@ -117,6 +141,10 @@ public class AdminAccountController {
                 case "research" -> runtimeConfigService.testTavilyConnection(
                         text(config, "baseUrl", runtimeConfigService.tavilyUrl()),
                         secret(config.get("apiKey"), runtimeConfigService.tavilyKey()));
+                case "mimosearch" -> runtimeConfigService.testMimoSearchConnection(
+                        text(config, "baseUrl", runtimeConfigService.mimoSearchEndpoint()),
+                        secret(config.get("apiKey"), runtimeConfigService.mimoSearchKey()),
+                        text(config, "model", runtimeConfigService.mimoSearchModel()));
                 default -> throw new AuthException(400, "不支持的 API 提供方");
             };
             Map<String, Object> data = new LinkedHashMap<>(result);

@@ -7,6 +7,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -166,6 +169,37 @@ class TranslationServiceTest {
     }
 
     @Test
+    void refundsChargedRecoveredTaskWhenItsOriginalFileIsMissing() throws Exception {
+        PdfParseService pdfParseService = mock(PdfParseService.class);
+        BabelDocService babelDocService = mock(BabelDocService.class);
+        QuotaService quotaService = mock(QuotaService.class);
+        TranslationConfig config = new TranslationConfig();
+        config.setStorageDir(tempDir.toString());
+        config.setQueueCapacity(2);
+
+        Path taskDir = Files.createDirectories(tempDir.resolve("missing-input"));
+        TranslationSession queued = new TranslationSession("missing-input", "paper.pdf", taskDir);
+        queued.setTotalPages(2);
+        queued.setPageRange(1, 2);
+        queued.setStatus("queued");
+        queued.setQuotaRequired(true);
+        queued.setCreditTransactionId(73L);
+        new ObjectMapper().writerWithDefaultPrettyPrinter().writeValue(queued.getMetadataPath().toFile(), queued);
+
+        TranslationService service = new TranslationService(
+                pdfParseService, babelDocService, config, new ObjectMapper(), quotaService);
+        service.initialize();
+        try {
+            TranslationSession recovered = service.getSession("missing-input");
+            assertEquals("error", recovered.getStatus());
+            assertTrue(recovered.isCreditRefunded());
+            verify(quotaService).refund(73L, "翻译恢复失败自动退回额度");
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void downgradesAcceleratedTranslationOnceWhenResourcePressureIsDetected() throws Exception {
         PdfParseService pdfParseService = mock(PdfParseService.class);
         BabelDocService babelDocService = mock(BabelDocService.class);
@@ -252,6 +286,54 @@ class TranslationServiceTest {
             awaitStatus(service, session.getTaskId(), "completed");
             verify(babelDocService).translatePdf(
                     any(Path.class), any(Path.class), eq("bad.pdf"), eq(1), eq(3), eq("auto"), eq(4), any());
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void queuesImageTranslationAsOnePageAndKeepsImageResults() throws Exception {
+        PdfParseService pdfParseService = mock(PdfParseService.class);
+        BabelDocService babelDocService = mock(BabelDocService.class);
+        ImageTranslationService imageTranslationService = mock(ImageTranslationService.class);
+        TranslationConfig config = new TranslationConfig();
+        config.setStorageDir(tempDir.toString());
+        config.setQueueCapacity(2);
+
+        when(imageTranslationService.inspect(any(Path.class)))
+                .thenReturn(new TranslationFileSupport.ImageInfo(100, 80));
+        doAnswer(invocation -> {
+            Path resultDir = invocation.getArgument(1);
+            Files.writeString(resultDir.resolve("translated.txt"), "你好");
+            Files.write(resultDir.resolve("translated.png"), new byte[]{1});
+            Files.write(resultDir.resolve("bilingual.png"), new byte[]{2});
+            Files.write(resultDir.resolve("translated.pdf"), new byte[]{3});
+            Files.write(resultDir.resolve("bilingual.pdf"), new byte[]{4});
+            return null;
+        }).when(imageTranslationService).translateImage(any(Path.class), any(Path.class), anyString(), anyString(), any());
+
+        TranslationService service = new TranslationService(
+                pdfParseService, babelDocService, config, new ObjectMapper(), null, imageTranslationService);
+        service.initialize();
+        try {
+            BufferedImage image = new BufferedImage(20, 20, BufferedImage.TYPE_INT_RGB);
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            ImageIO.write(image, "png", bytes);
+            TranslationSession session = service.createSessionPreview(
+                    "poster.png", "image/png", new ByteArrayInputStream(bytes.toByteArray()), 0);
+
+            assertEquals("image", session.getInputKind());
+            assertEquals(1, session.getTotalPages());
+            assertTrue(Files.isRegularFile(session.getInputImagePath()));
+
+            service.startTranslation(session.getTaskId(), 1, 1, "auto", 4);
+            awaitStatus(service, session.getTaskId(), "completed");
+
+            assertEquals("poster-翻译版.png", service.buildImageDownloadFileName(session.getTaskId(), "translated"));
+            assertEquals("你好", service.buildDownloadContent(session.getTaskId()));
+            verify(imageTranslationService).translateImage(
+                    eq(session.getInputImagePath()), eq(session.getTaskDir()), eq("poster.png"), eq("auto"), any());
+            verifyNoInteractions(babelDocService);
         } finally {
             service.shutdown();
         }

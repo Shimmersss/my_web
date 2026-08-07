@@ -4,11 +4,12 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import JSZip from 'jszip';
-import { imageFillability, inspectTemplate, physicalSlideNumber, sanitizeGeneratedPptx } from './template-pptx.mjs';
+import { imageFillability, inspectTemplate, physicalSlideNumber, sanitizeGeneratedPptx, stripStaticTemplateArtwork } from './template-pptx.mjs';
 
 test('full-slide and out-of-bounds pictures cannot become fillable content slots', () => {
   assert.equal(imageFillability({ name: 'Picture 3', descr: '', x: 0, y: 0, width: 15294988, height: 7967314 }).fillable, false);
   assert.equal(imageFillability({ name: 'photo', descr: '', x: 2500000, y: 1500000, width: 4000000, height: 3000000 }).fillable, true);
+  assert.equal(imageFillability({ name: 'photo', descr: '', x: 2500000, y: 1500000, width: 4000000, height: 3000000 }, { width: 18288000, height: 10287000 }).fillable, true);
 });
 
 test('inspectTemplate follows presentation order and records duplicate-name selectors', async () => {
@@ -75,4 +76,40 @@ test('sanitizeGeneratedPptx removes source slide relationships and orphan rel pa
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
+});
+
+test('stripStaticTemplateArtwork preserves inherited artwork and removes explicit image placeholders', () => {
+  const xml = '<p:sld xmlns:p="p" xmlns:a="a" xmlns:r="r"><p:spTree>'
+    + '<p:grpSp><p:nvGrpSpPr/><p:spPr/></p:grpSp>'
+    + '<p:grpSp><p:nvGrpSpPr/><p:spPr/><p:sp><p:nvSpPr><p:cNvPr id="2" name="title"/></p:nvSpPr><p:txBody><a:t>保留标题</a:t></p:txBody></p:sp></p:grpSp>'
+    + '<p:pic><p:nvPicPr><p:cNvPr id="3" name="Picture 1"/></p:nvPicPr><a:blip r:embed="rId1"/></p:pic>'
+    + '<p:pic><p:nvPicPr><p:cNvPr id="4" name="Image Placeholder"/></p:nvPicPr><a:blip r:embed="rId2"/></p:pic>'
+    + '</p:spTree></p:sld>';
+  const rels = '<Relationships>'
+    + '<Relationship Id="rId1" Target="../media/template.png"/>'
+    + '<Relationship Id="rId2" Target="../media/placeholder.png"/>'
+    + '</Relationships>';
+  const cleaned = stripStaticTemplateArtwork(xml, rels, []);
+  assert.match(cleaned, /rId1/);
+  assert.match(cleaned, /保留标题/);
+  assert.doesNotMatch(cleaned, /placeholder\.png/);
+  assert.doesNotMatch(cleaned, /Image Placeholder/);
+});
+
+test('stripStaticTemplateArtwork removes unfilled content photos but keeps user-replaced media', () => {
+  const xml = '<p:sld xmlns:p="p" xmlns:a="a" xmlns:r="r"><p:spTree>'
+    + '<p:sp><p:nvSpPr><p:cNvPr id="2" name="title"/></p:nvSpPr><p:txBody><a:t>标题</a:t></p:txBody></p:sp>'
+    + '<p:pic><p:nvPicPr><p:cNvPr id="3" name="Content Photo"/></p:nvPicPr><a:blip r:embed="rId1"/></p:pic>'
+    + '<p:pic><p:nvPicPr><p:cNvPr id="4" name="Content Photo"/></p:nvPicPr><a:blip r:embed="rId2"/></p:pic>'
+    + '<p:pic><p:nvPicPr><p:cNvPr id="5" name="Background"/></p:nvPicPr><a:blip r:embed="rId3"/></p:pic>'
+    + '</p:spTree></p:sld>';
+  const rels = '<Relationships>'
+    + '<Relationship Id="rId1" Target="../media/template-a.png"/>'
+    + '<Relationship Id="rId2" Target="../media/WEB01.jpg"/>'
+    + '<Relationship Id="rId3" Target="../media/background.png"/>'
+    + '</Relationships>';
+  const cleaned = stripStaticTemplateArtwork(xml, rels, ['WEB01.jpg'], new Set(['Content Photo\u00000', 'Content Photo\u00001']));
+  assert.doesNotMatch(cleaned, /template-a\.png/);
+  assert.match(cleaned, /rId2/);
+  assert.match(cleaned, /rId3/);
 });

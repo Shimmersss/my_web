@@ -43,3 +43,18 @@ test('quality preflight rejects template residue and text outside the canvas', a
     );
   });
 });
+
+test('quality preflight keeps compact metrics on one line and safely grows an isolated caption', async () => {
+  await withProject(`elements:
+  - elementType: text
+    bounds: [60, 60, 110, 56]
+    content: {fontSize: 44, wrap: false, text: "1950"}
+  - elementType: text
+    bounds: [60, 180, 212, 52]
+    content: {fontSize: 17, lineHeight: 1.35, text: "强氧化自由基驱动母体转化；\\n其有效产率会受水质基质竞争影响。"}
+`, async ({ root, manifestFile }) => {
+    await preparePptdQuality({ projectDir: root, manifestFile, pages: ['pages/one.page'], fontFamily: 'Microsoft YaHei' });
+    const written = await fs.readFile(path.join(root, 'pages/one.page'), 'utf8');
+    assert.match(written, /- 69\n/);
+  });
+});

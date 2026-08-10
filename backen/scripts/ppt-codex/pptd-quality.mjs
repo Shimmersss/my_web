@@ -1,9 +1,11 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import JSZip from 'jszip';
 import YAML from 'yaml';
 
 const FALLBACK_CANVAS = [960, 540];
+const MAX_SAFE_AUTOFIT_HEIGHT_DELTA = 32;
 const FORBIDDEN_TEMPLATE_COPY = [
   /\blink\s*start!?\b/i,
   /\bclick\s+(?:here\s+)?to\s+add\b/i,
@@ -42,17 +44,65 @@ function requestedFont(value) {
   return /^[\p{L}\p{N} ._-]{1,80}$/u.test(font) ? font : 'Microsoft YaHei';
 }
 
-function textCapacityIssue(text, content, bounds) {
+function installedFont(family) {
+  try {
+    return execFileSync('fc-match', ['--format=%{family}', family], {
+      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], timeout: 1500
+    }).split(',')[0].trim();
+  } catch {
+    return '';
+  }
+}
+
+function effectiveCjkFont(value) {
+  const requested = requestedFont(value);
+  const resolved = installedFont(requested);
+  if (resolved && resolved.toLocaleLowerCase() === requested.toLocaleLowerCase()) return requested;
+  for (const candidate of ['Noto Sans CJK SC', 'PingFang SC', 'Source Han Sans SC', 'WenQuanYi Zen Hei']) {
+    const available = installedFont(candidate);
+    if (available && /noto|pingfang|source han|wenquanyi/i.test(available)) return available;
+  }
+  // A Windows production host can render Microsoft YaHei without fontconfig;
+  // retain the requested family there rather than silently choosing Latin UI text.
+  return requested;
+}
+
+function textCapacity(text, content, bounds) {
   if (!text) return null;
   const fontSize = Math.max(8, Number(content?.fontSize || 18));
   const lineHeight = Math.max(fontSize, Number(content?.lineHeightPx || fontSize * Number(content?.lineHeight || 1.22)));
-  const charsPerLine = Math.max(2, Math.floor(bounds[2] / (fontSize * 0.86)));
+  // Numerals and comparison punctuation occupy materially less width than CJK
+  // glyphs. Treating a compact metric as all-CJK falsely rejects common cards
+  // such as "91.5% | 15.16%" even when the exporter renders it on one line.
+  const compactMetric = /^[\d\s.,:%‰+\-–—|｜/()]+$/.test(text);
+  const charsPerLine = Math.max(2, Math.floor(bounds[2] / (fontSize * (compactMetric ? 0.55 : 0.86))));
   const availableLines = Math.max(1, Math.floor(bounds[3] / lineHeight));
   const requiredLines = text.split('\n').reduce((total, line) =>
     total + Math.max(1, Math.ceil(Math.max(1, line.trim().length) / charsPerLine)), 0);
-  if (content?.wrap === false && requiredLines > 1) return 'single-line text does not fit its width';
-  if (requiredLines > availableLines) return `estimated ${requiredLines} lines exceed the ${availableLines}-line text box capacity`;
-  return null;
+  return { fontSize, lineHeight, requiredLines, availableLines, compactMetric,
+    issue: content?.wrap === false && requiredLines > 1 ? 'single-line text does not fit its width'
+      : requiredLines > availableLines ? `estimated ${requiredLines} lines exceed the ${availableLines}-line text box capacity` : null };
+}
+
+function intersects(left, right) {
+  return left[0] < right[0] + right[2] && left[0] + left[2] > right[0]
+    && left[1] < right[1] + right[3] && left[1] + left[3] > right[1];
+}
+
+function safelyAutofitHeight(page, index, element, capacity, canvas) {
+  if (!capacity?.issue || capacity.compactMetric || element.content?.wrap === false) return false;
+  const bounds = element.bounds;
+  const needed = Math.ceil(capacity.requiredLines * capacity.lineHeight);
+  if (needed <= bounds[3] || needed - bounds[3] > MAX_SAFE_AUTOFIT_HEIGHT_DELTA || bounds[1] + needed > canvas[1]) return false;
+  const expanded = [bounds[0], bounds[1], bounds[2], needed];
+  const collides = page.elements.some((other, otherIndex) => {
+    if (otherIndex === index || !Array.isArray(other?.bounds) || other.bounds.length !== 4) return false;
+    const candidate = other.bounds.map(Number);
+    return candidate.every(Number.isFinite) && intersects(expanded, candidate);
+  });
+  if (collides) return false;
+  element.bounds[3] = needed;
+  return true;
 }
 
 function applyFontAndCheckPage(page, pagePath, canvas, font) {
@@ -85,8 +135,12 @@ function applyFontAndCheckPage(page, pagePath, canvas, font) {
     if (x < 0 || y < 0 || x + width > canvas[0] || y + height > canvas[1]) {
       issues.push(`${pagePath} element ${index + 1}: text bounds escape the ${canvas[0]}×${canvas[1]} canvas`);
     }
-    const capacityIssue = textCapacityIssue(text, element.content, bounds);
-    if (capacityIssue) issues.push(`${pagePath} element ${index + 1}: ${capacityIssue}`);
+    let capacity = textCapacity(text, element.content, bounds);
+    if (safelyAutofitHeight(page, index, element, capacity, canvas)) {
+      bounds = element.bounds.map(Number);
+      capacity = textCapacity(text, element.content, bounds);
+    }
+    if (capacity?.issue) issues.push(`${pagePath} element ${index + 1}: ${capacity.issue}`);
   }
   return issues;
 }
@@ -97,7 +151,7 @@ export async function preparePptdQuality({ projectDir, manifestFile, pages, font
   const size = Array.isArray(manifest?.size) && manifest.size.length === 2
     && manifest.size.every(value => Number.isFinite(Number(value)) && Number(value) > 0)
     ? manifest.size.map(Number) : FALLBACK_CANVAS;
-  const font = requestedFont(fontFamily);
+  const font = effectiveCjkFont(fontFamily);
   const issues = [];
   for (const relative of pages) {
     const pagePath = path.resolve(projectDir, relative);

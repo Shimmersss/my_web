@@ -198,7 +198,17 @@ cleanup_deployment_lock() { rm -f "$DEPLOYMENT_LOCK"; }
 trap cleanup_deployment_lock EXIT
 
 [[ -n "${ROOT_PASSWORD:-}" && "${#ROOT_PASSWORD}" -ge 6 ]] || die "ROOT_PASSWORD in $ENV_FILE must be set and at least 6 characters."
-[[ -x "${PPT_GENERATION_CHROME_COMMAND:-/usr/bin/chromium}" ]] || die "Chromium/Chrome not found at PPT_GENERATION_CHROME_COMMAND (default /usr/bin/chromium)."
+PPT_CHROME_COMMAND="${PPT_GENERATION_CHROME_COMMAND:-}"
+if [[ -z "$PPT_CHROME_COMMAND" ]]; then
+  for candidate in /usr/bin/chromium /usr/bin/chromium-browser /usr/bin/google-chrome; do
+    if [[ -x "$candidate" ]]; then
+      PPT_CHROME_COMMAND="$candidate"
+      break
+    fi
+  done
+fi
+[[ -n "$PPT_CHROME_COMMAND" && -x "$PPT_CHROME_COMMAND" ]] \
+  || die "Chromium/Chrome not found. Set PPT_GENERATION_CHROME_COMMAND to an executable path."
 
 if [[ "$REQUIRE_MYSQL_CONFIG" == "1" ]]; then
   [[ -n "${DB_URL:-}" && "$DB_URL" == jdbc:mysql:* ]] || die "DB_URL in $ENV_FILE must point to MySQL, or set REQUIRE_MYSQL_CONFIG=0."
@@ -327,6 +337,7 @@ EnvironmentFile=$ENV_FILE
 Environment=HOME=/home/admin
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=DEPLOYMENT_LOCK_PATH=$DEPLOYMENT_LOCK
+Environment=PPT_GENERATION_CHROME_COMMAND=$PPT_CHROME_COMMAND
 Environment="JAVA_TOOL_OPTIONS=-Xms128m -Xmx768m -XX:+UseG1GC"
 ExecStart=/usr/bin/env java -jar $INSTALL_DIR/backen/backen.jar
 Restart=always

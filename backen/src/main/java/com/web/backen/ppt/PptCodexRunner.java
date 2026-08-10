@@ -91,7 +91,7 @@ public class PptCodexRunner {
             deleteTree(target);
             copyTree(deck, target, config.getCodexMaxProjectFiles(), config.getCodexMaxProjectBytes());
             events.accept("rendering", Map.of("progress", 82, "message", "正在用服务器固定导出器生成 PPTX"));
-            runFinalize(finalizeScript, session.getTaskDir(), vendor, events);
+            runFinalize(finalizeScript, session.getTaskDir(), vendor, session.getFontFamily(), events);
         } finally {
             deleteTree(workspace);
         }
@@ -101,7 +101,7 @@ public class PptCodexRunner {
             throws IOException, InterruptedException {
         Path vendor = resolve(config.getCodexVendorRoot());
         Path finalizeScript = resolve(config.getCodexFinalizeScript());
-        runFinalize(finalizeScript, session.getTaskDir(), vendor, events);
+        runFinalize(finalizeScript, session.getTaskDir(), vendor, session.getFontFamily(), events);
     }
 
     public Map<String, Object> testConnection(String apiKey, String model, String effort)
@@ -243,7 +243,7 @@ public class PptCodexRunner {
 
     private record AuthSource(boolean localCli) {}
 
-    private void runFinalize(Path script, Path taskDir, Path vendor,
+    private void runFinalize(Path script, Path taskDir, Path vendor, String fontFamily,
                              BiConsumer<String, Map<String, Object>> events) throws IOException, InterruptedException {
         List<String> command = List.of(config.getAgentCommand(),
                 "--max-old-space-size=" + config.getAgentNodeMaxOldSpaceMb(), script.toString(),
@@ -252,7 +252,8 @@ public class PptCodexRunner {
                 "PPT_AGENT_SOFFICE", config.getSofficeCommand(),
                 "PPT_AGENT_PDFTOPPM", config.getPdftoppmCommand(),
                 "PPT_CODEX_MAX_FILES", Integer.toString(config.getCodexMaxProjectFiles()),
-                "PPT_CODEX_MAX_BYTES", Long.toString(config.getCodexMaxProjectBytes()));
+                "PPT_CODEX_MAX_BYTES", Long.toString(config.getCodexMaxProjectBytes()),
+                "PPT_CODEX_REQUESTED_FONT", fontFamily == null || fontFamily.isBlank() ? "Microsoft YaHei" : fontFamily);
         run(command, script.getParent(), null, "", Duration.ofSeconds(600), events, true, env);
     }
 
@@ -317,6 +318,12 @@ public class PptCodexRunner {
                 one ./deck/deck.pptd, ./deck/pages/*.page, and ./deck/media/ as needed. Produce 3-30 pages.
                 Do not run export_pptx.py, browser tools, package managers, network downloaders, or create scripts/binaries.
                 Do not write outside ./deck. Validate PPTD v2 structure and closed relative paths yourself.
+                Every visible text element must explicitly use the requested font. Keep all text inside its own bounds:
+                shorten conclusion titles before reducing their size, give multi-line titles sufficient height, and never let
+                a title overlap a subtitle, diagram, image, or body copy. Do not emit LaTex/Markdown source syntax as text.
+                Never use a full PDF page screenshot as a slide image; use an extracted figure with legible labels, or redraw
+                the relationship as vectors. Do not include template samples, “Link Start!”, standalone “第 N 页”, “Full”,
+                or visible bibliography/reference pages. Cite source material only in the page metadata/notes.
                 When a custom template exists at ./input/template.pptx, use it as the visual reference as described by the Skill.
                 Finish only after the complete PPTD project is present. The server will export and render it using fixed vendored code.
                 """.formatted(session.getTemplateKey(), session.getFontFamily(), session.getResearchMode());

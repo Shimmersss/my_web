@@ -35,17 +35,6 @@
               <n-alert v-if="!auth.isRoot" type="info" title="Codex PPTX 试运行仅 root 可用" class="preview-alert">普通用户仍可使用现有 HTML 演示生成。</n-alert>
             </div>
 
-            <div class="field-block font-family-block">
-              <div class="field-label">生成字体</div>
-              <label class="font-family-control">
-                <span class="font-family-control__label">应用于自动填充的文字与 HTML 页面</span>
-                <select v-model="fontFamily" aria-label="生成字体">
-                  <option v-for="font in fontOptions" :key="font.value" :value="font.value">{{ font.label }}</option>
-                </select>
-              </label>
-              <p class="field-hint">默认微软雅黑；PPTX 会直接修改模板原文字框，模板的字号、位置和段落结构保持不变。</p>
-            </div>
-
             <div class="field-block">
                 <div class="field-label">{{ outputFormat === 'html' ? 'HTML 交互主题' : 'PPTX 通用模板' }}</div>
               <div class="template-picker">
@@ -67,7 +56,7 @@
                         :aria-pressed="templateKey === template.key"
                         @click="selectTemplate(template)"
                       >
-                        <div class="template-card__cover" :style="templatePreviewStyle(buildTemplatePreviewSlides(template)[0])">
+                        <div class="template-card__cover" :style="templatePreviewStyle(buildTemplatePreviewSlides(template)[0], template)">
                           <img
                             v-if="templatePreviewImageUrl(0, template)"
                             :src="templatePreviewImageUrl(0, template)"
@@ -75,8 +64,8 @@
                             loading="lazy"
                             @error="markTemplatePreviewImageError(0, template.key)"
                           />
-                          <div v-else class="template-card__fallback" :class="`template-preview-design--${template.design || 'academic'}`">
-                            <span>01</span>
+                          <div v-else class="template-card__fallback" :class="templatePreviewClass(template)">
+                            <span>{{ templatePreviewModeLabel(template) }}</span>
                             <strong>{{ template.name }}</strong>
                           </div>
                           <span v-if="templateKey === template.key" class="template-card__selected">已选择</span>
@@ -96,7 +85,7 @@
                 <section class="template-showcase" aria-label="模板样式预览">
                   <div class="template-showcase__heading">
                     <div>
-                      <span class="template-showcase__eyebrow">STYLE PREVIEW · 5 PAGES</span>
+                      <span class="template-showcase__eyebrow">{{ templatePreviewImageUrl(templatePreviewIndex) ? 'REAL RENDER · 5 PAGES' : 'DESIGN LANGUAGE · 5 FRAMES' }}</span>
                       <h3>{{ selectedTemplate?.name || '学术蓝' }}</h3>
                       <p>{{ selectedTemplate?.description || '选择模板后查看页面节奏和配色示意。' }}</p>
                       <div class="template-showcase__facts">
@@ -117,7 +106,7 @@
                         loading="eager"
                         @error="markTemplatePreviewImageError(templatePreviewIndex, selectedTemplate?.key)"
                       />
-                      <div v-else class="template-preview-slide" :class="[`template-preview-slide--${templatePreviewSlides[templatePreviewIndex].kind}`, `template-preview-design--${selectedTemplate?.design || 'academic'}`]">
+                      <div v-else class="template-preview-slide" :class="[`template-preview-slide--${templatePreviewSlides[templatePreviewIndex].kind}`, templatePreviewClass()]">
                         <span class="template-preview-kicker">{{ templatePreviewSlides[templatePreviewIndex].eyebrow }}</span>
                         <span v-if="templatePreviewSlides[templatePreviewIndex].index" class="template-preview-chapter">{{ templatePreviewSlides[templatePreviewIndex].index }}</span>
                         <h4>{{ templatePreviewSlides[templatePreviewIndex].title }}</h4>
@@ -141,7 +130,7 @@
                         :aria-label="`预览第 ${index + 1} 页`"
                         @click="templatePreviewIndex = index"
                       >
-                        <div class="template-preview-thumb__canvas" :class="`template-preview-design--${selectedTemplate?.design || 'academic'}`" :style="templatePreviewStyle(slide)">
+                        <div class="template-preview-thumb__canvas" :class="templatePreviewClass()" :style="templatePreviewStyle(slide)">
                           <img
                             v-if="templatePreviewImageUrl(index)"
                             :src="templatePreviewImageUrl(index)"
@@ -161,7 +150,7 @@
                   </div>
                   <p class="template-showcase__note">
                     {{ selectedTemplate?.category === 'pptd'
-                      ? '这里展示的是 PPTD 设计系统的配色和版式节奏；Codex 会在隔离工作区生成完整的可编辑 PPTD 项目，再由服务器固定导出器生成 PPTX。'
+                      ? '这是所选 PPTD 设计系统的风格化信息预览；它展示配色、版式节奏和信息密度，不把示意文字承诺为最终内容。Codex 会在隔离工作区生成可编辑 PPTD，再由服务器固定导出器生成 PPTX。'
                       : selectedTemplate?.category === 'github'
                       ? '这里展示的是来自 GitHub 成品 PPTX 的真实 5 页样稿；生成时会保留该模板的构图语言并用可编辑内容替换示例文字。'
                       : outputFormat === 'html'
@@ -178,7 +167,7 @@
                 <input type="file" accept=".pptx" aria-label="上传自定义 PPT 模板" @change="handleTemplateSelect" />
                 <n-icon size="34"><EaselOutline /></n-icon>
                 <strong>{{ templateFile ? templateFile.name : '上传自定义 PPT 模板' }}</strong>
-                <span>可选；作为 PPTX 底稿和布局来源</span>
+                <span>可选；作为 Codex 的视觉参考，不会覆盖当前设计系统</span>
               </label>
               <label class="file-box">
                 <input type="file" accept=".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.html,.htm" aria-label="上传资料文件" @change="handleSourceSelect" />
@@ -202,33 +191,45 @@
               <p class="field-hint">提示词和资料至少提供一个；只上传资料时，系统会自动提炼主题、结构、重点数据和适合的视觉素材。</p>
             </div>
 
-            <div class="field-block">
-              <div class="field-label">联网研究</div>
-              <div class="output-format-picker" role="radiogroup" aria-label="联网研究">
-                <button type="button" role="radio" :class="['output-format-card', { active: researchMode === 'auto' }]" :aria-checked="researchMode === 'auto'" @click="researchMode = 'auto'">
-                  <strong>自动研究</strong>
-                  <span>检索论文与可信网页，核验事实并生成引用</span>
-                </button>
-                <button type="button" role="radio" :class="['output-format-card', { active: researchMode === 'off' }]" :aria-checked="researchMode === 'off'" @click="researchMode = 'off'">
-                  <strong>关闭联网</strong>
-                  <span>仅使用提示词、上传资料与模板资产</span>
-                </button>
+            <details class="generation-options">
+              <summary><span>生成偏好</span><small>{{ preferenceSummary }}</small></summary>
+              <div class="generation-options__body">
+                <div class="font-family-block">
+                  <div class="field-label">生成字体</div>
+                  <label class="font-family-control">
+                    <span class="font-family-control__label">应用于自动填充的文字与 HTML 页面</span>
+                    <select v-model="fontFamily" aria-label="生成字体">
+                      <option v-for="font in fontOptions" :key="font.value" :value="font.value">{{ font.label }}</option>
+                    </select>
+                  </label>
+                  <p class="field-hint">PPTX 会把这个选择写入全部生成文字；标题过长会先缩写或换行，不会再压住正文。</p>
+                </div>
+                <div class="generation-options__grid">
+                  <div>
+                    <div class="field-label">联网研究</div>
+                    <div class="output-format-picker" role="radiogroup" aria-label="联网研究">
+                      <button type="button" role="radio" :class="['output-format-card', { active: researchMode === 'auto' }]" :aria-checked="researchMode === 'auto'" @click="researchMode = 'auto'">
+                        <strong>自动研究</strong><span>检索可信来源并核验事实</span>
+                      </button>
+                      <button type="button" role="radio" :class="['output-format-card', { active: researchMode === 'off' }]" :aria-checked="researchMode === 'off'" @click="researchMode = 'off'">
+                        <strong>关闭联网</strong><span>仅使用提示词与上传资料</span>
+                      </button>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="field-label">网络配图</div>
+                    <div class="output-format-picker" role="radiogroup" aria-label="网络配图">
+                      <button type="button" role="radio" :class="['output-format-card', { active: visualMode === 'best_effort' }]" :aria-checked="visualMode === 'best_effort'" @click="visualMode = 'best_effort'">
+                        <strong>尽力配图</strong><span>可靠素材优先；没有合适图片时保留清晰版式</span>
+                      </button>
+                      <button type="button" role="radio" :class="['output-format-card', { active: visualMode === 'strict' }]" :aria-checked="visualMode === 'strict'" @click="visualMode = 'strict'">
+                        <strong>严格图文并茂</strong><span>要求内容页有贴题图片；无可用素材会明确失败</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-
-            <div class="field-block">
-              <div class="field-label">网络配图</div>
-              <div class="output-format-picker" role="radiogroup" aria-label="网络配图">
-                <button type="button" role="radio" :class="['output-format-card', { active: visualMode === 'best_effort' }]" :aria-checked="visualMode === 'best_effort'" @click="visualMode = 'best_effort'">
-                  <strong>尽力配图</strong>
-                  <span>默认。优先使用贴题网络图；找不到可靠素材时保留版式，不会因此失败</span>
-                </button>
-                <button type="button" role="radio" :class="['output-format-card', { active: visualMode === 'strict' }]" :aria-checked="visualMode === 'strict'" @click="visualMode = 'strict'">
-                  <strong>严格图文并茂</strong>
-                  <span>要求至少一张贴题网络图成功落到内容页；无可用素材时任务会明确失败</span>
-                </button>
-              </div>
-            </div>
+            </details>
 
             <div class="actions">
               <n-button type="primary" size="large" :loading="isSubmitting" @click="submitTask">
@@ -497,6 +498,7 @@ const previewSlides = computed(() => previewData.value?.slides || [])
 const formatTemplates = computed(() => templates.value.filter(item => !Array.isArray(item.formats) || item.formats.includes(outputFormat.value)))
 const selectedTemplate = computed(() => formatTemplates.value.find(item => item.key === templateKey.value) || formatTemplates.value[0] || null)
 const selectedPreviewSlide = computed(() => previewSlides.value[previewSelectedIndex.value] || null)
+const preferenceSummary = computed(() => `${fontOptions.find(item => item.value === fontFamily.value)?.label || fontFamily.value} · ${researchMode.value === 'auto' ? '自动研究' : '仅本地资料'} · ${visualMode.value === 'strict' ? '严格配图' : '尽力配图'}`)
 const editorUrl = computed(() => taskId.value ? `/pptd-editor/upstream/?taskId=${encodeURIComponent(taskId.value)}` : '')
 const templatePreviewSlides = computed(() => buildTemplatePreviewSlides(selectedTemplate.value))
 const templateGroups = computed(() => {
@@ -850,8 +852,8 @@ function buildTemplatePreviewSlides(template) {
   ]
 }
 
-function templatePreviewStyle(slide) {
-  const palette = (selectedTemplate.value?.palette || ['005BAC', '063A78', 'D9A441', 'EFF6FF', '1F2937']).map(color => `#${String(color).replace('#', '')}`)
+function templatePreviewStyle(slide, template = selectedTemplate.value) {
+  const palette = (template?.palette || ['005BAC', '063A78', 'D9A441', 'EFF6FF', '1F2937']).map(color => `#${String(color).replace('#', '')}`)
   const dark = ['cover', 'section', 'closing'].includes(slide?.kind)
   return {
     '--template-accent': palette[0],
@@ -860,6 +862,26 @@ function templatePreviewStyle(slide) {
     '--template-bg': dark ? palette[1] : palette[3],
     '--template-text': dark ? '#ffffff' : palette[4]
   }
+}
+
+function templatePreviewClass(template = selectedTemplate.value) {
+  const key = `${template?.design || ''} ${template?.key || ''}`.toLowerCase()
+  if (/(dark|neon|cyber|black)/.test(key)) return 'template-preview-design--dark-tech'
+  if (/(collage|brand|peach|pink|silk|fresh)/.test(key)) return 'template-preview-design--poster'
+  if (/(data|analytics|engineering|due|quarterly|medical)/.test(key)) return 'template-preview-design--grid'
+  if (/(paper|academic|course|education|training)/.test(key)) return 'template-preview-design--paper'
+  if (/(orange|red|gold|yellow|journal)/.test(key)) return 'template-preview-design--editorial'
+  return 'template-preview-design--soft'
+}
+
+function templatePreviewModeLabel(template = selectedTemplate.value) {
+  return {
+    'template-preview-design--dark-tech': 'DARK / TECH',
+    'template-preview-design--poster': 'POSTER / STORY',
+    'template-preview-design--grid': 'GRID / DATA',
+    'template-preview-design--paper': 'PAPER / STUDY',
+    'template-preview-design--editorial': 'EDITORIAL'
+  }[templatePreviewClass(template)] || 'CLEAN / WORK'
 }
 
 async function submitRevision() {
@@ -1325,6 +1347,71 @@ p {
   font: inherit;
 }
 
+.generation-options {
+  margin-top: 22px;
+  border: 1px solid #d2cabc;
+  border-radius: 10px;
+  background: #f8f4ed;
+}
+
+.generation-options summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 56px;
+  padding: 0 16px;
+  color: #0f172a;
+  cursor: pointer;
+  list-style: none;
+}
+
+.generation-options summary::-webkit-details-marker {
+  display: none;
+}
+
+.generation-options summary::after {
+  content: '＋';
+  order: 3;
+  color: #8f2a22;
+  font-size: 20px;
+  font-weight: 400;
+}
+
+.generation-options[open] summary {
+  border-bottom: 1px solid #ded6c7;
+}
+
+.generation-options[open] summary::after {
+  content: '−';
+}
+
+.generation-options summary > span {
+  font-weight: 800;
+}
+
+.generation-options summary > small {
+  flex: 1;
+  overflow: hidden;
+  color: #64748b;
+  font-size: 12px;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.generation-options__body {
+  display: grid;
+  gap: 18px;
+  padding: 16px;
+}
+
+.generation-options__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
 .output-format-picker {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1514,6 +1601,32 @@ p {
 
 .template-preview-design--editorial h4 {
   letter-spacing: -.04em;
+}
+
+.template-preview-design--dark-tech {
+  color: #ecfeff;
+  background-color: #08111f;
+  background-image: linear-gradient(rgba(45, 212, 191, .12) 1px, transparent 1px), linear-gradient(90deg, rgba(45, 212, 191, .12) 1px, transparent 1px), radial-gradient(circle at 88% 12%, rgba(139, 92, 246, .5), transparent 28%);
+  background-size: 12% 18%, 12% 18%, auto;
+}
+
+.template-preview-design--poster {
+  font-family: Georgia, "Songti SC", serif;
+  background-image: linear-gradient(132deg, transparent 0 43%, color-mix(in srgb, var(--template-accent) 75%, white) 43% 61%, transparent 61%), linear-gradient(25deg, transparent 0 70%, color-mix(in srgb, var(--template-highlight) 54%, transparent) 70% 88%, transparent 88%);
+}
+
+.template-preview-design--grid {
+  background-image: linear-gradient(to right, color-mix(in srgb, var(--template-deep) 13%, transparent) 1px, transparent 1px), linear-gradient(to bottom, color-mix(in srgb, var(--template-deep) 13%, transparent) 1px, transparent 1px);
+  background-size: 16.66% 100%, 100% 25%;
+}
+
+.template-preview-design--paper {
+  font-family: Georgia, "Songti SC", serif;
+  background-image: linear-gradient(90deg, color-mix(in srgb, var(--template-accent) 65%, transparent) 0 4px, transparent 4px), radial-gradient(circle at 84% 18%, color-mix(in srgb, var(--template-highlight) 44%, transparent) 0 5%, transparent 5.5%);
+}
+
+.template-preview-design--soft {
+  background-image: radial-gradient(circle at 88% 16%, color-mix(in srgb, var(--template-accent) 38%, transparent), transparent 26%), linear-gradient(135deg, transparent 30%, color-mix(in srgb, var(--template-highlight) 17%, transparent));
 }
 
 .template-preview-design--memphis {
@@ -1791,7 +1904,12 @@ p {
   padding: 13px;
   overflow: hidden;
   color: var(--template-text);
-  background: var(--template-bg);
+  background-color: var(--template-bg);
+}
+
+.template-card__fallback.template-preview-design--dark-tech,
+.template-card__fallback.template-preview-design--dark-tech strong {
+  color: #ecfeff;
 }
 
 .template-card__fallback::before {
@@ -2461,8 +2579,13 @@ p {
 
   .template-grid,
   .upload-grid,
-  .stage-grid {
+  .stage-grid,
+  .generation-options__grid {
     grid-template-columns: 1fr;
+  }
+
+  .generation-options summary > small {
+    display: none;
   }
 
   .template-picker {

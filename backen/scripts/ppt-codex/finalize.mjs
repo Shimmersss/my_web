@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import JSZip from 'jszip';
 import { renderPptx } from '../ppt-agent/render.mjs';
+import { assertPptxTextFrameBounds, preparePptdQuality } from './pptd-quality.mjs';
 
 const [taskDirArg, vendorRootArg] = process.argv.slice(2);
 if (!taskDirArg || !vendorRootArg) throw new Error('usage: finalize.mjs <taskDir> <vendorRoot>');
@@ -97,9 +98,17 @@ for (const file of projectFiles) {
 }
 if (totalBytes > MAX_BYTES) throw new Error(`PPTD project exceeds ${MAX_BYTES} bytes`);
 
+const qualityInput = await preparePptdQuality({
+  projectDir,
+  manifestFile,
+  pages,
+  fontFamily: process.env.PPT_CODEX_REQUESTED_FONT
+});
+
 const exporter = path.join(vendorRoot, 'skills/open-kimi-ppt/scripts/export_pptx.py');
 const output = path.join(taskDir, 'output.pptx');
 await run(process.env.PPT_CODEX_PYTHON || 'python3', [exporter, manifestFile, '--output', output, '--force'], projectDir);
+await assertPptxTextFrameBounds(output);
 const previewDir = path.join(taskDir, 'preview');
 const renderedPages = await renderPptx(output, previewDir);
 if (renderedPages !== pages.length) throw new Error(`rendered page count mismatch: ${renderedPages}/${pages.length}`);
@@ -111,7 +120,7 @@ for (const file of projectFiles) {
 await fs.writeFile(path.join(taskDir, 'pptd-project.zip'), await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
 const slides = pages.map((pageFile, index) => ({ index: index + 1, title: path.basename(pageFile, '.page'), sourceIds: [] }));
 const plan = { title: manifests[0].replace(/\.pptd$/, ''), slides };
-const qa = { valid: true, engine: 'codex-pptd', structural: { valid: true, version: 'v2', pageCount: pages.length }, visualReview: { valid: true, issues: [], note: 'LibreOffice real-render gate passed; manual edits create immutable versions.' } };
+const qa = { valid: true, engine: 'codex-pptd', structural: { valid: true, version: 'v2', pageCount: pages.length, canvas: qualityInput.canvas, font: qualityInput.font }, visualReview: { valid: true, issues: [], note: 'PPTD text/font preflight, PPTX text-frame boundary check, and LibreOffice real-render gate passed; manual edits create immutable versions.' } };
 const preview = { format: 'pptx', engine: 'codex-pptd', title: plan.title, slides: slides.map((slide, index) => ({ ...slide, imageFile: `slide-${index + 1}.png`, width: 1280, height: 720 })), sources: [], qa };
 await fs.writeFile(path.join(taskDir, 'agent-plan.json'), JSON.stringify(plan, null, 2));
 await fs.writeFile(path.join(taskDir, 'sources.json'), '[]\n');

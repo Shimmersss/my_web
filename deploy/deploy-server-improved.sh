@@ -304,6 +304,9 @@ for document in README.md DEPLOYMENT.md AGENTS.md WORKLOG.md MAINTENANCE.md rele
   fi
 done
 
+info "Verifying that headless LibreOffice really renders newly authored CJK text..."
+(cd "$INSTALL_DIR/backen" && npm run preflight:ppt-fonts)
+
 if [[ -f "$CURRENT_DIR/.run/github-projects.json" && ! -f "$INSTALL_DIR/.run/github-projects.json" ]]; then
   cp "$CURRENT_DIR/.run/github-projects.json" "$INSTALL_DIR/.run/github-projects.json"
 fi
@@ -319,9 +322,6 @@ if [[ ! -f "$PPT_CODEX_MIGRATION_MARKER" ]]; then
   chmod 600 "$PPT_TASK_ARCHIVE"
   info "Archived and cleared pre-Codex PPT tasks: $PPT_TASK_ARCHIVE"
 fi
-
-info "Verifying that headless LibreOffice really renders newly authored CJK text..."
-(cd "$INSTALL_DIR/backen" && npm run preflight:ppt-fonts)
 
 info "Installing systemd service..."
 cat > "/etc/systemd/system/$SERVICE_NAME.service" <<SERVICE_UNIT

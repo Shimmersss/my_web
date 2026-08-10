@@ -1,9 +1,6 @@
 export default {
   common: {
     home: '首页',
-    about: '项目说明',
-    business: '工具模块',
-    cases: '案例归档',
     news: '开源项目',
     contact: 'PPT 生成',
     search: '搜索',
@@ -41,37 +38,5 @@ export default {
       title: 'GitHub 项目开源',
       subtitle: '展示精选开源项目与实时仓库数据'
     }
-  },
-  about: {
-    title: '项目说明',
-    intro: '项目简介',
-    history: '演进记录',
-    organization: '系统结构',
-    team: '核心模块',
-    honors: '维护重点',
-    culture: '工作原则'
-  },
-  business: {
-    title: '工具模块',
-    solution: '工作流组合',
-    process: '使用流程'
-  },
-  cases: {
-    title: '任务样例',
-    filterIndustry: '模块筛选',
-    filterType: '链路筛选',
-    background: '项目背景',
-    solution: '处理链路',
-    result: '产物记录',
-    download: '归档下载'
-  },
-  contact: {
-    title: 'PPT 生成',
-    address: '项目路径',
-    phone: '联系电话',
-    email: '电子邮箱',
-    message: '生成提示词',
-    submit: '开始生成',
-    service: '客服咨询'
   },
 }

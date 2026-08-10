@@ -5,7 +5,7 @@ import { claimDailyCheckin, getCurrentUser, getSiteSettings, loginAccount, logou
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const loading = ref(false)
-  const visibility = ref({ Publications: 'PUBLIC', Translate: 'USER', Contact: 'USER', News: 'PUBLIC', Business: 'PUBLIC', Cases: 'PUBLIC' })
+  const visibility = ref({ Publications: 'PUBLIC', Translate: 'USER', Contact: 'USER', News: 'PUBLIC' })
   const authPrompt = ref('')
   const pendingPath = ref('')
 

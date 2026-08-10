@@ -11,9 +11,6 @@
             <a class="primary-action" href="/publications" @click.prevent="navigateTo('/publications')">
               进入工作台 <span aria-hidden="true">→</span>
             </a>
-            <a class="text-action" href="/publications" @click.prevent="navigateTo('/publications')">
-              进入文献库 <span aria-hidden="true">→</span>
-            </a>
           </div>
 
           <div class="hero-status" aria-label="网站状态">
@@ -298,8 +295,7 @@ function formatNumber(value) {
   margin-top: 54px;
 }
 
-.primary-action,
-.text-action {
+.primary-action {
   text-decoration: none;
   transition: color $transition-fast, transform $transition-fast, background $transition-fast;
 }
@@ -321,21 +317,6 @@ function formatNumber(value) {
   &:hover {
     background: #92271f;
     transform: translateY(-2px);
-  }
-}
-
-.text-action {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding-bottom: 4px;
-  border-bottom: 1px solid #9c9488;
-  color: #4f4b43;
-  font-size: 14px;
-
-  &:hover {
-    border-color: #b83126;
-    color: #b83126;
   }
 }
 
@@ -672,7 +653,12 @@ function formatNumber(value) {
   .desk-hero { padding: 30px 0 18px; }
   .hero-copy { padding: 12px 20px 0 28px; }
   .hero-copy::before { top: 20px; width: 2px; height: 70px; }
-  .hero-copy h1 { font-size: clamp(48px, 15vw, 72px); letter-spacing: -0.06em; }
+  .hero-copy h1 {
+    font-size: clamp(36px, 12vw, 48px);
+    letter-spacing: -0.05em;
+    line-height: 1.16;
+    white-space: nowrap;
+  }
   .hero-copy .lead { margin-top: 14px; font-size: 19px; }
   .hero-actions { align-items: flex-start; flex-direction: column; gap: 18px; margin-top: 34px; }
   .hero-status { margin-top: 26px; }

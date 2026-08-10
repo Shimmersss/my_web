@@ -131,13 +131,7 @@ const authForm = reactive({
 })
 
 const isDark = computed(() => themeStore.isDark)
-const activeKey = computed(() => {
-  const activeMap = {
-    BusinessDetail: 'Business',
-    CaseDetail: 'Cases'
-  }
-  return activeMap[route.name] || route.name
-})
+const activeKey = computed(() => route.name)
 
 const MenuIcon = MenuOutline
 const MoonIcon = MoonOutline

@@ -7,17 +7,6 @@
           <span class="logo-text">Research Desk</span>
         </div>
         <p class="footer-desc">{{ $t('home.hero.subtitle') }}</p>
-        <div class="social-links">
-          <n-icon size="20" class="social-icon">
-            <WechatIcon />
-          </n-icon>
-          <n-icon size="20" class="social-icon">
-            <WeiboIcon />
-          </n-icon>
-          <n-icon size="20" class="social-icon">
-            <LinkedinIcon />
-          </n-icon>
-        </div>
       </div>
 
       <div class="footer-section">
@@ -30,23 +19,6 @@
         </ul>
       </div>
 
-      <div class="footer-section">
-        <h4 class="footer-title">当前工具</h4>
-        <div class="contact-info">
-          <a href="/contact" @click.prevent="navigateTo('/contact')">
-            <n-icon><LocationIcon /></n-icon>
-            PPT 生成
-          </a>
-          <a href="/translate" @click.prevent="navigateTo('/translate')">
-            <n-icon><PhoneIcon /></n-icon>
-            论文翻译
-          </a>
-          <a href="/news" @click.prevent="navigateTo('/news')">
-            <n-icon><MailIcon /></n-icon>
-            GitHub 项目
-          </a>
-        </div>
-      </div>
     </div>
 
     <div class="footer-bottom">
@@ -59,24 +31,8 @@
 
 <script setup>
 import { useRouter } from 'vue-router'
-import { NIcon } from 'naive-ui'
-import {
-  LogoWechat,
-  ShareSocial,
-  LogoLinkedin,
-  LocationOutline,
-  CallOutline,
-  MailOutline
-} from '@vicons/ionicons5'
 
 const router = useRouter()
-
-const WechatIcon = LogoWechat
-const WeiboIcon = ShareSocial
-const LinkedinIcon = LogoLinkedin
-const LocationIcon = LocationOutline
-const PhoneIcon = CallOutline
-const MailIcon = MailOutline
 
 const navigateTo = (path) => {
   router.push(path)
@@ -93,7 +49,7 @@ const navigateTo = (path) => {
 
   .footer-content {
     display: grid;
-    grid-template-columns: 2fr 1fr 1fr;
+    grid-template-columns: minmax(0, 2fr) minmax(180px, 1fr);
     gap: $spacing-xl;
     margin-bottom: $spacing-xl;
   }
@@ -129,22 +85,6 @@ const navigateTo = (path) => {
     font-size: $font-size-base;
   }
 
-  .social-links {
-    display: flex;
-    gap: $spacing-md;
-
-    .social-icon {
-      cursor: pointer;
-      transition: all $transition-fast;
-      color: $text-color-secondary;
-
-      &:hover {
-        transform: scale(1.1);
-        color: $primary-color;
-      }
-    }
-  }
-
   .footer-title {
     font-size: $font-size-title-h3;
     font-weight: 600;
@@ -167,24 +107,6 @@ const navigateTo = (path) => {
       &:hover {
         color: $primary-color;
         padding-left: 4px;
-      }
-    }
-  }
-
-  .contact-info {
-    a {
-      display: flex;
-      align-items: center;
-      gap: $spacing-sm;
-      color: $text-color-secondary;
-      margin-bottom: $spacing-sm;
-      font-size: $font-size-base;
-      line-height: $line-height;
-      text-decoration: none;
-
-      .n-icon {
-        flex-shrink: 0;
-        color: $primary-color;
       }
     }
   }

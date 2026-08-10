@@ -59,7 +59,7 @@ public class RuntimeConfigService {
     private static final String GITHUB_RANKING_MONTHLY_LIMIT = "github.ranking.monthly.limit";
     private static final String GITHUB_RANKING_AI_ENABLED = "github.ranking.ai.enabled";
     private static final Map<String, String> VISIBILITY_DEFAULTS = Map.of(
-            "Publications", "PUBLIC", "Translate", "USER", "Contact", "USER", "News", "PUBLIC", "Business", "PUBLIC", "Cases", "PUBLIC");
+            "Publications", "PUBLIC", "Translate", "USER", "Contact", "USER", "News", "PUBLIC");
     private static final String VISIBILITY_POLICY_VERSION = "visibility.policy.version";
 
     private final JdbcTemplate jdbc;

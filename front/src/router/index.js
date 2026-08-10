@@ -9,36 +9,6 @@ const routes = [
     meta: { title: '首页' }
   },
   {
-    path: '/about',
-    name: 'About',
-    component: () => import('@/views/About/index.vue'),
-    meta: { title: '项目说明' }
-  },
-  {
-    path: '/business',
-    name: 'Business',
-    component: () => import('@/views/Business/index.vue'),
-    meta: { title: '工具模块', visibility: 'Business' }
-  },
-  {
-    path: '/business/:id',
-    name: 'BusinessDetail',
-    component: () => import('@/views/Business/detail.vue'),
-    meta: { title: '工具详情', visibility: 'Business' }
-  },
-  {
-    path: '/cases',
-    name: 'Cases',
-    component: () => import('@/views/Cases/index.vue'),
-    meta: { title: '任务样例', visibility: 'Cases' }
-  },
-  {
-    path: '/cases/:id',
-    name: 'CaseDetail',
-    component: () => import('@/views/Cases/detail.vue'),
-    meta: { title: '样例详情', visibility: 'Cases' }
-  },
-  {
     path: '/news',
     name: 'News',
     component: () => import('@/views/News/index.vue'),
@@ -67,7 +37,12 @@ const routes = [
     name: 'Admin',
     component: () => import('@/views/Admin/index.vue'),
     meta: { title: '账号后台', visibility: 'Admin' }
-  }
+  },
+  // Retire unused showcase pages without leaving old links on a blank view.
+  { path: '/about', redirect: '/' },
+  { path: '/business/:pathMatch(.*)*', redirect: '/' },
+  { path: '/cases/:pathMatch(.*)*', redirect: '/' },
+  { path: '/:pathMatch(.*)*', redirect: '/' }
 ]
 
 const router = createRouter({

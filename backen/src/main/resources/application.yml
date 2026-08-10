@@ -92,7 +92,6 @@ translation:
 ppt-generation:
   # 公开 PPT 生成入口保持资源保守：单 worker、有界队列、文件落盘
   storage-dir: ${PPT_GENERATION_STORAGE_DIR:../.run/ppt-generation-tasks}
-  template-cache-dir: ${PPT_GENERATION_TEMPLATE_CACHE_DIR:../.run/ppt-generation-tasks/_template-cache}
   max-history: ${PPT_GENERATION_MAX_HISTORY:5}
   max-global-history: ${PPT_GENERATION_MAX_GLOBAL_HISTORY:20}
   queue-capacity: ${PPT_GENERATION_QUEUE_CAPACITY:3}

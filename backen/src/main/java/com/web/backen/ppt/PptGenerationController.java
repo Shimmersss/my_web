@@ -60,6 +60,10 @@ public class PptGenerationController {
             return authError(e);
         }
         try {
+            if ("pptx".equalsIgnoreCase(outputFormat) && !user.isRoot()) {
+                return ResponseEntity.status(403).body(Map.of("code", 403,
+                        "message", "Codex PPTX 试运行仅 root 可用；普通用户仍可生成 HTML 演示"));
+            }
             MultipartFile materialFile = sourceFile != null && !sourceFile.isEmpty() ? sourceFile : legacyPaperFile;
             PptGenerationSession session = pptGenerationService.createTask(prompt, templateKey, 100,
                     templateFile, materialFile, user, clientRequestId, outputFormat, researchMode, visualMode, fontFamily);
@@ -101,6 +105,9 @@ public class PptGenerationController {
             PptGenerationSession original = pptGenerationService.getSession(taskId);
             if (!pptGenerationService.canAccess(original, user)) {
                 original = pptGenerationService.getAuthorizedSession(taskId, accessToken);
+            }
+            if ("pptx".equalsIgnoreCase(original.getOutputFormat()) && !user.isRoot()) {
+                return ResponseEntity.status(403).body(Map.of("code", 403, "message", "Codex PPTX 修改仅 root 可用"));
             }
             String prompt = body == null ? "" : String.valueOf(body.getOrDefault("prompt", ""));
             PptGenerationSession session = pptGenerationService.createRevisionTask(
@@ -219,6 +226,62 @@ public class PptGenerationController {
         return emitter;
     }
 
+    @GetMapping("/tasks/{taskId}/project")
+    public ResponseEntity<?> project(@PathVariable String taskId,
+                                     @RequestHeader(value = "X-Ppt-Task-Token", required = false) String accessToken,
+                                     HttpServletRequest request) {
+        try {
+            PptGenerationSession session = authorized(taskId, accessToken, request);
+            return ResponseEntity.ok(Map.of("code", 200, "data", pptGenerationService.pptdProject(session)));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.status(404).body(Map.of("code", 404, "message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("code", 400, "message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/tasks/{taskId}/project/files/{*filePath}")
+    public ResponseEntity<?> projectFile(@PathVariable String taskId, @PathVariable String filePath,
+                                         @RequestHeader(value = "X-Ppt-Task-Token", required = false) String accessToken,
+                                         HttpServletRequest request) {
+        try {
+            PptGenerationSession session = authorized(taskId, accessToken, request);
+            String clean = filePath == null ? "" : filePath.replaceFirst("^/+", "");
+            Path file = pptGenerationService.pptdProjectFile(session, clean);
+            MediaType type = MediaTypeFactory.getMediaType(file.getFileName().toString()).orElse(MediaType.APPLICATION_OCTET_STREAM);
+            return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore())
+                    .contentType(type).body(new FileSystemResource(file));
+        } catch (Exception e) {
+            return ResponseEntity.status(404).body(Map.of("code", 404, "message", "PPTD 媒体不存在"));
+        }
+    }
+
+    @PostMapping("/tasks/{taskId}/versions")
+    public ResponseEntity<?> createVersion(@PathVariable String taskId,
+                                           @RequestHeader(value = "X-Ppt-Task-Token", required = false) String accessToken,
+                                           @RequestBody Map<String, Object> body,
+                                           HttpServletRequest request) {
+        try {
+            authService.requireCsrf(request);
+            AuthUser user = authService.requireUser(request);
+            PptGenerationSession parent = authorized(taskId, accessToken, request);
+            int baseVersion = body.get("baseVersion") instanceof Number value ? value.intValue() : 0;
+            @SuppressWarnings("unchecked")
+            List<Map<String, Object>> changes = body.get("changes") instanceof List<?> list
+                    ? (List<Map<String, Object>>) (List<?>) list : List.of();
+            PptGenerationSession session = pptGenerationService.createManualVersion(parent, baseVersion, changes, user);
+            Map<String, Object> data = toSummary(session);
+            data.put("accessToken", session.getAccessToken());
+            return ResponseEntity.ok(Map.of("code", 200, "data", data));
+        } catch (AuthException e) {
+            return authError(e);
+        } catch (IllegalStateException e) {
+            return ResponseEntity.status(409).body(Map.of("code", 409, "message", e.getMessage()));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("code", 400, "message", e.getMessage()));
+        }
+    }
+
     @GetMapping("/status/{taskId}")
     public ResponseEntity<?> status(@PathVariable String taskId,
                                     @RequestHeader(value = "X-Ppt-Task-Token", required = false) String accessToken,
@@ -248,23 +311,26 @@ public class PptGenerationController {
     @GetMapping("/download/{taskId}")
     public ResponseEntity<?> download(@PathVariable String taskId,
                                       @RequestHeader(value = "X-Ppt-Task-Token", required = false) String accessToken,
+                                      @RequestParam(value = "artifact", required = false, defaultValue = "pptx") String artifact,
                                       HttpServletRequest request) {
         try {
             AuthUser user = authService.currentUser(request).orElse(null);
             PptGenerationSession session = pptGenerationService.getSession(taskId);
             Path output;
             if (pptGenerationService.canAccess(session, user)) {
-                output = pptGenerationService.getOutput(taskId);
+                output = pptGenerationService.artifact(session, artifact);
             } else {
                 session = pptGenerationService.getAuthorizedSession(taskId, accessToken);
-                output = pptGenerationService.getOutput(taskId, accessToken);
+                output = pptGenerationService.artifact(session, artifact);
             }
-            boolean html = session != null && "html".equalsIgnoreCase(session.getOutputFormat());
+            boolean pptd = "pptd".equalsIgnoreCase(artifact);
+            boolean html = !pptd && session != null && "html".equalsIgnoreCase(session.getOutputFormat());
             String fileName = session != null && session.getOutputFileName() != null
                     ? session.getOutputFileName()
                     : "AI生成PPT-" + taskId + (html ? ".html" : ".pptx");
+            if (pptd) fileName = "PPTD项目-" + taskId + ".zip";
             String encodedFileName = URLEncoder.encode(fileName, StandardCharsets.UTF_8).replace("+", "%20");
-            MediaType contentType = html
+            MediaType contentType = pptd ? MediaType.parseMediaType("application/zip") : html
                     ? MediaType.parseMediaType("text/html;charset=UTF-8")
                     : MediaType.parseMediaType("application/vnd.openxmlformats-officedocument.presentationml.presentation");
             return ResponseEntity.ok()
@@ -279,6 +345,13 @@ public class PptGenerationController {
             log.error("下载 PPT 失败: taskId={}", taskId, e);
             return ResponseEntity.internalServerError().body(Map.of("code", 500, "message", "下载 PPT 失败: " + e.getMessage()));
         }
+    }
+
+    private PptGenerationSession authorized(String taskId, String accessToken, HttpServletRequest request) {
+        AuthUser user = authService.currentUser(request).orElse(null);
+        PptGenerationSession session = pptGenerationService.getSession(taskId);
+        return pptGenerationService.canAccess(session, user)
+                ? session : pptGenerationService.getAuthorizedSession(taskId, accessToken);
     }
 
     private Map<String, Object> toSummary(PptGenerationSession session) {
@@ -307,6 +380,11 @@ public class PptGenerationController {
         data.put("sourceCount", session.getSourceCount());
         data.put("agentIteration", session.getAgentIteration());
         data.put("qaValid", session.isQaValid());
+        data.put("engine", session.getEngine());
+        data.put("version", session.getVersion());
+        data.put("parentTaskId", session.getParentTaskId() == null ? "" : session.getParentTaskId());
+        data.put("editorAvailable", session.isEditorAvailable());
+        data.put("pptdAvailable", session.isPptdAvailable());
         data.put("previewAvailable", "completed".equals(session.getStatus()));
         data.put("createdAt", session.getCreatedAt());
         data.put("updatedAt", session.getUpdatedAt());

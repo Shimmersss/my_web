@@ -8,7 +8,6 @@ import org.springframework.context.annotation.Configuration;
 public class PptGenerationConfig {
 
     private String storageDir = "../.run/ppt-generation-tasks";
-    private String templateCacheDir = "../.run/ppt-generation-tasks/_template-cache";
     private int maxHistory = 5;
     private int maxGlobalHistory = 20;
     private int queueCapacity = 3;
@@ -38,11 +37,16 @@ public class PptGenerationConfig {
     private String chromeCommand = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
     private String paperParserCommand = "uv run --with docling --with markitdown python";
     private String paperParserScript = "./scripts/ppt_document_parser.py";
+    private String codexCommand = "./node_modules/.bin/codex";
+    private String codexVendorRoot = "../vendor/open-kimi-ppt-skill";
+    private String codexFinalizeScript = "./scripts/ppt-codex/finalize.mjs";
+    private int codexTimeoutSeconds = 1800;
+    private long codexMaxLogBytes = 2L * 1024 * 1024;
+    private long codexMaxProjectBytes = 100L * 1024 * 1024;
+    private int codexMaxProjectFiles = 500;
 
     public String getStorageDir() { return storageDir; }
     public void setStorageDir(String storageDir) { this.storageDir = storageDir; }
-    public String getTemplateCacheDir() { return templateCacheDir; }
-    public void setTemplateCacheDir(String templateCacheDir) { this.templateCacheDir = templateCacheDir; }
     public int getMaxHistory() { return maxHistory; }
     public void setMaxHistory(int maxHistory) { this.maxHistory = maxHistory; }
     public int getMaxGlobalHistory() { return maxGlobalHistory; }
@@ -99,4 +103,18 @@ public class PptGenerationConfig {
     public void setPaperParserCommand(String paperParserCommand) { this.paperParserCommand = paperParserCommand; }
     public String getPaperParserScript() { return paperParserScript; }
     public void setPaperParserScript(String paperParserScript) { this.paperParserScript = paperParserScript; }
+    public String getCodexCommand() { return codexCommand; }
+    public void setCodexCommand(String codexCommand) { this.codexCommand = codexCommand; }
+    public String getCodexVendorRoot() { return codexVendorRoot; }
+    public void setCodexVendorRoot(String codexVendorRoot) { this.codexVendorRoot = codexVendorRoot; }
+    public String getCodexFinalizeScript() { return codexFinalizeScript; }
+    public void setCodexFinalizeScript(String codexFinalizeScript) { this.codexFinalizeScript = codexFinalizeScript; }
+    public int getCodexTimeoutSeconds() { return codexTimeoutSeconds; }
+    public void setCodexTimeoutSeconds(int codexTimeoutSeconds) { this.codexTimeoutSeconds = codexTimeoutSeconds; }
+    public long getCodexMaxLogBytes() { return codexMaxLogBytes; }
+    public void setCodexMaxLogBytes(long codexMaxLogBytes) { this.codexMaxLogBytes = codexMaxLogBytes; }
+    public long getCodexMaxProjectBytes() { return codexMaxProjectBytes; }
+    public void setCodexMaxProjectBytes(long codexMaxProjectBytes) { this.codexMaxProjectBytes = codexMaxProjectBytes; }
+    public int getCodexMaxProjectFiles() { return codexMaxProjectFiles; }
+    public void setCodexMaxProjectFiles(int codexMaxProjectFiles) { this.codexMaxProjectFiles = codexMaxProjectFiles; }
 }

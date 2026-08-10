@@ -29,7 +29,6 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.HashSet;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -61,9 +60,6 @@ public class PptGenerationService {
     private static final Set<String> SOURCE_ARCHIVES = Set.of(".docx", ".pptx", ".xlsx");
     private static final Set<String> SOURCE_SUFFIXES =
             Set.of(".pdf", ".docx", ".pptx", ".xlsx", ".txt", ".md", ".csv", ".html", ".htm");
-    private static final Set<String> BUILT_IN_TEMPLATE_KEYS = Set.of(
-            "github-bjtu-blue", "github-bjtu-green", "github-bjtu-yellow",
-            "github-bjtu-red-2024", "github-bjtu-red-2023", "github-bjtu-handdrawn");
 
     private final PptGenerationConfig config;
     private final PptInputExtractor inputExtractor;
@@ -135,19 +131,29 @@ public class PptGenerationService {
     }
 
     public List<Map<String, Object>> templates() {
-        return List.of(
-                pptxTemplate("github-bjtu-blue", "BJTU 蓝色答辩", "北京交通大学开源成品模板，适合答辩、研究汇报与课程展示",
-                        List.of("24539A", "08245C", "F5C542", "F8FAFC", "0F172A"), "bjtu-blue"),
-                pptxTemplate("github-bjtu-green", "BJTU 青绿影像", "强调照片、圆形构图和校园叙事",
-                        List.of("2A807D", "5D948F", "D7B95D", "F1F4F0", "173B3A"), "bjtu-green"),
-                pptxTemplate("github-bjtu-yellow", "BJTU 金色分栏", "左侧图片带与右侧正文分栏",
-                        List.of("F5B400", "E29A2E", "0F172A", "FFFDF6", "111827"), "bjtu-yellow"),
-                pptxTemplate("github-bjtu-red-2024", "BJTU 红色舞台", "大面积红色舞台与强标题层级",
-                        List.of("EF4444", "58151C", "FFFFFF", "FFF1F2", "FFFFFF"), "bjtu-red"),
-                pptxTemplate("github-bjtu-red-2023", "BJTU 红色拱门", "拱门线稿与年份叙事，适合正式汇报",
-                        List.of("EF4444", "4A2029", "FFFFFF", "FFF1F2", "FFFFFF"), "bjtu-2023-red"),
-                pptxTemplate("github-bjtu-handdrawn", "BJTU 手绘波形", "柔和波形、插画和手绘感版式",
-                        List.of("7CBFC3", "819FB3", "E3C6BA", "EAF5F5", "203B4A"), "bjtu-handdrawn"),
+        List<Map<String, Object>> result = new ArrayList<>();
+        List<String> designs = List.of(
+                "blue-line-courseware", "color-stripes-documentary", "cream-collage", "dark-themed-data",
+                "dusk-violet-consulting", "fresh-brand", "gold-orange-type-journal", "honey-orange-memo",
+                "indigo-due-diligence", "ink-green-market-trends", "lead-gray-quarterly", "light-blue-product",
+                "lime-coral-workshop", "minimal-red-academic", "mint-green-training", "navy-cyan-technology",
+                "navy-gold-corporate", "neon-cyberpunk", "orange-black-launch", "paper-blue-research",
+                "peach-rose-story", "purple-gradient-ai", "red-black-editorial", "sand-brown-heritage",
+                "sky-blue-education", "slate-teal-analytics", "soft-pink-brand", "teal-grid-engineering",
+                "warm-yellow-business", "white-blue-medical");
+        List<List<String>> palettes = List.of(
+                List.of("2563EB", "EFF6FF", "F59E0B", "FFFFFF", "0F172A"),
+                List.of("0F766E", "ECFDF5", "FB7185", "FFFFFF", "134E4A"),
+                List.of("7C3AED", "F5F3FF", "22D3EE", "FFFFFF", "1E1B4B"),
+                List.of("EA580C", "FFF7ED", "111827", "FFFFFF", "431407"),
+                List.of("DC2626", "FEF2F2", "F59E0B", "FFFFFF", "450A0A"));
+        for (int index = 0; index < designs.size(); index++) {
+            String design = designs.get(index);
+            result.add(pptxTemplate("pptd-" + design, titleCase(design),
+                    "open-kimi-ppt Skill 设计系统；由 Codex 根据内容选择版式并生成可编辑 PPTD",
+                    palettes.get(index % palettes.size()), design));
+        }
+        result.addAll(List.of(
                 htmlTemplate("html-reveal-black", "Reveal Black", "纯黑演讲主题", List.of("111111", "000000", "D9A441", "111111", "F8FAFC"), "reveal-black"),
                 htmlTemplate("html-reveal-white", "Reveal White", "白底高可读主题", List.of("1D4ED8", "FFFFFF", "D97706", "F8FAFC", "1F2937"), "reveal-white"),
                 htmlTemplate("html-reveal-beige", "Reveal Beige", "暖米色纸张感", List.of("8C3B1F", "F7F1E3", "B7791F", "FFFDF7", "3D2B1F"), "reveal-beige"),
@@ -164,15 +170,22 @@ public class PptGenerationService {
                         List.of("4ADE80", "07120D", "FACC15", "10261A", "D1FAE5"), "terminal-green"),
                 htmlTemplate("html-gallery-cream", "Gallery Cream", "画廊米白、酒红强调与高雅衬线排版，适合文化、设计和高端品牌",
                         List.of("9F1239", "F4EFE5", "C08457", "E7DAC9", "3B2524"), "gallery-cream")
-        );
+        ));
+        return List.copyOf(result);
+    }
+
+    private String titleCase(String design) {
+        return Stream.of(design.split("-"))
+                .map(part -> part.isBlank() ? part : Character.toUpperCase(part.charAt(0)) + part.substring(1))
+                .collect(java.util.stream.Collectors.joining(" "));
     }
 
     private Map<String, Object> pptxTemplate(String key, String name, String description,
                                              List<String> palette, String design) {
-        return template(key, name, description, palette, design, "GitHub 成品模板", List.of("pptx"),
-                "Allenpandas/BJTU-Slides-Template", "Apache-2.0",
-                "https://github.com/Allenpandas/BJTU-Slides-Template",
-                "来源仓库 LICENSE 标注 Apache-2.0，但 README 另有仅供学习、禁止商业使用声明；商用前需确认授权");
+        return template(key, name, description, palette, design, "PPTD 设计系统", List.of("pptx"),
+                "open-kimi-ppt-skill 1.3.0", "MIT + separately authorized editor assets",
+                "https://github.com/Binaryify/open-kimi-ppt-skill",
+                "PPTX 试运行仅 root 可用；自定义 PPTX 模板会作为视觉参考传给隔离 Codex 工作区");
     }
 
     private Map<String, Object> htmlTemplate(String key, String name, String description,
@@ -189,7 +202,7 @@ public class PptGenerationService {
                 Map.entry("key", key), Map.entry("name", name), Map.entry("description", description),
                 Map.entry("palette", palette), Map.entry("source", source), Map.entry("license", license),
                 Map.entry("sourceUrl", sourceUrl), Map.entry("design", design),
-                Map.entry("category", formats.contains("html") ? "html" : "github"),
+                Map.entry("category", formats.contains("html") ? "html" : "pptd"),
                 Map.entry("categoryLabel", categoryLabel), Map.entry("formats", formats),
                 Map.entry("complexity", "rich"), Map.entry("supports", List.of("text", "image", "metrics", "charts")),
                 Map.entry("recommendedFor", List.of("研究汇报", "商业演示", "课程展示")),
@@ -265,6 +278,7 @@ public class PptGenerationService {
         session.setClientRequestId(requestId.isBlank() ? null : requestId);
         session.setAccessToken(newAccessToken());
         session.setOutputFormat(normalizedOutputFormat);
+        session.setEngine("html".equals(normalizedOutputFormat) ? "html-agent" : "codex-pptd");
         session.setTemplateKey(normalizeTemplateKey(templateKey, normalizedOutputFormat));
         session.setResearchMode(normalizeResearchMode(researchMode));
         session.setVisualMode(normalizeVisualMode(visualMode));
@@ -326,6 +340,9 @@ public class PptGenerationService {
         session.setAccessToken(newAccessToken());
         session.setTemplateKey(original.getTemplateKey());
         session.setOutputFormat(original.getOutputFormat());
+        session.setEngine(original.getEngine());
+        session.setVersion(original.getVersion() + 1);
+        session.setParentTaskId(original.getTaskId());
         session.setResearchMode(original.getResearchMode());
         session.setVisualMode(original.getVisualMode());
         session.setFontFamily(original.getFontFamily());
@@ -349,6 +366,7 @@ public class PptGenerationService {
             copyOptional(original.getOutputPath(), taskDir.resolve(
                     "html".equalsIgnoreCase(original.getOutputFormat()) ? "previous-output.html" : "previous-output.pptx"));
             copyDirectoryContents(original.getPreviewDir(), taskDir.resolve("previous-preview"));
+            copyDirectoryContents(original.getPptdProjectDir(), taskDir.resolve("previous-pptd-project"));
             session.setCreationReady(true);
             saveMetadata(session);
             charge(session, user, "PPT_REVISION", "PPT 二次修改");
@@ -418,10 +436,6 @@ public class PptGenerationService {
         try {
             if (agentRunner == null) throw new IllegalStateException("PPT Agent runner 未配置");
             Files.createDirectories(session.getImagesDir());
-            if ("pptx".equalsIgnoreCase(session.getOutputFormat())) {
-                ensureBuiltInTemplateAsset(session);
-                if (!hasTemplate(session)) throw new IllegalStateException("所选 PPTX 模板资产尚未准备");
-            }
             String sourceText = inputExtractor.extractPaperText(
                     hasPaper(session) ? session.getPaperPath() : null,
                     session.getPaperFileName(), session.getImagesDir(), 100,
@@ -501,6 +515,157 @@ public class PptGenerationService {
         }
         if (!Files.isRegularFile(session.getPreviewPath())) throw new IllegalArgumentException("真实预览尚未生成");
         return objectMapper.readValue(session.getPreviewPath().toFile(), Map.class);
+    }
+
+    public Map<String, Object> pptdProject(PptGenerationSession session) throws IOException {
+        requireCompletedPptd(session);
+        Path root = session.getPptdProjectDir().toAbsolutePath().normalize();
+        List<Path> manifests;
+        try (Stream<Path> stream = Files.list(root)) {
+            manifests = stream.filter(Files::isRegularFile)
+                    .filter(path -> path.getFileName().toString().endsWith(".pptd")).toList();
+        }
+        if (manifests.size() != 1) throw new IllegalStateException("PPTD 项目清单无效");
+        Map<String, String> textFiles = new LinkedHashMap<>();
+        textFiles.put(manifests.get(0).getFileName().toString(), Files.readString(manifests.get(0), StandardCharsets.UTF_8));
+        Path pages = root.resolve("pages");
+        if (Files.isDirectory(pages)) {
+            try (Stream<Path> stream = Files.list(pages)) {
+                for (Path page : stream.filter(Files::isRegularFile)
+                        .filter(path -> path.getFileName().toString().endsWith(".page")).sorted().toList()) {
+                    if (Files.size(page) > 2L * 1024 * 1024) throw new IllegalStateException("PPTD 页面超过读取上限");
+                    textFiles.put("pages/" + page.getFileName(), Files.readString(page, StandardCharsets.UTF_8));
+                }
+            }
+        }
+        List<Map<String, Object>> media = new ArrayList<>();
+        Path mediaRoot = root.resolve("media");
+        if (Files.isDirectory(mediaRoot)) {
+            try (Stream<Path> stream = Files.walk(mediaRoot)) {
+                for (Path file : stream.filter(Files::isRegularFile).sorted().toList()) {
+                    String relative = root.relativize(file).toString().replace('\\', '/');
+                    media.add(Map.of("path", relative, "size", Files.size(file),
+                            "contentType", Files.probeContentType(file) == null ? "application/octet-stream" : Files.probeContentType(file)));
+                }
+            }
+        }
+        return Map.of("taskId", session.getTaskId(), "version", session.getVersion(),
+                "parentTaskId", session.getParentTaskId() == null ? "" : session.getParentTaskId(),
+                "files", textFiles, "media", media);
+    }
+
+    public Path pptdProjectFile(PptGenerationSession session, String relativePath) {
+        requireCompletedPptd(session);
+        String clean = relativePath == null ? "" : relativePath.replace('\\', '/');
+        if (clean.isBlank() || clean.startsWith("/") || clean.contains("../") || clean.contains("/..")
+                || !(clean.endsWith(".png") || clean.endsWith(".jpg") || clean.endsWith(".jpeg")
+                || clean.endsWith(".gif") || clean.endsWith(".svg") || clean.endsWith(".webp"))) {
+            throw new IllegalArgumentException("PPTD 媒体路径无效");
+        }
+        Path root = session.getPptdProjectDir().toAbsolutePath().normalize();
+        Path file = root.resolve(clean).normalize();
+        if (!file.startsWith(root.resolve("media")) || !Files.isRegularFile(file)) {
+            throw new IllegalArgumentException("PPTD 媒体不存在");
+        }
+        return file;
+    }
+
+    public Path artifact(PptGenerationSession session, String artifact) {
+        if (session == null || !"completed".equals(session.getStatus())) throw new IllegalStateException("PPT 尚未生成完成");
+        if ("pptd".equalsIgnoreCase(artifact)) {
+            if (!Files.isRegularFile(session.getPptdZipPath())) throw new IllegalArgumentException("PPTD 项目包不存在");
+            return session.getPptdZipPath();
+        }
+        return getOutput(session);
+    }
+
+    public synchronized PptGenerationSession createManualVersion(PptGenerationSession parent, int baseVersion,
+                                                     List<Map<String, Object>> changes, AuthUser user) throws IOException {
+        assertDeploymentNotLocked();
+        requireCompletedPptd(parent);
+        if (user == null || !user.isRoot()) throw new IllegalArgumentException("Codex PPTD 编辑器当前仅 root 可用");
+        if (baseVersion != parent.getVersion()) throw new IllegalStateException("版本冲突：请重新加载最新版本");
+        if (sessions.values().stream().anyMatch(session -> parent.getTaskId().equals(session.getParentTaskId())
+                && session.getVersion() > baseVersion)) {
+            throw new IllegalStateException("版本冲突：此版本已有更新，请重新加载最新版本");
+        }
+        if (changes == null || changes.isEmpty() || changes.size() > 60) throw new IllegalArgumentException("changes 数量必须为 1-60");
+        List<Map<String, Object>> normalizedChanges = new ArrayList<>();
+        long bytes = 0;
+        Path parentProject = parent.getPptdProjectDir().toAbsolutePath().normalize();
+        for (Map<String, Object> change : changes) {
+            String relative = String.valueOf(change.getOrDefault("path", "")).replace('\\', '/').trim();
+            String content = String.valueOf(change.getOrDefault("content", ""));
+            bytes += content.getBytes(StandardCharsets.UTF_8).length;
+            if (bytes > 8L * 1024 * 1024) throw new IllegalArgumentException("编辑内容总量超过 8MB");
+            if (relative.isBlank() || relative.startsWith("/") || relative.contains("..")
+                    || !(relative.endsWith(".pptd") || relative.startsWith("pages/") && relative.endsWith(".page"))) {
+                throw new IllegalArgumentException("只允许修改根 .pptd 或 pages/*.page");
+            }
+            Path source = parentProject.resolve(relative).normalize();
+            if (!source.startsWith(parentProject) || !Files.isRegularFile(source)) {
+                throw new IllegalArgumentException("编辑文件不存在或路径越界");
+            }
+            normalizedChanges.add(Map.of("path", relative, "content", content));
+        }
+        String taskId = UUID.randomUUID().toString().substring(0, 8);
+        Path taskDir = Files.createDirectories(storageDir.resolve(taskId));
+        PptGenerationSession session = new PptGenerationSession(taskId, parent.getPrompt(), taskDir);
+        session.setUserId(user.id());
+        session.setAccessToken(newAccessToken());
+        session.setOutputFormat("pptx");
+        session.setEngine("codex-pptd");
+        session.setTemplateKey(parent.getTemplateKey());
+        session.setFontFamily(parent.getFontFamily());
+        session.setVersion(parent.getVersion() + 1);
+        session.setParentTaskId(parent.getTaskId());
+        session.setRevisionOfTaskId(parent.getTaskId());
+        session.setRevisionPrompt("PPTD 编辑器手工保存");
+        session.setOutputFileName(outputFileName(session));
+        session.setStatus("creating");
+        session.setProgressStage("creating");
+        sessions.put(taskId, session);
+        copyDirectoryContents(parent.getPptdProjectDir(), session.getPptdProjectDir());
+        for (Map<String, Object> change : normalizedChanges) {
+            String relative = String.valueOf(change.get("path"));
+            byte[] encoded = String.valueOf(change.get("content")).getBytes(StandardCharsets.UTF_8);
+            Path target = session.getPptdProjectDir().resolve(relative).normalize();
+            Files.write(target, encoded);
+        }
+        session.setCreationReady(true);
+        session.setStatus("queued");
+        session.setProgressStage("queued");
+        saveMetadata(session);
+        executor.execute(() -> runManualVersionTask(session));
+        updateQueuePositions();
+        return session;
+    }
+
+    private void runManualVersionTask(PptGenerationSession session) {
+        session.setStatus("generating");
+        saveAndProgress(session, 20, "rendering", "正在导出手工编辑版本");
+        try {
+            agentRunner.finalizePptdProject(session, (event, data) -> handleAgentEvent(session, event, data));
+            verifyAgentArtifacts(session);
+            session.setStatus("completed");
+            session.setProgress(100);
+            session.setProgressStage("completed");
+            session.setCompletedAt(System.currentTimeMillis());
+            saveMetadata(session);
+            emit(session, "done", Map.of("taskId", session.getTaskId(), "qaValid", session.isQaValid()));
+            completeEmitters(session.getTaskId());
+        } catch (Exception e) {
+            failTask(session, e);
+        } finally {
+            cleanupHistory();
+        }
+    }
+
+    private void requireCompletedPptd(PptGenerationSession session) {
+        if (session == null || !"completed".equals(session.getStatus()) || !"codex-pptd".equals(session.getEngine())
+                || !Files.isDirectory(session.getPptdProjectDir())) {
+            throw new IllegalArgumentException("PPTD 项目不可用");
+        }
     }
 
     public Path previewImage(PptGenerationSession session, String fileName) {
@@ -607,43 +772,6 @@ public class PptGenerationService {
         sendSnapshot(session, emitter);
     }
 
-    private void ensureBuiltInTemplateAsset(PptGenerationSession session) {
-        if (session == null || "html".equalsIgnoreCase(session.getOutputFormat()) || hasTemplate(session)) return;
-        if (!BUILT_IN_TEMPLATE_KEYS.contains(session.getTemplateKey())) return;
-        try {
-            Path cached = Path.of(config.getTemplateCacheDir()).toAbsolutePath().normalize()
-                    .resolve(session.getTemplateKey() + ".pptx");
-            if (!Files.isRegularFile(cached) || Files.size(cached) <= 4) {
-                throw new IllegalStateException("模板尚未在构建/部署阶段准备: " + session.getTemplateKey());
-            }
-            Path manifestPath = cached.getParent().resolve("manifest.json");
-            if (!Files.isRegularFile(manifestPath)) {
-                throw new IllegalStateException("模板缓存缺少可信哈希清单");
-            }
-            JsonNode entries = objectMapper.readTree(manifestPath.toFile()).path("templates");
-            JsonNode entry = null;
-            for (JsonNode candidate : entries) {
-                if (session.getTemplateKey().equals(candidate.path("key").asText())) {
-                    entry = candidate;
-                    break;
-                }
-            }
-            if (entry == null || entry.path("sha256").asText().isBlank()) {
-                throw new IllegalStateException("模板缓存清单缺少 " + session.getTemplateKey());
-            }
-            String actualHash = sha256(cached);
-            if (!MessageDigest.isEqual(actualHash.getBytes(StandardCharsets.US_ASCII),
-                    entry.path("sha256").asText().getBytes(StandardCharsets.US_ASCII))) {
-                throw new IllegalStateException("模板缓存 SHA-256 校验失败: " + session.getTemplateKey());
-            }
-            validateArchive(cached);
-            Files.copy(cached, session.getTemplatePath(), StandardCopyOption.REPLACE_EXISTING);
-            session.setTemplateFileName("GitHub 成品模板 · " + session.getTemplateKey());
-        } catch (Exception e) {
-            throw new IllegalStateException("PPT 源模板不可用（不会降级重绘）: " + trimLog(e.getMessage()), e);
-        }
-    }
-
     private void validateSourceFile(MultipartFile file) {
         String name = Optional.ofNullable(file.getOriginalFilename()).orElse("").toLowerCase(Locale.ROOT);
         if (SOURCE_SUFFIXES.stream().noneMatch(name::endsWith)) {
@@ -687,7 +815,7 @@ public class PptGenerationService {
     }
 
     private String normalizeTemplateKey(String templateKey, String outputFormat) {
-        String fallback = "html".equals(outputFormat) ? "html-reveal-white" : "github-bjtu-blue";
+        String fallback = "html".equals(outputFormat) ? "html-reveal-white" : "pptd-navy-cyan-technology";
         String value = templateKey == null || templateKey.isBlank() ? fallback : templateKey.trim();
         return templates().stream().anyMatch(item -> value.equals(item.get("key"))
                 && item.get("formats") instanceof List<?> formats
@@ -734,18 +862,6 @@ public class PptGenerationService {
         if (Files.exists(lock)) {
             throw new IllegalStateException("系统正在发布更新，请稍后重新提交任务");
         }
-    }
-
-    private String sha256(Path file) throws Exception {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        try (InputStream input = Files.newInputStream(file)) {
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = input.read(buffer)) >= 0) {
-                if (read > 0) digest.update(buffer, 0, read);
-            }
-        }
-        return HexFormat.of().formatHex(digest.digest());
     }
 
     private String normalizeClientRequestId(String value) {

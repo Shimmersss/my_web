@@ -17,6 +17,7 @@ deploy/*
 
 # logs / runtime
 .run/
+front/public/pptd-editor/
 *.log
 *.pid
 

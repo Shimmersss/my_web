@@ -23,7 +23,7 @@
             <div class="field-block output-format-block">
               <div class="field-label">输出格式</div>
               <div class="output-format-picker" role="radiogroup" aria-label="输出格式">
-                <button type="button" role="radio" :class="['output-format-card', { active: outputFormat === 'pptx' }]" :aria-checked="outputFormat === 'pptx'" @click="outputFormat = 'pptx'">
+                <button type="button" role="radio" :disabled="!auth.isRoot" :class="['output-format-card', { active: outputFormat === 'pptx' }]" :aria-checked="outputFormat === 'pptx'" @click="outputFormat = 'pptx'">
                   <strong>PPTX</strong>
                   <span>可在 PowerPoint 中继续编辑</span>
                 </button>
@@ -32,6 +32,7 @@
                   <span>单文件网页演示，可直接分享</span>
                 </button>
               </div>
+              <n-alert v-if="!auth.isRoot" type="info" title="Codex PPTX 试运行仅 root 可用" class="preview-alert">普通用户仍可使用现有 HTML 演示生成。</n-alert>
             </div>
 
             <div class="field-block font-family-block">
@@ -159,7 +160,9 @@
                     </div>
                   </div>
                   <p class="template-showcase__note">
-                    {{ selectedTemplate?.category === 'github'
+                    {{ selectedTemplate?.category === 'pptd'
+                      ? '这里展示的是 PPTD 设计系统的配色和版式节奏；Codex 会在隔离工作区生成完整的可编辑 PPTD 项目，再由服务器固定导出器生成 PPTX。'
+                      : selectedTemplate?.category === 'github'
                       ? '这里展示的是来自 GitHub 成品 PPTX 的真实 5 页样稿；生成时会保留该模板的构图语言并用可编辑内容替换示例文字。'
                       : outputFormat === 'html'
                         ? '这里展示的是由 reveal.js HTML 内核真实渲染出的 5 页样稿；生成后支持键盘翻页、全屏和网页二次编辑。'
@@ -347,6 +350,12 @@
               <div class="html-preview-stage__caption"><strong>隔离交互预览</strong><span>沙箱中支持翻页与全屏，不共享站点会话。</span></div>
             </div>
 
+            <section v-if="activeTask?.editorAvailable" class="revision-box">
+              <div class="revision-box__heading"><div><h3>PPTD 项目编辑</h3><p>编辑器通过同源 API 加载工程；保存会创建不可变子版本，不调用 Codex、不扣 LLM credits。</p></div><n-tag size="small" type="success">v{{ activeTask.version || 1 }}</n-tag></div>
+              <div class="actions"><n-button @click="editorVisible = !editorVisible">{{ editorVisible ? '收起编辑器' : '打开 PPTD 编辑器' }}</n-button><n-button @click="downloadPptdProject">下载完整 PPTD 项目</n-button></div>
+              <iframe v-if="editorVisible" :src="editorUrl" title="PPTD 项目编辑器" class="pptd-editor-frame" sandbox="allow-scripts allow-same-origin" referrerpolicy="same-origin"></iframe>
+            </section>
+
             <section v-if="previewData?.sources?.length" class="revision-box">
               <div class="revision-box__heading"><div><h3>研究来源</h3><p>共 {{ previewData.sources.length }} 项，已按幻灯片建立引用映射。</p></div><n-tag size="small" type="success">可追溯</n-tag></div>
               <ul>
@@ -434,7 +443,7 @@ const message = useMessage()
 const auth = useAuthStore()
 const step = ref('form')
 const prompt = ref('')
-const templateKey = ref('github-bjtu-blue')
+const templateKey = ref('pptd-navy-cyan-technology')
 const outputFormat = ref('pptx')
 const researchMode = ref('auto')
 const visualMode = ref('best_effort')
@@ -455,6 +464,7 @@ const previewLoading = ref(false)
 const previewError = ref('')
 const revisionPrompt = ref('')
 const revisionSubmitting = ref(false)
+const editorVisible = ref(false)
 const taskFailed = ref(false)
 const templatePreviewIndex = ref(0)
 const templatePreviewImageErrors = ref(new Set())
@@ -472,8 +482,8 @@ let previewGeneration = 0
 let previewAbortController = null
 let authWatchReady = false
 let pendingIdempotencyKey = ''
-const PPT_TASK_TOKENS_KEY = 'ppt-generation-task-tokens'
-const PPT_ACTIVE_TASK_KEY = 'ppt-generation-active-task'
+const PPT_TASK_TOKENS_KEY = 'ppt-generation-task-tokens-v2'
+const PPT_ACTIVE_TASK_KEY = 'ppt-generation-active-task-v2'
 const pptCreditPerTask = ref(10)
 const pptEstimatedCredits = computed(() => pptCreditPerTask.value)
 const fontOptions = [
@@ -487,6 +497,7 @@ const previewSlides = computed(() => previewData.value?.slides || [])
 const formatTemplates = computed(() => templates.value.filter(item => !Array.isArray(item.formats) || item.formats.includes(outputFormat.value)))
 const selectedTemplate = computed(() => formatTemplates.value.find(item => item.key === templateKey.value) || formatTemplates.value[0] || null)
 const selectedPreviewSlide = computed(() => previewSlides.value[previewSelectedIndex.value] || null)
+const editorUrl = computed(() => taskId.value ? `/pptd-editor/upstream/?taskId=${encodeURIComponent(taskId.value)}` : '')
 const templatePreviewSlides = computed(() => buildTemplatePreviewSlides(selectedTemplate.value))
 const templateGroups = computed(() => {
   const groups = new Map()
@@ -514,10 +525,14 @@ const stageItems = [
 const runningTitle = computed(() => activeTask.value?.sourceFileName || activeTask.value?.paperFileName || activeTask.value?.templateFileName || 'PPT 生成任务')
 
 onMounted(async () => {
+  sessionStorage.removeItem('ppt-generation-task-tokens')
+  sessionStorage.removeItem('ppt-generation-active-task')
   await auth.refresh().catch(() => {})
+  if (!auth.isRoot) outputFormat.value = 'html'
   await Promise.all([loadTemplates(), loadRecent(), loadQuotaSettings()])
   authWatchReady = true
   await restoreActiveTask()
+  window.addEventListener('message', handleEditorMessage)
 })
 
 watch(outputFormat, () => {
@@ -531,6 +546,7 @@ onBeforeUnmount(() => {
   closeStream()
   stopPolling()
   clearPreview()
+  window.removeEventListener('message', handleEditorMessage)
 })
 
 watch(() => auth.user?.id || null, (nextId, previousId) => {
@@ -574,6 +590,10 @@ async function submitTask() {
   }
   if (!auth.isLoggedIn) {
     errorMsg.value = '请先登录账号'
+    return
+  }
+  if (outputFormat.value === 'pptx' && !auth.isRoot) {
+    errorMsg.value = 'Codex PPTX 试运行仅 root 可用；请选择 HTML'
     return
   }
   if (!auth.isRoot && auth.credits < pptEstimatedCredits.value) {
@@ -721,7 +741,7 @@ async function loadTemplates() {
   try {
     const res = await getPptTemplates()
     if (Array.isArray(res.data) && res.data.length) templates.value = res.data
-    if (!formatTemplates.value.some(item => item.key === templateKey.value)) templateKey.value = formatTemplates.value[0]?.key || 'github-bjtu-blue'
+    if (!formatTemplates.value.some(item => item.key === templateKey.value)) templateKey.value = formatTemplates.value[0]?.key || 'pptd-navy-cyan-technology'
   } catch {
     templates.value = defaultTemplates()
   }
@@ -922,6 +942,25 @@ async function downloadCurrent() {
   }
 }
 
+async function downloadPptdProject() {
+  if (!activeTask.value?.pptdAvailable) return
+  try { await downloadGeneratedPpt(taskId.value, taskAccessToken.value, 'pptx', 'pptd') }
+  catch (error) { errorMsg.value = error.message || 'PPTD 项目下载失败' }
+}
+
+function handleEditorMessage(event) {
+  if (event.origin !== window.location.origin || event.data?.type !== 'pptd-version-created') return
+  const task = event.data.task
+  if (!task?.taskId) return
+  rememberTaskToken(task.taskId, task.accessToken)
+  editorVisible.value = false
+  clearPreview()
+  setActiveTask(task)
+  step.value = 'running'
+  openStream(task.taskId)
+  loadRecent()
+}
+
 function resetForm() {
   prompt.value = ''
   researchMode.value = 'auto'
@@ -1055,7 +1094,7 @@ function clearActiveTask() {
 
 function defaultTemplates() {
   return [
-    { key: 'github-bjtu-blue', name: 'BJTU 蓝色答辩', description: '北京交通大学开源成品模板，适合答辩、研究汇报与课程展示', palette: ['24539A', '08245C', 'F5C542', 'F8FAFC', '0F172A'], source: 'Allenpandas/BJTU-Slides-Template', license: 'Apache-2.0', sourceUrl: 'https://github.com/Allenpandas/BJTU-Slides-Template', design: 'bjtu-blue', category: 'github', categoryLabel: 'GitHub 成品模板', complexity: 'rich', recommendedFor: ['答辩', '研究汇报', '课程展示'], usageNote: '来源仓库 LICENSE 标注 Apache-2.0，但 README 另有仅供学习、禁止商业使用声明；商用前需确认授权' },
+    { key: 'pptd-navy-cyan-technology', name: 'Navy Cyan Technology', description: 'PPTD 技术设计系统；Codex 在隔离工作区生成可编辑工程', palette: ['2563EB', 'EFF6FF', 'F59E0B', 'FFFFFF', '0F172A'], source: 'open-kimi-ppt-skill 1.3.0', license: 'MIT + separately authorized editor assets', sourceUrl: 'https://github.com/Binaryify/open-kimi-ppt-skill', design: 'navy-cyan-technology', category: 'pptd', categoryLabel: 'PPTD 设计系统', complexity: 'rich', recommendedFor: ['技术汇报', '产品方案', '研究展示'], usageNote: 'PPTX 试运行仅 root 可用；可上传自定义 PPTX 作为视觉参考', formats: ['pptx'] },
     { key: 'github-bjtu-green', name: 'BJTU 青绿影像', description: '北京交通大学开源成品模板，强调照片、圆形构图和校园叙事', palette: ['2A807D', '5D948F', 'D7B95D', 'F1F4F0', '173B3A'], source: 'Allenpandas/BJTU-Slides-Template', license: 'Apache-2.0', sourceUrl: 'https://github.com/Allenpandas/BJTU-Slides-Template', design: 'bjtu-green', category: 'github', categoryLabel: 'GitHub 成品模板', complexity: 'rich', recommendedFor: ['校园叙事', '品牌故事', '图片汇报'], usageNote: '来源仓库 LICENSE 标注 Apache-2.0，但 README 另有仅供学习、禁止商业使用声明；商用前需确认授权' },
     { key: 'github-bjtu-yellow', name: 'BJTU 金色分栏', description: '北京交通大学开源成品模板，左侧图片带与右侧正文分栏', palette: ['F5B400', 'E29A2E', '0F172A', 'FFFDF6', '111827'], source: 'Allenpandas/BJTU-Slides-Template', license: 'Apache-2.0', sourceUrl: 'https://github.com/Allenpandas/BJTU-Slides-Template', design: 'bjtu-yellow', category: 'github', categoryLabel: 'GitHub 成品模板', complexity: 'rich', recommendedFor: ['课程', '项目介绍', '图文报告'], usageNote: '来源仓库 LICENSE 标注 Apache-2.0，但 README 另有仅供学习、禁止商业使用声明；商用前需确认授权' },
     { key: 'github-bjtu-red-2024', name: 'BJTU 红色舞台', description: '北京交通大学开源成品模板，大面积红色舞台与强标题层级', palette: ['EF4444', '58151C', 'FFFFFF', 'FFF1F2', 'FFFFFF'], source: 'Allenpandas/BJTU-Slides-Template', license: 'Apache-2.0', sourceUrl: 'https://github.com/Allenpandas/BJTU-Slides-Template', design: 'bjtu-red', category: 'github', categoryLabel: 'GitHub 成品模板', complexity: 'rich', recommendedFor: ['发布会', '正式汇报', '主题演讲'], usageNote: '来源仓库 LICENSE 标注 Apache-2.0，但 README 另有仅供学习、禁止商业使用声明；商用前需确认授权' },
@@ -1073,7 +1112,7 @@ function defaultTemplates() {
     { key: 'html-neon-grid', name: 'Neon Grid', description: '深色网格与青色霓虹界面，适合 AI、数据产品和技术发布', palette: ['2DD4BF', '070A13', '8B5CF6', '172033', 'ECFEFF'], source: 'Agent HTML theme asset', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'neon-grid', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
     { key: 'html-terminal-green', name: 'Terminal Green', description: '终端式等宽字体与命令行节奏，适合开发者、架构和开源项目', palette: ['4ADE80', '07120D', 'FACC15', '10261A', 'D1FAE5'], source: 'Agent HTML theme asset', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'terminal-green', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
     { key: 'html-gallery-cream', name: 'Gallery Cream', description: '画廊米白、酒红强调与高雅衬线排版，适合文化、设计和高端品牌', palette: ['9F1239', 'F4EFE5', 'C08457', 'E7DAC9', '3B2524'], source: 'Agent HTML theme asset', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'gallery-cream', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] }
-  ].filter(template => template.category === 'github' || template.category === 'html')
+  ].filter(template => template.category === 'pptd' || template.category === 'html')
     .map(template => ({ formats: template.category === 'html' ? ['html'] : ['pptx'], ...template }))
 }
 
@@ -1104,6 +1143,7 @@ function templateCategoryLabel(key) {
     corporate: '企业与开源',
     training: '课程与培训',
     github: 'GitHub 成品模板',
+    pptd: 'PPTD 设计系统',
     html: 'HTML 交互主题'
   }[key] || '其他风格'
 }
@@ -2300,6 +2340,15 @@ p {
   margin-top: 24px;
   padding-top: 20px;
   border-top: 1px solid #e2e8f0;
+}
+
+.pptd-editor-frame {
+  width: 100%;
+  height: min(720px, 72vh);
+  margin-top: 16px;
+  border: 1px solid rgba(148, 163, 184, .3);
+  border-radius: 14px;
+  background: #090b10;
 }
 
 .revision-box__heading {

@@ -4,6 +4,7 @@ import com.web.backen.translate.LlmService;
 import com.web.backen.zotero.ZoteroService;
 import com.web.backen.github.GithubRankingService;
 import com.web.backen.ppt.PptGenerationService;
+import com.web.backen.ppt.PptCodexRunner;
 import com.web.backen.translate.TranslationService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
@@ -23,11 +24,13 @@ public class AdminAccountController {
     private final GithubRankingService githubRankingService;
     private final PptGenerationService pptGenerationService;
     private final TranslationService translationService;
+    private final PptCodexRunner pptCodexRunner;
 
     public AdminAccountController(AuthService authService, QuotaService quotaService,
                                   RuntimeConfigService runtimeConfigService, LlmService llmService,
                                   ZoteroService zoteroService, GithubRankingService githubRankingService,
-                                  PptGenerationService pptGenerationService, TranslationService translationService) {
+                                  PptGenerationService pptGenerationService, TranslationService translationService,
+                                  PptCodexRunner pptCodexRunner) {
         this.authService = authService;
         this.quotaService = quotaService;
         this.runtimeConfigService = runtimeConfigService;
@@ -36,6 +39,7 @@ public class AdminAccountController {
         this.githubRankingService = githubRankingService;
         this.pptGenerationService = pptGenerationService;
         this.translationService = translationService;
+        this.pptCodexRunner = pptCodexRunner;
     }
 
     @GetMapping
@@ -146,6 +150,10 @@ public class AdminAccountController {
                         text(config, "baseUrl", runtimeConfigService.mimoSearchEndpoint()),
                         secret(config.get("apiKey"), runtimeConfigService.mimoSearchKey()),
                         text(config, "model", runtimeConfigService.mimoSearchModel()));
+                case "codexppt" -> pptCodexRunner.testConnection(
+                        secret(config.get("apiKey"), runtimeConfigService.codexPptKey()),
+                        text(config, "model", runtimeConfigService.codexPptModel()),
+                        text(config, "reasoningEffort", runtimeConfigService.codexPptReasoningEffort()));
                 default -> throw new AuthException(400, "不支持的 API 提供方");
             };
             Map<String, Object> data = new LinkedHashMap<>(result);

@@ -513,13 +513,14 @@ export function getRecentPptGenerations(accessTokens = []) {
   })
 }
 
-export async function downloadGeneratedPpt(taskId, accessToken, outputFormat = 'pptx') {
+export async function downloadGeneratedPpt(taskId, accessToken, outputFormat = 'pptx', artifact = 'pptx') {
   const csrfToken = localStorage.getItem('csrfToken')
   const headers = {
     ...(accessToken ? { 'X-Ppt-Task-Token': accessToken } : {}),
     ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {})
   }
-  const res = await fetch(apiUrl(`/ppt-generate/download/${encodeURIComponent(taskId)}`), {
+  const query = artifact === 'pptd' ? '?artifact=pptd' : ''
+  const res = await fetch(apiUrl(`/ppt-generate/download/${encodeURIComponent(taskId)}${query}`), {
     method: 'GET',
     credentials: /^https?:\/\//i.test(apiUrl('')) ? 'include' : 'same-origin',
     headers
@@ -531,7 +532,7 @@ export async function downloadGeneratedPpt(taskId, accessToken, outputFormat = '
   const blob = await res.blob()
   const disposition = res.headers.get('Content-Disposition') || ''
   const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
-  const filename = encoded ? decodeURIComponent(encoded) : `AI生成PPT-${taskId}.${String(outputFormat).toLowerCase() === 'html' ? 'html' : 'pptx'}`
+  const filename = encoded ? decodeURIComponent(encoded) : artifact === 'pptd' ? `PPTD项目-${taskId}.zip` : `AI生成PPT-${taskId}.${String(outputFormat).toLowerCase() === 'html' ? 'html' : 'pptx'}`
   const url = URL.createObjectURL(blob)
   const anchor = document.createElement('a')
   anchor.href = url

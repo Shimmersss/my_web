@@ -31,16 +31,23 @@ public class PptAgentRunner {
     private final PptGenerationConfig config;
     private final RuntimeConfigService runtime;
     private final ObjectMapper objectMapper;
+    private final PptCodexRunner codexRunner;
     private final Set<Process> active = ConcurrentHashMap.newKeySet();
 
-    public PptAgentRunner(PptGenerationConfig config, RuntimeConfigService runtime, ObjectMapper objectMapper) {
+    public PptAgentRunner(PptGenerationConfig config, RuntimeConfigService runtime, ObjectMapper objectMapper,
+                          PptCodexRunner codexRunner) {
         this.config = config;
         this.runtime = runtime;
         this.objectMapper = objectMapper;
+        this.codexRunner = codexRunner;
     }
 
     public void run(PptGenerationSession session, Path storageRoot,
                     BiConsumer<String, Map<String, Object>> eventConsumer) throws IOException, InterruptedException {
+        if ("pptx".equalsIgnoreCase(session.getOutputFormat())) {
+            codexRunner.run(session, eventConsumer);
+            return;
+        }
         Path taskDir = session.getTaskDir().toAbsolutePath().normalize();
         Path projectRoot = Path.of(config.getAgentProjectRoot()).toAbsolutePath().normalize();
         Path script = resolveFromWorkingDirectory(config.getAgentScript());
@@ -52,9 +59,6 @@ public class PptAgentRunner {
         Path previousPreview = taskDir.resolve("previous-preview");
 
         if (!Files.isRegularFile(script)) throw new IllegalStateException("PPT Agent worker 不存在: " + script);
-        if (!Files.isRegularFile(session.getTemplatePath()) && "pptx".equalsIgnoreCase(session.getOutputFormat())) {
-            throw new IllegalStateException("PPTX Agent 缺少已校验的源模板");
-        }
 
         Map<String, Object> job = new LinkedHashMap<>();
         job.put("taskId", session.getTaskId());
@@ -190,6 +194,12 @@ public class PptAgentRunner {
         } finally {
             active.remove(process);
         }
+    }
+
+    public void finalizePptdProject(PptGenerationSession session,
+                                    BiConsumer<String, Map<String, Object>> eventConsumer)
+            throws IOException, InterruptedException {
+        codexRunner.finalizeExisting(session, eventConsumer);
     }
 
     private Path resolveFromWorkingDirectory(String value) {

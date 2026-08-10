@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.nio.file.Path;
+import java.nio.file.Files;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class PptGenerationSession {
@@ -42,6 +43,9 @@ public class PptGenerationSession {
     private boolean qaValid;
     private boolean creationReady;
     private boolean quotaRequired;
+    private String engine;
+    private int version = 1;
+    private String parentTaskId;
 
     @JsonIgnore
     private Path taskDir;
@@ -122,6 +126,14 @@ public class PptGenerationSession {
     public void setCreationReady(boolean creationReady) { this.creationReady = creationReady; touch(); }
     public boolean isQuotaRequired() { return quotaRequired; }
     public void setQuotaRequired(boolean quotaRequired) { this.quotaRequired = quotaRequired; touch(); }
+    public String getEngine() { return engine == null || engine.isBlank() ? ("html".equalsIgnoreCase(outputFormat) ? "html-agent" : "legacy-pptx") : engine; }
+    public void setEngine(String engine) { this.engine = engine; touch(); }
+    public int getVersion() { return Math.max(1, version); }
+    public void setVersion(int version) { this.version = Math.max(1, version); touch(); }
+    public String getParentTaskId() { return parentTaskId; }
+    public void setParentTaskId(String parentTaskId) { this.parentTaskId = parentTaskId; touch(); }
+    public boolean isEditorAvailable() { return taskDir != null && "completed".equals(status) && "codex-pptd".equals(getEngine()) && Files.isDirectory(getPptdProjectDir()); }
+    public boolean isPptdAvailable() { return taskDir != null && Files.isRegularFile(getPptdZipPath()); }
 
     @JsonIgnore
     public Path getTaskDir() { return taskDir; }
@@ -147,6 +159,10 @@ public class PptGenerationSession {
     public Path getPptxOutputPath() { return taskDir.resolve("output.pptx"); }
     @JsonIgnore
     public Path getHtmlOutputPath() { return taskDir.resolve("output.html"); }
+    @JsonIgnore
+    public Path getPptdProjectDir() { return taskDir.resolve("pptd-project"); }
+    @JsonIgnore
+    public Path getPptdZipPath() { return taskDir.resolve("pptd-project.zip"); }
     @JsonIgnore
     public Path getOutputPath() {
         return "html".equalsIgnoreCase(outputFormat) ? getHtmlOutputPath() : getPptxOutputPath();

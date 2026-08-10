@@ -273,12 +273,15 @@ chmod 644 "$INSTALL_DIR/backen/backen.jar.new"
 mv -f "$INSTALL_DIR/backen/backen.jar.new" "$INSTALL_DIR/backen/backen.jar"
 rm -rf "$INSTALL_DIR/backen/scripts"
 cp -R "$CURRENT_DIR/backen/scripts" "$INSTALL_DIR/backen/scripts"
+rm -rf "$INSTALL_DIR/vendor/open-kimi-ppt-skill"
+mkdir -p "$INSTALL_DIR/vendor"
+cp -R "$CURRENT_DIR/vendor/open-kimi-ppt-skill" "$INSTALL_DIR/vendor/open-kimi-ppt-skill"
 rm -rf "$INSTALL_DIR/.agents"
 cp -R "$CURRENT_DIR/.agents" "$INSTALL_DIR/.agents"
 if [[ -f "$CURRENT_DIR/backen/package.json" ]]; then
   cp "$CURRENT_DIR/backen/package.json" "$INSTALL_DIR/backen/package.json"
   [[ ! -f "$CURRENT_DIR/backen/package-lock.json" ]] || cp "$CURRENT_DIR/backen/package-lock.json" "$INSTALL_DIR/backen/package-lock.json"
-  info "Installing the provider-neutral Agent worker, pptx-automizer, and reveal.js..."
+  info "Installing the locked Codex CLI, HTML worker, and presentation runtime..."
   (cd "$INSTALL_DIR/backen" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund)
 fi
 rm -rf "$INSTALL_DIR/front/dist"
@@ -295,8 +298,17 @@ if [[ -f "$CURRENT_DIR/.run/github-projects.json" && ! -f "$INSTALL_DIR/.run/git
   cp "$CURRENT_DIR/.run/github-projects.json" "$INSTALL_DIR/.run/github-projects.json"
 fi
 mkdir -p "$INSTALL_DIR/.run/ppt-generation-tasks"
-rm -rf "$INSTALL_DIR/.run/ppt-generation-tasks/_template-cache"
-cp -R "$CURRENT_DIR/.run/ppt-generation-tasks/_template-cache" "$INSTALL_DIR/.run/ppt-generation-tasks/_template-cache"
+PPT_CODEX_MIGRATION_MARKER="$INSTALL_DIR/.run/ppt-generation-tasks/.codex-pptd-v1"
+if [[ ! -f "$PPT_CODEX_MIGRATION_MARKER" ]]; then
+  PPT_TASK_ARCHIVE="${PPT_PRE_CODEX_ARCHIVE:-$INSTALL_DIR/../.web-homepage-releases/ppt-generation-tasks-pre-codex-$(date +%Y%m%d-%H%M%S).tar.gz}"
+  mkdir -p "$(dirname "$PPT_TASK_ARCHIVE")"
+  tar -czf "$PPT_TASK_ARCHIVE" -C "$INSTALL_DIR/.run" ppt-generation-tasks
+  tar -tzf "$PPT_TASK_ARCHIVE" >/dev/null
+  find "$INSTALL_DIR/.run/ppt-generation-tasks" -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+  touch "$PPT_CODEX_MIGRATION_MARKER"
+  chmod 600 "$PPT_TASK_ARCHIVE"
+  info "Archived and cleared pre-Codex PPT tasks: $PPT_TASK_ARCHIVE"
+fi
 
 info "Verifying that headless LibreOffice really renders newly authored CJK text..."
 (cd "$INSTALL_DIR/backen" && npm run preflight:ppt-fonts)
@@ -315,7 +327,6 @@ EnvironmentFile=$ENV_FILE
 Environment=HOME=/home/admin
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=DEPLOYMENT_LOCK_PATH=$DEPLOYMENT_LOCK
-Environment=PPT_GENERATION_TEMPLATE_CACHE_DIR=$INSTALL_DIR/.run/ppt-generation-tasks/_template-cache
 Environment="JAVA_TOOL_OPTIONS=-Xms128m -Xmx768m -XX:+UseG1GC"
 ExecStart=/usr/bin/env java -jar $INSTALL_DIR/backen/backen.jar
 Restart=always
@@ -444,9 +455,6 @@ build_release() {
     (cd "$ROOT/front" && npm install --cache "$NPM_CACHE_DIR" && VITE_API_BASE_URL=/api npm run build)
   fi
 
-  info "Downloading and hashing the six allow-listed PPTX source decks..."
-  (cd "$ROOT/backen" && npm run prepare:ppt-templates)
-
   if grep -Rqs 'api\.example\.com' "$ROOT/front/dist"; then
     die "Frontend build contains placeholder API host api.example.com"
   fi
@@ -457,6 +465,8 @@ build_release() {
   cp "$ROOT/backen/package-lock.json" "$PACKAGE_ROOT/backen/package-lock.json"
   cp -R "$ROOT/backen/scripts" "$PACKAGE_ROOT/backen/scripts"
   cp -R "$ROOT/.agents" "$PACKAGE_ROOT/.agents"
+  mkdir -p "$PACKAGE_ROOT/vendor"
+  cp -R "$ROOT/vendor/open-kimi-ppt-skill" "$PACKAGE_ROOT/vendor/open-kimi-ppt-skill"
   find "$PACKAGE_ROOT/backen/scripts" -type d -name node_modules -prune -exec rm -rf {} +
   find "$PACKAGE_ROOT/backen/scripts" \( -type d -name __pycache__ -o -type d -name .pytest_cache \) -prune -exec rm -rf {} +
   find "$PACKAGE_ROOT/backen/scripts" -type f \( -name '*.pyc' -o -name '*.pyo' \) -delete
@@ -473,8 +483,6 @@ build_release() {
     mkdir -p "$PACKAGE_ROOT/.run"
     cp "$ROOT/.run/github-projects.json" "$PACKAGE_ROOT/.run/github-projects.json"
   fi
-  mkdir -p "$PACKAGE_ROOT/.run/ppt-generation-tasks"
-  cp -R "$ROOT/.run/ppt-generation-tasks/_template-cache" "$PACKAGE_ROOT/.run/ppt-generation-tasks/_template-cache"
 
   {
     echo "version=$version"
@@ -521,7 +529,7 @@ REMOTE_ARCHIVE="$REMOTE_UPLOAD_DIR/$ARCHIVE_NAME"
 REMOTE_STAGE="$REMOTE_UPLOAD_DIR/stage-$VERSION"
 REMOTE_PACKAGE="$REMOTE_STAGE/web-homepage"
 REMOTE_BACKUP="$REMOTE_UPLOAD_DIR/web-homepage-backup-$VERSION.tar.gz"
-REMOTE_TEMPLATE_CACHE_BACKUP="$REMOTE_UPLOAD_DIR/template-cache-backup-$VERSION"
+REMOTE_PPT_TASK_ARCHIVE="$REMOTE_UPLOAD_DIR/ppt-generation-tasks-pre-codex-$VERSION.tar.gz"
 REMOTE_PARENT="$(dirname "$REMOTE_DIR")"
 REMOTE_BASENAME="$(basename "$REMOTE_DIR")"
 INSTALL_ATTEMPTED=0
@@ -549,10 +557,10 @@ rollback_remote_release() {
       sudo mkdir -p '$REMOTE_PARENT'; \
       sudo tar -xzf '$REMOTE_BACKUP' -C '$REMOTE_PARENT'; \
       if [ -d \"\$preserve_run\" ]; then sudo rm -rf '$REMOTE_DIR/.run'; sudo mv \"\$preserve_run\" '$REMOTE_DIR/.run'; fi; \
-      if [ -d '$REMOTE_TEMPLATE_CACHE_BACKUP' ]; then \
-        sudo rm -rf '$REMOTE_DIR/.run/ppt-generation-tasks/_template-cache'; \
-        sudo mkdir -p '$REMOTE_DIR/.run/ppt-generation-tasks'; \
-        sudo mv '$REMOTE_TEMPLATE_CACHE_BACKUP' '$REMOTE_DIR/.run/ppt-generation-tasks/_template-cache'; \
+      if [ -f '$REMOTE_PPT_TASK_ARCHIVE' ]; then \
+        sudo rm -rf '$REMOTE_DIR/.run/ppt-generation-tasks'; \
+        sudo mkdir -p '$REMOTE_DIR/.run'; \
+        sudo tar -xzf '$REMOTE_PPT_TASK_ARCHIVE' -C '$REMOTE_DIR/.run'; \
       fi; \
       sudo systemctl daemon-reload; \
       sudo systemctl start '$SERVICE_NAME.service'; \
@@ -582,24 +590,20 @@ run_cmd "${SCP[@]}" "$ARCHIVE" "$TARGET:$REMOTE_ARCHIVE"
 info "Creating server backup and extracting release..."
 run_cmd "${SSH[@]}" \
   "set -e; \
-  rm -rf '$REMOTE_STAGE' '$REMOTE_TEMPLATE_CACHE_BACKUP'; \
+  rm -rf '$REMOTE_STAGE'; \
   mkdir -p '$REMOTE_STAGE'; \
   if [ -d '$REMOTE_DIR' ]; then tar --exclude='$REMOTE_BASENAME/.run' -czf '$REMOTE_BACKUP' -C '$REMOTE_PARENT' '$REMOTE_BASENAME'; fi; \
-  if [ -d '$REMOTE_DIR/.run/ppt-generation-tasks/_template-cache' ]; then \
-    cp -a '$REMOTE_DIR/.run/ppt-generation-tasks/_template-cache' '$REMOTE_TEMPLATE_CACHE_BACKUP'; \
-  fi; \
   tar -xzf '$REMOTE_ARCHIVE' -C '$REMOTE_STAGE'"
 
 info "Installing release. sudo may ask for the server password..."
 INSTALL_ATTEMPTED=1
 set +e
 run_cmd "${SSH_TTY[@]}" \
-  "sudo env INSTALL_DIR='$REMOTE_DIR' CONFIG_DIR='$CONFIG_DIR' SERVICE_NAME='$SERVICE_NAME' NGINX_SITE_NAME='$NGINX_SITE_NAME' DOMAIN='$DOMAIN' FORCE_NGINX_CONFIG='$FORCE_NGINX_CONFIG' REQUIRE_MYSQL_CONFIG='$REQUIRE_MYSQL_CONFIG' bash '$REMOTE_PACKAGE/install-linux.sh'"
+  "sudo env INSTALL_DIR='$REMOTE_DIR' CONFIG_DIR='$CONFIG_DIR' SERVICE_NAME='$SERVICE_NAME' NGINX_SITE_NAME='$NGINX_SITE_NAME' DOMAIN='$DOMAIN' FORCE_NGINX_CONFIG='$FORCE_NGINX_CONFIG' REQUIRE_MYSQL_CONFIG='$REQUIRE_MYSQL_CONFIG' PPT_PRE_CODEX_ARCHIVE='$REMOTE_PPT_TASK_ARCHIVE' bash '$REMOTE_PACKAGE/install-linux.sh'"
 INSTALL_STATUS=$?
 set -e
 if [[ "$INSTALL_STATUS" -eq 42 ]]; then
   INSTALL_ATTEMPTED=0
-  run_cmd "${SSH[@]}" "rm -rf '$REMOTE_TEMPLATE_CACHE_BACKUP'"
   warn "Deployment postponed because a translation or presentation task is active."
   exit 42
 fi
@@ -623,7 +627,6 @@ run_cmd "${SSH[@]}" \
   done; \
   curl -fsSI -H 'Host: $LOCAL_SITE_HOST' '$LOCAL_SITE_URL' >/dev/null"
 LOCAL_VERIFY_PASSED=1
-run_cmd "${SSH[@]}" "rm -rf '$REMOTE_TEMPLATE_CACHE_BACKUP'"
 
 info "Verifying public response: $PUBLIC_URL"
 run_cmd "${SSH[@]}" "curl -fsSI '$PUBLIC_URL' >/dev/null"
@@ -641,7 +644,6 @@ run_cmd "${SSH[@]}" \
   find . -maxdepth 1 -type f -name 'web-homepage-backup-[0-9]*.tar.gz' -printf '%T@ %p\n' \
     | sort -rn | awk 'NR>$REMOTE_RELEASE_KEEP {print substr(\$0, index(\$0,\$2))}' \
     | xargs -r rm -f --; \
-  find . -maxdepth 1 -type d -name 'template-cache-backup-*' -mtime +1 -exec rm -rf -- {} +; \
   du -sh '$REMOTE_UPLOAD_DIR'"
 
 if [[ "$DRY_RUN" == "1" ]]; then

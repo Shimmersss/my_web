@@ -1,0 +1,2 @@
+# Keep vendored upstream bytes unchanged; their original Markdown whitespace is intentional here.
+vendor/open-kimi-ppt-skill/** -whitespace

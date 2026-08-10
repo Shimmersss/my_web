@@ -18,6 +18,8 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       sessionStorage.removeItem('ppt-generation-task-tokens')
       sessionStorage.removeItem('ppt-generation-active-task')
+      sessionStorage.removeItem('ppt-generation-task-tokens-v2')
+      sessionStorage.removeItem('ppt-generation-active-task-v2')
     } catch {
       // Storage can be disabled in private browsing; auth transitions still proceed.
     }

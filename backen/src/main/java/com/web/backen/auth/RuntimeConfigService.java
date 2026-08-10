@@ -21,6 +21,7 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /** 后台可维护的运行时配置。密钥只在后端内存和数据库中保存，接口永不返回明文。 */
 @Service
@@ -42,6 +43,11 @@ public class RuntimeConfigService {
     private static final String MIMO_SEARCH_KEY = "ppt.mimo-search.key";
     private static final String MIMO_SEARCH_MODEL = "ppt.mimo-search.model";
     private static final String SEMANTIC_SCHOLAR_KEY = "api.semantic-scholar.key";
+    private static final String CODEX_PPT_KEY = "ppt.codex.api-key";
+    private static final String CODEX_PPT_MODEL = "ppt.codex.model";
+    private static final String CODEX_PPT_REASONING = "ppt.codex.reasoning-effort";
+    private static final Set<String> CODEX_MODELS = Set.of("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna");
+    private static final Set<String> CODEX_REASONING = Set.of("low", "medium", "high", "xhigh", "max", "ultra");
     private static final String PPT_MAX_HISTORY = "ppt.history.max-per-user";
     private static final String PPT_MAX_GLOBAL_HISTORY = "ppt.history.max-total";
     private static final String TRANSLATION_MAX_HISTORY = "translation.history.max-per-user";
@@ -137,6 +143,15 @@ public class RuntimeConfigService {
     public String mimoSearchKey() { return value(MIMO_SEARCH_KEY, pptGeneration == null ? "" : pptGeneration.getMimoSearchKey()); }
     public String mimoSearchModel() { return value(MIMO_SEARCH_MODEL, pptGeneration == null ? "mimo-v2.5" : pptGeneration.getMimoSearchModel()); }
     public String semanticScholarKey() { return value(SEMANTIC_SCHOLAR_KEY, System.getenv().getOrDefault("SEMANTIC_SCHOLAR_API_KEY", "")); }
+    public String codexPptKey() { return value(CODEX_PPT_KEY, System.getenv().getOrDefault("PPT_GENERATION_CODEX_API_KEY", "")); }
+    public String codexPptModel() {
+        String model = value(CODEX_PPT_MODEL, "gpt-5.6-terra");
+        return CODEX_MODELS.contains(model) ? model : "gpt-5.6-terra";
+    }
+    public String codexPptReasoningEffort() {
+        String effort = value(CODEX_PPT_REASONING, "high").toLowerCase();
+        return CODEX_REASONING.contains(effort) ? effort : "high";
+    }
     public String visibilityLevel(String feature) { return value("visibility." + feature, VISIBILITY_DEFAULTS.getOrDefault(feature, "PUBLIC")); }
 
     public Map<String, Object> publicSettings() {
@@ -166,6 +181,11 @@ public class RuntimeConfigService {
                 "configured", !mimoSearchEndpoint().isBlank() && !mimoSearchKey().isBlank(),
                 "apiKeyConfigured", !mimoSearchKey().isBlank(),
                 "apiKeyHint", secretHint(mimoSearchKey()))));
+        data.put("codexPpt", new LinkedHashMap<>(Map.of(
+                "name", "Codex PPTD", "model", codexPptModel(),
+                "reasoningEffort", codexPptReasoningEffort(), "cliVersion", "0.147.0",
+                "configured", !codexPptKey().isBlank(), "apiKeyConfigured", !codexPptKey().isBlank(),
+                "apiKeyHint", secretHint(codexPptKey()))));
         Map<String, String> visibility = new LinkedHashMap<>();
         VISIBILITY_DEFAULTS.forEach((feature, fallback) -> visibility.put(feature, value("visibility." + feature, fallback)));
         data.put("visibility", visibility);
@@ -199,6 +219,16 @@ public class RuntimeConfigService {
             save(MIMO_SEARCH_URL, llmEndpoint(string(mimoSearchBody, "baseUrl"), "OPENAI"));
             save(MIMO_SEARCH_MODEL, text(string(mimoSearchBody, "model"), mimoSearchModel()));
             saveSecret(MIMO_SEARCH_KEY, mimoSearchBody.get("apiKey"), mimoSearchKey());
+        }
+        Map<String, Object> codexPptBody = map(body.get("codexPpt"));
+        if (!codexPptBody.isEmpty()) {
+            String model = string(codexPptBody, "model").trim();
+            String effort = string(codexPptBody, "reasoningEffort").trim().toLowerCase();
+            if (!CODEX_MODELS.contains(model)) throw new AuthException(400, "Codex PPT 模型不在允许列表");
+            if (!CODEX_REASONING.contains(effort)) throw new AuthException(400, "Codex reasoning effort 不合法");
+            save(CODEX_PPT_MODEL, model);
+            save(CODEX_PPT_REASONING, effort);
+            saveSecret(CODEX_PPT_KEY, codexPptBody.get("apiKey"), codexPptKey());
         }
         Map<String, Object> rankingBody = map(body.get("githubRanking"));
         if (!rankingBody.isEmpty()) {

@@ -70,7 +70,6 @@ TRANSLATION_MAX_HISTORY=5
 TRANSLATION_MAX_GLOBAL_HISTORY=20
 
 PPT_GENERATION_STORAGE_DIR=../.run/ppt-generation-tasks
-PPT_GENERATION_TEMPLATE_CACHE_DIR=../.run/ppt-generation-tasks/_template-cache
 PPT_GENERATION_MAX_HISTORY=5
 PPT_GENERATION_MAX_GLOBAL_HISTORY=20
 PPT_GENERATION_QUEUE_CAPACITY=3
@@ -96,6 +95,11 @@ PPT_GENERATION_CHROME_COMMAND=/usr/bin/chromium
 # HTTPS_PROXY=http://127.0.0.1:7890
 PPT_GENERATION_PAPER_PARSER_COMMAND="uv run --with docling --with markitdown python"
 PPT_GENERATION_PAPER_PARSER_SCRIPT=./scripts/ppt_document_parser.py
+PPT_GENERATION_CODEX_API_KEY=...
+PPT_GENERATION_CODEX_COMMAND=./node_modules/.bin/codex
+PPT_GENERATION_CODEX_VENDOR_ROOT=../vendor/open-kimi-ppt-skill
+PPT_GENERATION_CODEX_FINALIZE_SCRIPT=./scripts/ppt-codex/finalize.mjs
+PPT_GENERATION_CODEX_TIMEOUT_SECONDS=1800
 TAVILY_API_URL=https://api.tavily.com/search
 TAVILY_API_KEY=
 TAVILY_MAX_SEARCHES=6
@@ -106,9 +110,11 @@ SEMANTIC_SCHOLAR_API_KEY=
 
 `project.sh` sources `.env.local` automatically for local development and turns locally discovered `soffice`/`pdftoppm` binaries into absolute paths when those variables are not explicitly set. For production systemd, put equivalent values in an environment file or in the service unit; set `PPT_GENERATION_SOFFICE_COMMAND` and `PPT_GENERATION_PDFTOPPM_COMMAND` to absolute paths so the service does not depend on an interactive shell PATH. PPTX/HTML generation requires Node.js 20+, stable LibreOffice, Poppler, Chromium, fontconfig and Noto CJK. The deploy installer treats these as hard preconditions and runs `npm ci --omit=dev` under the backend directory.
 
-The PPT generator accepts `outputFormat=pptx|html` and `researchMode=auto|off`. Spring Boot only owns authentication, quota, queueing, recovery, task storage and SSE; `backen/scripts/ppt-agent/worker.mjs` performs research, narrative planning, authoring, real rendering, screenshot review and at most two repair rounds. The worker reads the repository Skills in `.agents/skills/`. PPTX clones an explicitly mapped source page with `pptx-automizer`; there is no recolored PptxGenJS or Python template-fill fallback. HTML remains a self-contained reveal.js artifact, authored independently from PPTX. Missing renderers, missing templates or failed QA make the task fail explicitly.
+The PPT generator accepts `outputFormat=pptx|html` and `researchMode=auto|off`. HTML keeps the existing reveal.js Agent worker. New PPTX tasks are root-only and run the locked `@openai/codex@0.147.0` CLI in a disposable owner-only workspace with a temporary `CODEX_HOME` and `workspace-write` sandbox. Codex writes only a self-contained PPTD v2 project; the server then invokes the fixed vendored exporter, validates closed page/media paths, exports PPTX, renders it with stable LibreOffice/Poppler, and packages the complete PPTD project. The API key is sent to `codex login --with-api-key` over stdin and must not appear in commands, logs or task metadata.
 
-Run `npm run prepare:ppt-templates` during build/release preparation. It downloads the six allow-listed source decks, applies a 32 MB limit, validates the ZIP signature and records SHA-256 values in `.run/ppt-generation-tasks/_template-cache/manifest.json`. User requests never download templates.
+The vendored runtime is fixed under `vendor/open-kimi-ppt-skill/`; source commit and file hashes are recorded there. `front` build runs `prepare:pptd-editor` and copies the upstream editor plus the website overlay into `/pptd-editor/`. The initial production migration creates a readable `ppt-generation-tasks-pre-codex-<timestamp>.tar.gz` before clearing incompatible legacy PPT task files. Do not open Codex PPTX to ordinary users until per-task container isolation, read-only Skill mounts, restricted network egress, and CPU/memory/PID limits have passed a separate review.
+
+The legacy GitHub PPTX template-cache preparation is no longer part of the release path. HTML theme assets remain static; PPTX design choices are supplied by the vendored Skill design systems, while an uploaded custom PPTX is copied into the isolated task input as a visual reference.
 
 When local MySQL is configured, `./project.sh start` starts Homebrew's `mysql` service and waits for port 3306 before launching Spring Boot. `./project.sh stop` stops only the MySQL instance started by that project invocation; use `./project.sh mysql stop` when you explicitly want to stop the service. Set `PROJECT_MYSQL_SERVICE` for a formula such as `mysql@8.4`, or set `PROJECT_DB_MODE=h2` to bypass MySQL locally.
 
@@ -183,29 +189,27 @@ mvn test
 npm test
 ```
 
-Before publishing Agent/template changes, validate the Skills, provision all six source decks, and run real PPTX/HTML forward tests:
+Before publishing presentation changes, validate the repository Skills and run the PPTD/HTML checks:
 
 ```bash
 uv run --with pyyaml python ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py ../.agents/skills/research-presentation
-uv run --with pyyaml python ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py ../.agents/skills/create-template-pptx
 uv run --with pyyaml python ~/.codex/skills/.system/skill-creator/scripts/quick_validate.py ../.agents/skills/create-html-presentation
 cd backen
-npm run prepare:ppt-templates
+npm test
 ```
 
-For each of the six PPTX templates and twelve HTML themes, generate at least five pages, inspect every PNG, and confirm the source/frame map, citations, notes, overflow, placeholders and package report. Run the final smoke with the backend and its child processes constrained to 2 CPU / 4 GB; only one LibreOffice or Chromium-heavy task may run at a time.
+For each selected PPTD design system and HTML theme, generate representative decks, inspect every PNG, and confirm PPTD paths, citations, notes, overflow, PPTX ZIP/package report and LibreOffice render. Run the final smoke with the backend and its child processes constrained to 2 CPU / 4 GB; only one LibreOffice-heavy task may run at a time.
 
-The template picker previews are generated from the actual source PPTX decks and reveal theme assets, then committed into the frontend static assets. Rebuild them after changing a template or theme:
+HTML template previews remain generated from reveal theme assets. PPTX design systems use local colour/structure cards; the actual PPTD result is always rendered from the task artifact:
 
 ```bash
 cd backen
-node scripts/generate_github_template_previews.mjs --output-dir ../front/public/ppt-template-previews
 node scripts/generate_html_template_previews.mjs --output-dir ../front/public/html-template-previews
 cd ../front
 npm run build
 ```
 
-This build-time step needs LibreOffice (`soffice`), `pdftoppm` and Chrome/Chromium. The production server only serves the generated PNGs and does not run LibreOffice or Chrome for template browsing. PPTX and HTML intentionally use different template families; the frontend filters `/api/ppt-generate/templates` by each template's `formats` field. The six PPTX preview folders are source-deck previews, not recolored CSS mockups.
+This build-time HTML preview step needs Chrome/Chromium. PPTX and HTML intentionally use different template families; the frontend filters `/api/ppt-generate/templates` by each template's `formats` field. The frontend build also copies the vendored editor plus its site overlay to `/pptd-editor/`.
 
 ## Production Layout
 
@@ -219,10 +223,11 @@ A simple production layout:
     package-lock.json
     node_modules/
     scripts/
+  vendor/open-kimi-ppt-skill/
   front/dist/
   .agents/skills/
   .run/
-    ppt-generation-tasks/_template-cache/
+    ppt-generation-tasks/
 /etc/web-homepage/web.env
 ```
 
@@ -230,17 +235,12 @@ Build and copy the following as one release:
 
 - `backen/target/backen-0.0.1-SNAPSHOT.jar` -> `/opt/web-homepage/backen/backen.jar`
 - `backen/package.json`, `backen/package-lock.json`, `backen/scripts/` -> `/opt/web-homepage/backen/`
+- `vendor/open-kimi-ppt-skill/` -> `/opt/web-homepage/vendor/open-kimi-ppt-skill/`
 - repository `.agents/` -> `/opt/web-homepage/.agents/`
 - `front/dist/` -> `/opt/web-homepage/front/dist/`
-- build-time `.run/ppt-generation-tasks/_template-cache/`, including `manifest.json`
 
-Run `npm ci --omit=dev --ignore-scripts` in `/opt/web-homepage/backen`. Run
-`npm run prepare:ppt-templates` during build, not inside a user request; the source URLs are
-commit-pinned and must match the catalog SHA-256. Keep `.run/` persistent across installs and
-rollbacks so recent tasks and revision chains survive.
+Run `npm ci --omit=dev --ignore-scripts` in `/opt/web-homepage/backen`. Keep `.run/` persistent across normal installs and rollbacks. The first Codex-PPT deployment is the exception: it archives legacy PPT tasks to `ppt-generation-tasks-pre-codex-<timestamp>.tar.gz`, verifies the archive, then clears incompatible task files. If that install fails, restore both the code release and that task archive before retrying.
 
-The production service pins `PPT_GENERATION_TEMPLATE_CACHE_DIR` to the release-persistent
-`.run/ppt-generation-tasks/_template-cache`, independently of a custom task storage directory.
 The installer rejects LibreOfficeDev/alpha/beta/RC builds and renders two different pure-CJK
 samples plus a blank baseline before starting Spring Boot. Deployment creates a common lock,
 waits for in-flight create requests to persist, scans the resolved translation/PPT task stores,
@@ -404,9 +404,9 @@ PDF translation fails before starting:
 
 PPT generation fails:
 
-- Check `PPT_GENERATION_AGENT_COMMAND`, stable `soffice`, `pdftoppm`, `PPT_GENERATION_CHROME_COMMAND`, Noto CJK and `PPT_GENERATION_PAPER_PARSER_COMMAND`.
-- Confirm `.agents/skills/`, `backen/scripts/ppt-agent/`, Node dependencies and `_template-cache/manifest.json` were deployed.
-- Check `.run/ppt-generation-tasks/{taskId}/agent.log`, `sources.json`, `agent-plan.json`, `template-frame-map.json`, `preview/` and `quality-report.json`.
+- Check `PPT_GENERATION_CODEX_COMMAND`, `PPT_GENERATION_CODEX_VENDOR_ROOT`, stable `soffice`, `pdftoppm`, Noto CJK and `PPT_GENERATION_PAPER_PARSER_COMMAND`.
+- Confirm `vendor/open-kimi-ppt-skill/`, `backen/scripts/ppt-codex/`, Node dependencies and `front/dist/pptd-editor/` were deployed.
+- Check `.run/ppt-generation-tasks/{taskId}/codex-events.jsonl`, `pptd-project/`, `pptd-project.zip`, `preview/` and `quality-report.json`. HTML tasks retain `agent.log`, `sources.json` and `agent-plan.json`.
 - If Tavily is not configured, the task should report `researchDegraded=true` but still use open academic indexes.
 
 Frontend works but API calls fail:

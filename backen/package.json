@@ -7,12 +7,13 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test scripts/ppt-agent/*.test.mjs",
+    "test": "node --test scripts/ppt-agent/*.test.mjs scripts/ppt-codex/*.test.mjs",
     "prepare:ppt-templates": "node scripts/ppt-agent/prepare-templates.mjs",
     "preflight:ppt-fonts": "node scripts/ppt-agent/font-preflight.mjs",
     "smoke:presentations": "node scripts/ppt-agent/visual-smoke.mjs"
   },
   "dependencies": {
+    "@openai/codex": "0.147.0",
     "image-size": "^1.2.1",
     "jszip": "3.10.1",
     "playwright-core": "1.62.1",

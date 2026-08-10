@@ -267,9 +267,7 @@
           <div>
             <h2>最近翻译</h2>
             <p>
-              服务器保留最近几次任务和结果文件
-              <span v-if="recentTasks.length">，当前 {{ recentTasks.length }} 条</span>
-              ；后端重启后未完成任务会重新排队。
+              {{ auth.isRoot ? 'root 可查看服务器保留的全部最近任务和结果文件' : '显示当前账号保留的最近任务和结果文件' }}<span v-if="recentTasks.length">，当前 {{ recentTasks.length }} 条</span>；后端重启后未完成任务会重新排队。
             </p>
           </div>
           <n-button size="small" :loading="isLoadingRecent" @click="loadRecentTranslations">刷新</n-button>
@@ -295,7 +293,7 @@
             <div class="recent-copy">
               <strong>{{ item.fileName }}</strong>
               <span>
-                第 {{ item.startPage }}-{{ item.endPage }} 页 · {{ speedLabel(item) }} · {{ formatTaskTime(item.createdAt) }}
+                <template v-if="auth.isRoot">{{ ownerLabel(item) }} · </template>第 {{ item.startPage }}-{{ item.endPage }} 页 · {{ speedLabel(item) }} · {{ formatTaskTime(item.createdAt) }}
               </span>
             </div>
             <div class="recent-status">
@@ -730,6 +728,11 @@ function taskStatusLabel(item) {
   return '待配置'
 }
 
+function ownerLabel(item) {
+  const userId = Number(item?.userId || 0)
+  return userId > 0 ? `用户 #${userId}` : '历史任务'
+}
+
 function speedLabel(item) {
   const currentQps = item.qps || item.requestedQps || 4
   if (item.resourceDowngraded) return `已降级稳定模式 · ${currentQps} QPS`
@@ -887,10 +890,14 @@ onBeforeUnmount(() => {
 .recent-list {
   display: grid;
   gap: 8px;
+  min-width: 0;
 }
 
 .recent-item {
+  box-sizing: border-box;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -899,6 +906,7 @@ onBeforeUnmount(() => {
   border: 1px solid #edf0f3;
   border-radius: 10px;
   background: #fff;
+  overflow: hidden;
   text-align: left;
   cursor: pointer;
 
@@ -915,6 +923,7 @@ onBeforeUnmount(() => {
 }
 
 .recent-copy {
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 4px;
 

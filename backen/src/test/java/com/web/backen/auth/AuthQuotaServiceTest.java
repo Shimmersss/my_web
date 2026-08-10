@@ -52,6 +52,21 @@ class AuthQuotaServiceTest {
     }
 
     @Test
+    void unusedInviteCanBeDeletedButUsedInviteRemainsAuditable() {
+        TestServices services = newServices();
+        services.quota().createInvite(1L, "delete-unused", 12, 1);
+        long unusedId = services.jdbc().queryForObject("SELECT id FROM invite_codes WHERE code='delete-unused'", Long.class);
+        services.quota().deleteUnusedInvite(unusedId);
+        assertEquals(0, services.jdbc().queryForObject("SELECT COUNT(*) FROM invite_codes WHERE id=?", Integer.class, unusedId));
+
+        services.quota().createInvite(1L, "keep-used", 12, 1);
+        services.auth().register("used-invite-user", "used-invite-password-123", "keep-used");
+        long usedId = services.jdbc().queryForObject("SELECT id FROM invite_codes WHERE code='keep-used'", Long.class);
+        AuthException error = assertThrows(AuthException.class, () -> services.quota().deleteUnusedInvite(usedId));
+        assertEquals(400, error.getStatus());
+    }
+
+    @Test
     void inviteRegistrationConsumesInviteAtomically() throws Exception {
         TestServices services = newServices();
         services.quota().createInvite(1L, "race-invite", 12, 1);
@@ -106,11 +121,29 @@ class AuthQuotaServiceTest {
     @Test
     void settingsCanBeUpdated() {
         TestServices services = newServices();
-        services.quota().updateSettings(2, 15);
+        services.quota().updateSettings(2, 15, false, 4);
 
         Map<String, Object> settings = services.quota().settings();
         assertEquals(2, settings.get("translationCreditPerPage"));
         assertEquals(15, settings.get("pptCreditPerTask"));
+        assertEquals(false, settings.get("dailyCheckinEnabled"));
+        assertEquals(4, settings.get("dailyCheckinCredits"));
+    }
+
+    @Test
+    void dailyCheckinAwardsOncePerShanghaiCalendarDay() {
+        TestServices services = newServices();
+        services.jdbc().update("INSERT INTO users (username, password_hash, role, credits, enabled) VALUES ('alice', 'x', 'USER', 5, TRUE)");
+        long userId = services.jdbc().queryForObject("SELECT id FROM users WHERE username='alice'", Long.class);
+
+        Map<String, Object> first = services.quota().claimDailyCheckin(userId);
+        Map<String, Object> again = services.quota().claimDailyCheckin(userId);
+
+        assertEquals(2, first.get("granted"));
+        assertEquals(7, first.get("balance"));
+        assertEquals(true, again.get("claimed"));
+        assertEquals(7, services.quota().balance(userId));
+        assertEquals(1, services.jdbc().queryForObject("SELECT COUNT(*) FROM credit_transactions WHERE user_id=? AND kind='DAILY_CHECKIN'", Integer.class, userId));
     }
 
     private TestServices newServices() {

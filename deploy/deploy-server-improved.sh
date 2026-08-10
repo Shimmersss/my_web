@@ -279,7 +279,7 @@ if [[ -f "$CURRENT_DIR/backen/package.json" ]]; then
   cp "$CURRENT_DIR/backen/package.json" "$INSTALL_DIR/backen/package.json"
   [[ ! -f "$CURRENT_DIR/backen/package-lock.json" ]] || cp "$CURRENT_DIR/backen/package-lock.json" "$INSTALL_DIR/backen/package-lock.json"
   info "Installing the provider-neutral Agent worker, pptx-automizer, and reveal.js..."
-  (cd "$INSTALL_DIR/backen" && npm ci --omit=dev --ignore-scripts)
+  (cd "$INSTALL_DIR/backen" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund)
 fi
 rm -rf "$INSTALL_DIR/front/dist"
 cp -R "$CURRENT_DIR/front/dist" "$INSTALL_DIR/front/dist"

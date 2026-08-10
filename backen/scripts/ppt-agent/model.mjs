@@ -5,15 +5,19 @@ const JSON_BLOCK = /```(?:json)?\s*([\s\S]*?)```/i;
 const MAX_AGENT_ACTIONS = 24;
 const MAX_MODEL_REQUESTS = 48;
 const MAX_TOOL_CALLS = 48;
+const MAX_NETWORK_TOOL_CALLS = 96;
+const NETWORK_TOOL_NAMES = new Set(['http-search', 'image-fetch', 'mimo-page']);
 let actionCount = 0;
 let requestCount = 0;
 let toolCallCount = 0;
+let networkToolCallCount = 0;
 let modelFetch = agentFetch;
 
 export function resetAgentLimitsForTest() {
   actionCount = 0;
   requestCount = 0;
   toolCallCount = 0;
+  networkToolCallCount = 0;
 }
 
 export function setModelFetchForTest(fetchImplementation) {
@@ -21,22 +25,43 @@ export function setModelFetchForTest(fetchImplementation) {
 }
 
 export function recordToolCall(name = 'tool') {
+  if (NETWORK_TOOL_NAMES.has(name)) {
+    networkToolCallCount += 1;
+    if (networkToolCallCount > MAX_NETWORK_TOOL_CALLS) {
+      throw new Error(`Agent 超过 ${MAX_NETWORK_TOOL_CALLS} 次联网请求: ${name}`);
+    }
+    return;
+  }
   toolCallCount += 1;
   if (toolCallCount > MAX_TOOL_CALLS) throw new Error(`Agent 超过 ${MAX_TOOL_CALLS} 次工具调用: ${name}`);
+}
+
+function contentText(value) {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) {
+    return value.map(item => contentText(item?.text ?? item?.content ?? item)).filter(Boolean).join('\n');
+  }
+  if (value && typeof value === 'object') return contentText(value.text ?? value.content ?? '');
+  return '';
 }
 
 function parseContent(payload, protocol) {
   if (protocol === 'CLAUDE') {
     const blocks = Array.isArray(payload?.content) ? payload.content : [];
-    return blocks.filter(item => item?.type === 'text').map(item => item.text || '').join('\n');
+    return blocks
+      .filter(item => !item?.type || ['text', 'output_text'].includes(item.type))
+      .map(item => contentText(item))
+      .filter(Boolean)
+      .join('\n');
   }
-  return payload?.choices?.[0]?.message?.content || '';
+  const message = payload?.choices?.[0]?.message || {};
+  return contentText(message.content ?? message.output_text ?? payload?.output_text ?? '');
 }
 
 export function extractJson(text) {
   const raw = String(text || '').trim();
   const fenced = raw.match(JSON_BLOCK)?.[1]?.trim();
-  const candidate = fenced || raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1);
+  const candidate = extractJsonCandidate(fenced || raw);
   if (!candidate || !candidate.startsWith('{')) throw new Error('模型没有返回 JSON 对象');
   try {
     return JSON.parse(candidate);
@@ -44,9 +69,36 @@ export function extractJson(text) {
     try {
       return JSON.parse(repairJsonCandidate(candidate));
     } catch {
-      throw error;
+      try {
+        return JSON.parse(repairStructuralJsonCandidate(candidate));
+      } catch {
+        throw error;
+      }
     }
   }
+}
+
+function extractJsonCandidate(value) {
+  const start = value.indexOf('{');
+  if (start < 0) return '';
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < value.length; index += 1) {
+    const char = value[index];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === '{') depth += 1;
+    else if (char === '}' && --depth === 0) return value.slice(start, index + 1);
+  }
+  // Keep a truncated root object intact so deterministic repair can append the
+  // missing delimiters instead of cutting it at the last nested object.
+  return value.slice(start).replace(/```\s*$/, '').trim();
 }
 
 function repairJsonCandidate(candidate) {
@@ -88,6 +140,36 @@ function repairJsonCandidate(candidate) {
     else if (char.charCodeAt(0) < 0x20) output += `\\u${char.charCodeAt(0).toString(16).padStart(4, '0')}`;
     else output += char;
   }
+  return output.replace(/,\s*([}\]])/g, '$1');
+}
+
+function repairStructuralJsonCandidate(candidate) {
+  let output = repairJsonCandidate(candidate);
+  // The long presentation plans returned by MiMo occasionally omit a comma
+  // between adjacent array objects or object properties. These boundaries are
+  // unambiguous after string/control-character normalization.
+  output = output
+    .replace(/([}\]])(\s*)(?=[{[])/g, '$1,$2')
+    .replace(/([}\]])(\s*)(?="(?:[^"\\]|\\.)*"\s*:)/g, '$1,$2')
+    .replace(/("|\b(?:true|false|null)|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)(\s+)(?=[{[])/g, '$1,$2');
+
+  const stack = [];
+  let inString = false;
+  let escaped = false;
+  for (const char of output) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inString = false;
+      continue;
+    }
+    if (char === '"') inString = true;
+    else if (char === '{' || char === '[') stack.push(char);
+    else if (char === '}' && stack.at(-1) === '{') stack.pop();
+    else if (char === ']' && stack.at(-1) === '[') stack.pop();
+  }
+  if (inString) output += '"';
+  while (stack.length) output += stack.pop() === '{' ? '}' : ']';
   return output.replace(/,\s*([}\]])/g, '$1');
 }
 
@@ -161,6 +243,7 @@ async function completeStructured({ system, user, maxTokens, repairContext, imag
 
   let lastError;
   let prompt = user;
+  let tokenBudget = maxTokens;
   const timeoutMs = Math.max(1_000, Number(requestTimeoutMs) || 180_000);
   const attempts = Math.max(1, Math.min(3, Number(maxAttempts) || 3));
   for (let attempt = 0; attempt < attempts; attempt += 1) {
@@ -184,9 +267,21 @@ async function completeStructured({ system, user, maxTokens, repairContext, imag
               ...imageBlocks.map(item => ({ type: 'image_url', image_url: { url: `data:${item.mediaType};base64,${item.data}`, detail: 'high' } }))
             ])
       : prompt;
+    const mimoRequest = /^mimo-/i.test(model) || /xiaomimimo|token-plan[^/]*\.xiaomimimo/i.test(endpoint);
     const body = protocol === 'CLAUDE'
-      ? { model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: userContent }] }
-      : { model, max_tokens: maxTokens, messages: [{ role: 'system', content: system }, { role: 'user', content: userContent }] };
+      ? {
+          model,
+          max_tokens: tokenBudget,
+          system,
+          messages: [{ role: 'user', content: userContent }],
+          ...(mimoRequest ? { thinking: { type: 'disabled' } } : {})
+        }
+      : {
+          model,
+          max_tokens: tokenBudget,
+          messages: [{ role: 'system', content: system }, { role: 'user', content: userContent }],
+          ...(mimoRequest ? { thinking: { type: 'disabled' } } : {})
+        };
     const headers = {
       'content-type': 'application/json',
       ...(protocol === 'CLAUDE'
@@ -200,6 +295,13 @@ async function completeStructured({ system, user, maxTokens, repairContext, imag
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(`LLM HTTP ${response.status}: ${JSON.stringify(payload).slice(0, 800)}`);
       const content = parseContent(payload, protocol);
+      if (!String(content || '').trim()) {
+        const finishReason = payload?.choices?.[0]?.finish_reason || payload?.stop_reason || 'unknown';
+        if (String(finishReason).toLowerCase() === 'max_tokens') {
+          tokenBudget = Math.min(16_000, Math.max(tokenBudget + 2_000, Math.ceil(tokenBudget * 1.5)));
+        }
+        throw new Error(`模型没有返回正文 JSON（finish_reason=${finishReason}）`);
+      }
       return extractJson(content);
     } catch (error) {
       lastError = error;

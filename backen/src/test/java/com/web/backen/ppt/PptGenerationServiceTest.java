@@ -129,6 +129,32 @@ class PptGenerationServiceTest {
     }
 
     @Test
+    void visualQaWarningStillDeliversTheRenderedDeck() throws Exception {
+        PptAgentRunner runner = mock(PptAgentRunner.class);
+        doAnswer(invocation -> {
+            PptGenerationSession session = invocation.getArgument(0);
+            writeAgentArtifacts(session);
+            Files.writeString(session.getTaskDir().resolve("quality-report.json"),
+                    "{\"valid\":false,\"slideCount\":1,\"visualReview\":{\"valid\":false,\"issues\":[{\"slide\":1,\"severity\":\"error\",\"message\":\"clipped\"}]}}",
+                    StandardCharsets.UTF_8);
+            return null;
+        }).when(runner).run(any(), any(), any());
+        PptGenerationService service = service(runner, null);
+        try {
+            PptGenerationSession task = service.createTask(
+                    "Deliver warning", "html-reveal-white", 100, null, null,
+                    null, "warning-delivery", "html", "off");
+            awaitStatus(service, task.getTaskId(), "completed");
+            PptGenerationSession completed = service.getSession(task.getTaskId());
+            assertFalse(completed.isQaValid());
+            assertTrue(Files.isRegularFile(completed.getHtmlOutputPath()));
+            assertFalse(service.preview(completed).get("qa").toString().isBlank());
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void interruptedTaskIsRequeuedAndRecoversAfterServiceRestart() throws Exception {
         PptGenerationService first = service(successfulRunner(), null);
         PptGenerationSession task;

@@ -261,11 +261,12 @@ public class TranslationService {
 
     public List<TranslationSession> getRecentSessions(AuthUser user) {
         updateQueuePositions();
+        int limit = user != null && user.isRoot() ? maxTotalHistory() : maxPerUserHistory();
         return sessions.values().stream()
                 .filter(session -> !"preview".equals(session.getStatus()))
                 .filter(session -> user != null && (user.isRoot() || session.getUserId() == user.id()))
                 .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt).reversed())
-                .limit(Math.max(1, config.getMaxHistory()))
+                .limit(Math.max(1, limit))
                 .toList();
     }
 

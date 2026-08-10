@@ -67,6 +67,20 @@ public class AuthController {
         return ok(quotaService.settings());
     }
 
+    @PostMapping("/daily-checkin")
+    public ResponseEntity<?> dailyCheckin(HttpServletRequest request) {
+        try {
+            authService.requireCsrf(request);
+            AuthUser user = authService.requireUser(request);
+            return ResponseEntity.ok(okBody(quotaService.claimDailyCheckin(user.id())));
+        } catch (AuthException e) {
+            return error(e);
+        }
+    }
+
+    @GetMapping("/daily-checkin/leaderboard")
+    public Map<String, Object> dailyCheckinLeaderboard() { return ok(quotaService.dailyCheckinLeaderboard()); }
+
     @GetMapping("/site-settings")
     public Map<String, Object> siteSettings() {
         return Map.of("code", 200, "message", "success", "data", Map.of("visibility", runtimeConfigService.publicSettings().get("visibility")));
@@ -79,6 +93,7 @@ public class AuthController {
         data.put("role", user.role());
         data.put("credits", user.credits());
         data.put("root", user.isRoot());
+        data.put("dailyCheckin", quotaService.dailyCheckinStatus(user.id()));
         return data;
     }
 

@@ -1,7 +1,9 @@
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import path from 'node:path';
 import JSZip from 'jszip';
 import automizerPackage from 'pptx-automizer';
+import { imageSize } from 'image-size';
 import { isTemplatePlaceholder } from './plan-utils.mjs';
 
 const { Automizer, ModifyImageHelper, modify } = automizerPackage;
@@ -78,14 +80,26 @@ function textCapacity(shape) {
   const heightPt = shape.height / EMU_PER_INCH * 72;
   const lines = Math.max(1, Math.floor(heightPt / (fontPt * 1.25)));
   const charsPerLine = Math.max(2, Math.floor(widthPt / (fontPt * 0.9)));
-  return Math.max(4, Math.min(320, lines * charsPerLine));
+  const raw = lines * charsPerLine;
+  // Large inherited headings need more breathing room than the mathematical
+  // glyph count suggests, especially for mixed CJK/Latin text in LibreOffice.
+  const adjusted = shape.maxFontPt >= 28 ? Math.floor(raw * 0.72) : raw;
+  return Math.max(4, Math.min(320, adjusted));
 }
 
 function textRole(shape, index) {
-  const hint = `${shape.name} ${shape.text}`.toLowerCase();
-  if (/title|标题|题目/.test(hint) || shape.maxFontPt >= 28) return 'title';
-  if (/sub|副标题|subtitle/.test(hint) || (index === 1 && shape.maxFontPt >= 16)) return 'headline';
+  const nameHint = String(shape.name || '').toLowerCase();
+  const sample = String(shape.text || '').replace(/\s+/g, ' ').trim();
+  const hint = `${nameHint} ${sample}`.toLowerCase();
+  // Instructional body placeholders often contain the word “标题” inside a
+  // sentence such as “建议与标题相关”. Treating that substring as a title
+  // made every paragraph/card body receive a short repeated heading.
+  if (/详细文本描述|字数控制|语言描述|正文|body|content text/i.test(sample)) return 'body';
   if (/footer|页脚|date|日期/.test(hint)) return 'footer';
+  if (/sub|副标题|subtitle/.test(nameHint) || (index === 1 && shape.maxFontPt >= 16)) return 'headline';
+  if (/title|标题|题目/.test(nameHint)
+    || /^(?:单击此处添加标题文本|click here to add title text|添加标题(?:文本)?)$/i.test(sample)
+    || shape.maxFontPt >= 28) return 'title';
   return 'body';
 }
 
@@ -114,7 +128,7 @@ function elementNameIndexes(xml) {
   return indexes;
 }
 
-export function imageFillability(shape, slideSize = {}) {
+export function imageFillability(shape, slideSize = {}, textShapes = []) {
   const hint = `${shape.name} ${shape.descr}`.toLowerCase();
   if (/logo|icon|avatar|badge|watermark|qr|二维码|校标|徽标|图标|页脚|装饰/.test(hint)) {
     return { fillable: false, fillableReason: 'decorative-or-brand-element' };
@@ -134,6 +148,17 @@ export function imageFillability(shape, slideSize = {}) {
   }
   if (areaRatio < 0.06 || shape.width < 1_800_000 || shape.height < 1_200_000) {
     return { fillable: false, fillableReason: 'too-small-for-content-image' };
+  }
+  const overlapsVisibleText = textShapes.some(text => {
+    if (text.furniture || !text.width || !text.height) return false;
+    const overlapWidth = Math.max(0,
+      Math.min(shape.x + shape.width, text.x + text.width) - Math.max(shape.x, text.x));
+    const overlapHeight = Math.max(0,
+      Math.min(shape.y + shape.height, text.y + text.height) - Math.max(shape.y, text.y));
+    return overlapWidth * overlapHeight / (text.width * text.height) > 0.1;
+  });
+  if (overlapsVisibleText) {
+    return { fillable: false, fillableReason: 'overlaps-visible-text' };
   }
   return { fillable: true, fillableReason: 'content-sized-picture-frame' };
 }
@@ -200,7 +225,7 @@ export async function inspectTemplate(templateFile) {
       ...shape,
       slotId: `s${index + 1}-i${shapeIndex + 1}`,
       roleHint: shape.width * shape.height > 10_000_000_000_000 ? 'hero' : 'supporting',
-      ...imageFillability(shape, slideSize)
+      ...imageFillability(shape, slideSize, shapes)
     }));
     slides.push({
       slide: index + 1,
@@ -230,6 +255,43 @@ function setFontFace(fontFace = 'Microsoft YaHei') {
       }
     }
   };
+}
+
+function setRelationTargetContain(filename, imagePath, slot, presentation) {
+  let dimensions = null;
+  try {
+    dimensions = imageSize(fsSync.readFileSync(imagePath));
+  } catch {
+    // A malformed or unsupported image still uses Automizer's normal cover
+    // replacement and will be caught by real rendering and visual QA.
+  }
+  if (!dimensions?.width || !dimensions?.height || !slot?.width || !slot?.height) {
+    return [ModifyImageHelper.setRelationTargetCover(filename, presentation)];
+  }
+  const imageRatio = dimensions.width / dimensions.height;
+  const slotRatio = slot.width / slot.height;
+  const width = imageRatio >= slotRatio ? slot.width : Math.round(slot.height * imageRatio);
+  const height = imageRatio >= slotRatio ? Math.round(slot.width / imageRatio) : slot.height;
+  const x = Math.round(slot.x + (slot.width - width) / 2);
+  const y = Math.round(slot.y + (slot.height - height) / 2);
+  return [
+    ModifyImageHelper.setRelationTarget(filename),
+    element => {
+      const srcRect = element.getElementsByTagName('a:srcRect')[0];
+      if (srcRect) {
+        for (const attr of ['l', 't', 'r', 'b']) srcRect.setAttribute(attr, '0');
+      }
+      const transform = element.getElementsByTagName('a:xfrm')[0];
+      const offset = transform?.getElementsByTagName('a:off')[0];
+      const extent = transform?.getElementsByTagName('a:ext')[0];
+      if (offset && extent) {
+        offset.setAttribute('x', String(x));
+        offset.setAttribute('y', String(y));
+        extent.setAttribute('cx', String(width));
+        extent.setAttribute('cy', String(height));
+      }
+    }
+  ];
 }
 
 function xmlEscape(value) {
@@ -321,6 +383,43 @@ export function stripStaticTemplateArtwork(xml, relsXml, sourceImageNames = [], 
   return stripStaticPictures(String(xml), String(relsXml), names, removablePictureKeys);
 }
 
+/** Remove wide, empty callout bars accidentally inherited by closing pages. */
+export function stripEmptyClosingPlaceholderGroups(xml) {
+  let output = String(xml);
+  const spans = elementSpans(output, ['grpSp'])
+    .filter(span => span.depth === 0)
+    .sort((left, right) => right.start - left.start);
+  for (const span of spans) {
+    const element = output.slice(span.start, span.end);
+    if (/<a:t>[\s\S]*?\S[\s\S]*?<\/a:t>/.test(element) || /<p:pic\b/.test(element)) continue;
+    const groupProperties = element.match(/<p:grpSpPr\b[\s\S]*?<\/p:grpSpPr>/)?.[0] || '';
+    const offsetTag = groupProperties.match(/<a:off\b[^>]*>/)?.[0] || '';
+    const extentTag = groupProperties.match(/<a:ext\b[^>]*>/)?.[0] || '';
+    const width = Number(xmlAttribute(extentTag, 'cx'));
+    const height = Number(xmlAttribute(extentTag, 'cy'));
+    if (width > 0 && height >= 300000 && width / height >= 6) {
+      output = `${output.slice(0, span.start)}${output.slice(span.end)}`;
+    }
+  }
+  return output;
+}
+
+/** Remove source-template mascots/logos from delivery closing pages while
+ * preserving any image explicitly supplied by the current task. */
+export function stripNonUserClosingPictures(xml, relsXml, sourceImageNames = []) {
+  const targets = relationshipTargets(relsXml);
+  const names = new Set((sourceImageNames || []).map(name =>
+    path.posix.basename(String(name).replaceAll('\\', '/'))));
+  const spans = elementSpans(String(xml), ['pic']).sort((left, right) => right.start - left.start);
+  let output = String(xml);
+  for (const span of spans) {
+    const element = output.slice(span.start, span.end);
+    const keep = embeddedRelationshipIds(element).some(id => isUserImageTarget(targets.get(id), names));
+    if (!keep) output = `${output.slice(0, span.start)}${output.slice(span.end)}`;
+  }
+  return output;
+}
+
 async function stripStaticTemplateArtworkFromPackage(outputFile, sourceImages = [], plan = null, manifest = null) {
   const zip = await JSZip.loadAsync(await fs.readFile(outputFile));
   const sourceImageNames = sourceImages.map(item => path.basename(item.path || item.fileName || ''));
@@ -339,7 +438,12 @@ async function stripStaticTemplateArtworkFromPackage(outputFile, sourceImages = 
       zip.file(name).async('string'),
       relFile.async('string')
     ]);
-    zip.file(name, stripStaticTemplateArtwork(xml, relsXml, sourceImageNames, removablePictureKeys));
+    let cleanedXml = stripStaticTemplateArtwork(xml, relsXml, sourceImageNames, removablePictureKeys);
+    if (String(slidePlan?.type || '').toLowerCase() === 'closing') {
+      cleanedXml = stripEmptyClosingPlaceholderGroups(cleanedXml);
+      cleanedXml = stripNonUserClosingPictures(cleanedXml, relsXml, sourceImageNames);
+    }
+    zip.file(name, cleanedXml);
   }
   await fs.writeFile(outputFile, await zip.generateAsync({
     type: 'nodebuffer',
@@ -544,7 +648,7 @@ export async function composeTemplatePptx({ templateFile, outputFile, plan, mani
         const image = imageById.get(String(edit.imageId));
         if (slot?.fillable && image) {
           slide.modifyElement({ name: slot.name, nameIdx: slot.nameIdx }, [
-            ModifyImageHelper.setRelationTargetCover(path.basename(image.path), presentation)
+            ...setRelationTargetContain(path.basename(image.path), image.path, slot, presentation)
           ]);
         }
       }

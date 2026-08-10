@@ -121,6 +121,16 @@
         </article>
       </div>
     </section>
+
+    <section class="checkin-section" aria-labelledby="checkin-title">
+      <div class="container">
+        <article class="paper-panel checkin-panel">
+          <div class="panel-heading"><div><p class="section-kicker">05 / DAILY CHECK-IN</p><h2 id="checkin-title">今日签到榜</h2></div><span>前 10 名</span></div>
+          <ol v-if="checkinLeaders.length" class="checkin-list"><li v-for="(item, index) in checkinLeaders" :key="`${item.username}-${index}`"><b>{{ String(index + 1).padStart(2, '0') }}</b><strong>{{ item.username }}</strong><span>+{{ item.amount }} 积分</span></li></ol>
+          <p v-else class="checkin-empty">今天还没有签到记录，来抢第一名吧。</p>
+        </article>
+      </div>
+    </section>
   </div>
 </template>
 
@@ -134,12 +144,13 @@ import {
   LogoGithub,
   SchoolOutline
 } from '@vicons/ionicons5'
-import { getGithubProjects } from '@/api'
+import { getDailyCheckinLeaderboard, getGithubProjects } from '@/api'
 import { defaultGithubProjects, githubProjectFallback } from '@/config/githubProjects'
 import workspaceImage from '@/assets/images/home-workspace-aurora.png'
 
 const router = useRouter()
 const projects = ref([])
+const checkinLeaders = ref([])
 const heroPointer = ref({ x: 0, y: 0 })
 
 const tools = [
@@ -158,6 +169,7 @@ const progress = [
 const featuredProject = computed(() => projects.value[0] || null)
 
 onMounted(async () => {
+  getDailyCheckinLeaderboard().then(response => { checkinLeaders.value = response?.data || [] }).catch(() => {})
   try {
     const response = await getGithubProjects()
     const items = response?.data || response || []
@@ -206,6 +218,13 @@ function formatNumber(value) {
   background: #eee9df;
   color: #25251f;
 }
+
+.checkin-section { padding: 0 0 72px; background:#eee9df; }
+.checkin-panel { max-width:760px; margin:auto; padding:24px; }
+.checkin-panel .panel-heading>span { color:#756f64; font-size:13px; }
+.checkin-list { list-style:none; margin:16px 0 0; padding:0; display:grid; gap:2px; }
+.checkin-list li { display:grid; grid-template-columns:42px 1fr auto; gap:12px; align-items:center; padding:12px 8px; border-bottom:1px solid #e7e0d5; }
+.checkin-list b { color:#b83126; font-size:12px; }.checkin-list span { color:#58745f; font-weight:700; }.checkin-empty { color:#756f64; margin:18px 0 4px; }
 
 .desk-hero {
   position: relative;

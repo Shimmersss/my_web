@@ -51,9 +51,11 @@ function slideMarkup(slide, index, sourceById, imageById) {
   // A split without an image creates a large empty panel that looks like an
   // unresolved template block. Collapse it to a statement page instead.
   const layout = requestedLayout === 'split' && !image ? 'statement' : requestedLayout;
+  const staticPage = ['cover', 'closing'].includes(String(slide.type || '').toLowerCase());
+  const kicker = slide.section || (staticPage ? '' : slide.type || '');
   return `<section class="slide layout-${layout}${image ? ' has-image' : ''}" data-title="${esc(slide.title)}">
     <div class="accent"></div>
-    <p class="kicker">${esc(slide.section || slide.type || '')}</p>
+    ${kicker ? `<p class="kicker">${esc(kicker)}</p>` : ''}
     <h2>${esc(slide.title)}</h2>
     ${slide.headline ? `<p class="headline">${esc(slide.headline)}</p>` : ''}
     ${bullets ? `<ul>${bullets}</ul>` : ''}
@@ -92,7 +94,7 @@ export async function createHtmlPresentation({ outputFile, plan, sources = [], s
 <title>${esc(plan.title || '演示文稿')}</title><style>${revealCss}
 :root{--bg:${bg};--fg:${fg};--accent:${accent};--surface:${surface}}
 html,body,.reveal{background:var(--bg);color:var(--fg);font-family:"${esc(safeFont)}",Inter,"PingFang SC","Microsoft YaHei",sans-serif}
-.reveal .slides{text-align:left}.reveal .slides section{box-sizing:border-box;display:flex!important;flex-direction:column;justify-content:center;padding:64px 72px}
+.reveal .slides{text-align:left}.reveal .slides section{box-sizing:border-box;display:flex!important;flex-direction:column;justify-content:center;padding:58px 72px 88px}
 .accent{width:96px;height:8px;background:var(--accent);margin-bottom:32px}.kicker{margin:0 0 18px;color:var(--accent);font-size:18px;font-weight:800;letter-spacing:.14em;text-transform:uppercase}
 .reveal h2{margin:0;max-width:1040px;color:var(--fg);font-size:54px;line-height:1.08;letter-spacing:-.035em}
 .headline{max-width:980px;margin:30px 0 0;font-size:29px;line-height:1.42;color:var(--fg);opacity:.92}
@@ -104,9 +106,9 @@ html,body,.reveal{background:var(--bg);color:var(--fg);font-family:"${esc(safeFo
 .layout-evidence{border-left:18px solid var(--accent)}.layout-closing{display:flex!important;flex-direction:column;justify-content:center;align-items:center;text-align:center!important}
 .layout-statement .headline{max-width:1040px;margin-top:24px;font-size:42px;line-height:1.28}.layout-statement ul{margin-top:24px}
 .layout-comparison ul{columns:2;column-gap:70px;padding:28px 34px;background:color-mix(in srgb,var(--surface) 72%,transparent);border-radius:20px}.layout-comparison li{break-inside:avoid;margin-bottom:16px}
-.layout-timeline ul{display:flex;gap:18px;width:100%;max-width:1120px;margin-top:28px;padding:0;list-style:none}.layout-timeline li{flex:1;min-height:128px;padding:20px 18px;border-top:5px solid var(--accent);background:color-mix(in srgb,var(--surface) 78%,transparent)}
+.layout-timeline ul{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px;width:100%;max-width:1120px;margin-top:26px;padding:0;list-style:none;font-size:20px;line-height:1.38}.layout-timeline li{min-height:112px;padding:18px 16px;border-top:5px solid var(--accent);background:color-mix(in srgb,var(--surface) 78%,transparent)}
 .layout-quote h2{max-width:900px;font-size:66px}.layout-quote .headline{padding-left:32px;border-left:5px solid var(--accent);font-family:Georgia,"Noto Serif SC",serif;font-size:34px}
-.evidence-image{position:absolute;right:54px;top:16%;width:38%;height:68%;margin:0}.evidence-image img{width:100%;height:100%;object-fit:contain;border-radius:16px}.has-image{padding-right:45%!important}
+.evidence-image{position:absolute;right:54px;top:15%;width:38%;height:62%;margin:0}.evidence-image img{width:100%;height:100%;object-fit:contain;border-radius:16px}.has-image{padding-right:45%!important}.has-image h2{font-size:46px}.has-image .headline{margin-top:22px;font-size:24px;line-height:1.35}.has-image ul{margin-top:20px;font-size:21px;line-height:1.38}.layout-closing h2{font-size:58px}.layout-closing ul{max-width:780px;font-size:22px;line-height:1.42}
 ${themeCss(style)}
 @media(max-width:800px){.reveal .slides section{padding:42px}.reveal h2{font-size:44px}.headline{font-size:24px}.reveal ul{font-size:21px}}
 </style></head><body class="theme-${style}"><div class="reveal"><div class="slides">${slides}</div></div>

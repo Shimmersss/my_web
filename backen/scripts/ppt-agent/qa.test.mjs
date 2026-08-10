@@ -1,6 +1,19 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { deterministicQa, ensureReferenceCoverage, hasAcademicSources, isAcademicSource } from './qa.mjs';
+import { deterministicQa, ensureReferenceCoverage, hasAcademicSources, isAcademicSource, reviewSlideNumbers } from './qa.mjs';
+
+test('follow-up visual review scopes only valid repaired pages and falls back to full deck', () => {
+  const plan = { slides: [{}, {}, {}, {}] };
+  assert.deepEqual(reviewSlideNumbers(plan, [4, 2, 2, 99, 0, 'bad']), [2, 4]);
+  assert.deepEqual(reviewSlideNumbers(plan, []), [1, 2, 3, 4]);
+});
+
+test('localized closing copy is not treated as an unfinished template placeholder', () => {
+  const qa = deterministicQa({
+    slides: [{ type: 'closing', title: '感谢观看', headline: '谢谢聆听', sourceIds: [], bullets: [] }]
+  }, [], { valid: true });
+  assert.equal(qa.valid, true);
+});
 
 test('academic detection accepts paper-like sources consistently', () => {
   assert.equal(isAcademicSource({ type: 'paper', title: 'Paper' }), true);

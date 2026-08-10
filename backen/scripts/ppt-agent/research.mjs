@@ -190,7 +190,10 @@ async function fetchImage(url) {
         dispatcher,
         redirect: 'manual',
         signal: controller.signal,
-        headers: { accept: 'image/avif,image/webp,image/png,image/jpeg,image/gif;q=0.8,*/*;q=0.1' }
+        headers: {
+          accept: 'image/png,image/jpeg,image/gif;q=0.8,*/*;q=0.1',
+          'user-agent': 'ShimmerPptAgent/1.0 (https://shimmer.help)'
+        }
       });
       if ([301, 302, 303, 307, 308].includes(response.status)) {
         await response.body?.cancel('redirect').catch(() => {});
@@ -350,7 +353,14 @@ export async function discoverPageImages(sources, { maxPages = 4, maxAssets = 8 
         || htmlAttribute(html, 'name', 'twitter:image')
         || htmlAttribute(html, 'rel', 'image_src');
       if (!raw) continue;
-      const imageUrl = new URL(htmlDecode(raw), sourceUrl).toString();
+      const sourceAddress = new URL(sourceUrl);
+      const imageAddress = new URL(htmlDecode(raw), sourceUrl);
+      // Some older official sites publish an http:// OG URL even while the
+      // same asset is available over HTTPS. Upgrade only same-host metadata;
+      // cross-host assets still go through the normal HTTPS/SSRF checks.
+      if (sourceAddress.protocol === 'https:' && imageAddress.protocol === 'http:'
+        && sourceAddress.hostname === imageAddress.hostname) imageAddress.protocol = 'https:';
+      const imageUrl = imageAddress.toString();
       assets.push({
         url: imageUrl,
         sourceUrl,
@@ -369,6 +379,26 @@ export async function discoverPageImages(sources, { maxPages = 4, maxAssets = 8 
   return { assets, failures: failures.slice(0, 8) };
 }
 
+/** Stable first-party media pages for known presentation franchises. */
+export function knownFirstPartyMediaSources(topic) {
+  const value = text(topic).toLowerCase();
+  if (!/刀剑神域|sword\s*art\s*online/.test(value)) return [];
+  return [
+    ['Sword Art Online 官方动画站', 'https://www.swordart-online.net/'],
+    ['Sword Art Online Alicization 官方站', 'https://sao-alicization.net/'],
+    ['Sword Art Online Progressive 官方站', 'https://sao-p.net/'],
+    ['Sword Art Online Ordinal Scale 官方站', 'https://sao-movie.net/']
+  ].map(([title, url]) => ({
+    title,
+    url,
+    abstract: `${title}发布的官方主视觉与作品信息。`,
+    type: 'web',
+    provider: 'first-party-media-catalog',
+    query: 'Sword Art Online official anime',
+    license: 'First-party source-page media; reuse terms require verification'
+  }));
+}
+
 function topicTerms(value) {
   const normalized = text(value).toLowerCase();
   const terms = new Set();
@@ -383,6 +413,20 @@ function topicTerms(value) {
   return [...terms];
 }
 
+function matchesSpecificSourceTopic(topic, item) {
+  const requested = text(topic).toLowerCase();
+  if (!/刀剑神域|sword\s*art\s*online/.test(requested)) return true;
+  let decodedUrl = text(item?.url).toLowerCase();
+  try { decodedUrl = decodeURIComponent(decodedUrl); } catch { /* retain raw URL */ }
+  const sourceIdentity = text([item?.title, decodedUrl].join(' ')).toLowerCase();
+  // "Sword Art Online" is a proper work title. Matching independent words
+  // such as "sword" or "art" admitted medieval-weapon pages whose og:image
+  // then outranked genuinely related visuals. Require the work/character arc
+  // identity in the source page itself; the model's original query is not
+  // evidence that a returned page is on-topic.
+  return /刀剑神域|sword[\s_-]*art[\s_-]*online|\bsao\b|kirito|asuna|alicization|aincrad|eugeo/.test(sourceIdentity);
+}
+
 /**
  * Source-page media is useful only when the page itself is on-topic.  Research
  * sources are intentionally broad (papers, index records, web pages), so
@@ -394,6 +438,7 @@ export function relevantPageImageSources(sources, topic, { maxPages = 4 } = {}) 
   const terms = topicTerms(topic);
   return (Array.isArray(sources) ? sources : [])
     .filter(item => String(item?.type || '').toLowerCase() === 'web' && String(item?.url || '').trim())
+    .filter(item => matchesSpecificSourceTopic(topic, item))
     .map(item => {
       const haystack = text([item.title, item.url].join(' ')).toLowerCase();
       const sourceQueryTerms = topicTerms(item.query);
@@ -551,7 +596,10 @@ async function wikimediaImages(query) {
   url.searchParams.set('gsrlimit', '6');
   url.searchParams.set('prop', 'imageinfo');
   url.searchParams.set('iiprop', 'url|mime|size|extmetadata');
-  url.searchParams.set('iiurlwidth', '1600');
+  // Commons rounds requested widths to a generated thumbnail tier. 1024 keeps
+  // most assets below the 4 MB worker limit and avoids downloading 1920 px
+  // thumbnails that are larger than a slide needs.
+  url.searchParams.set('iiurlwidth', '1024');
   url.searchParams.set('format', 'json');
   const data = await fetchJson(url);
   return Object.values(data.query?.pages || {}).map(page => {
@@ -597,9 +645,14 @@ function contextualPhotoQuery(query) {
   // A related real-world visual is preferable to an unrelated building or an
   // empty image frame. Keep the original topic in metadata for traceability
   // and for later slide-to-asset relevance matching.
-  if (/刀剑神域|sword\s*art\s*online|anime|动画/i.test(value)) return 'virtual reality gaming neon';
-  if (/元宇宙|metaverse/i.test(value)) return 'virtual reality headset digital world';
-  if (/游戏|game|gaming/i.test(value)) return 'immersive gaming technology';
+  // Open media indexes are much more reliable with concise concepts. The
+  // original, specific query is retained on every returned asset, so this
+  // broadening improves recall without weakening later topic relevance checks.
+  if (/alicization|eugeo|alice/i.test(value)) return 'fantasy forest';
+  if (/aincrad|floating\s+castle/i.test(value)) return 'fantasy castle';
+  if (/刀剑神域|sword\s*art\s*online|anime|动画/i.test(value)) return 'virtual reality';
+  if (/元宇宙|metaverse/i.test(value)) return 'virtual reality';
+  if (/游戏|game|gaming/i.test(value)) return 'gaming technology';
   return value;
 }
 
@@ -665,47 +718,84 @@ async function tavily(query) {
   return { sources, assets };
 }
 
+function matchesSpecificWorkQuery(query, asset) {
+  const value = String(query || '').toLowerCase();
+  if (!/刀剑神域|sword\s*art\s*online/.test(value)) return true;
+  const mediaText = text([asset?.title, asset?.description].join(' ')).toLowerCase();
+  return /刀剑神域|sword\s*art\s*online|kirito|asuna|alicization|aincrad|eugeo|alice/.test(mediaText);
+}
+
+function isUsefulContextualAsset(asset) {
+  const value = text([asset?.title, asset?.description].join(' ')).toLowerCase();
+  // Broad licensed searches occasionally return visually literal but
+  // presentation-useless objects (for example a "fantasy castle" birthday
+  // cake). Reject these before they receive topic-rich trace metadata that
+  // would otherwise make them look relevant to later deterministic checks.
+  return !/\b(?:birthday|cake|cupcake|food|lego|toy|figurine|miniature|costume|cosplay|city profile|zuylen)\b/i.test(value);
+}
+
+function isUsefulSpecificWorkAsset(asset) {
+  const value = text([asset?.title, asset?.description].join(' ')).toLowerCase();
+  return !/\b(?:logo|fukubukuro|shipping boxes|cardboard boxes|birthday|cake|toy|figurine)\b/i.test(value);
+}
+
 async function searchImages(query) {
-  if (!process.env.PPT_AGENT_TAVILY_KEY) {
-    const commons = await wikimediaImages(query);
-    if (commons.length) return { sources: [], assets: commons };
-    const openverse = await openverseImages(query);
-    if (openverse.length) return { sources: [], assets: openverse };
-    // Unsplash's unauthenticated search rendition can carry visible provider
-    // watermarks. Do not turn a licensed-looking search result into a failed
-    // deck; the worker separately extracts relevant first-party page media.
-    return { sources: [], assets: [] };
+  let tavilyResult = { sources: [], assets: [] };
+  if (process.env.PPT_AGENT_TAVILY_KEY) {
+    try { tavilyResult = await tavily(query); } catch { /* licensed fallbacks continue below */ }
   }
-  const tavilyResult = await tavily(query);
-  // Tavily deployments often return image URLs without a reusable-license
-  // field. Keep its text results, but use Wikimedia Commons as a licensed
-  // fallback so image search does not silently become metadata-only.
-  if (tavilyResult.assets?.length) return tavilyResult;
-  const commons = await wikimediaImages(query);
-  if (commons.length) return { sources: tavilyResult.sources || [], assets: commons };
-  const openverse = await openverseImages(query);
-  if (openverse.length) return { sources: tavilyResult.sources || [], assets: openverse };
-  return { sources: tavilyResult.sources || [], assets: [] };
+  // Commons and Openverse are complementary, not mutually exclusive. Stopping
+  // after the first two Commons hits left image-rich decks with one or two
+  // usable assets and encouraged repetition across every content page.
+  const commons = (await wikimediaImages(query).catch(() => []))
+    .filter(asset => matchesSpecificWorkQuery(query, asset) && isUsefulSpecificWorkAsset(asset));
+  const openverse = (await openverseImages(query).catch(() => []))
+    .filter(asset => matchesSpecificWorkQuery(query, asset) && isUsefulSpecificWorkAsset(asset));
+  let contextual = [];
+  const contextualQuery = contextualPhotoQuery(query);
+  if ([...(tavilyResult.assets || []), ...commons, ...openverse].length < 4 && contextualQuery !== String(query || '').trim()) {
+    const [contextCommons, contextOpenverse] = await Promise.all([
+      wikimediaImages(contextualQuery).catch(() => []),
+      openverseImages(contextualQuery).catch(() => [])
+    ]);
+    contextual = [...contextCommons, ...contextOpenverse].filter(isUsefulContextualAsset).map(item => ({
+      ...item,
+      title: `Contextual visual for ${String(query || '').trim()}: ${item.title || ''}`.slice(0, 240),
+      description: `Reusable contextual visual for ${String(query || '').trim()}. ${item.description || ''}`.slice(0, 600),
+      searchQuery: String(query || '').trim()
+    }));
+  }
+  const assets = [...(tavilyResult.assets || []), ...commons, ...openverse, ...contextual]
+    .filter((item, index, all) => item?.url && all.findIndex(other => other.url === item.url) === index)
+    .slice(0, 8);
+  // Unsplash's unauthenticated search rendition can carry visible provider
+  // watermarks, so it remains excluded from the final asset chain.
+  return { sources: tavilyResult.sources || [], assets };
 }
 
 export async function searchVisualAssets(queries, { maxQueries = 3, maxAssets = 8 } = {}) {
-  const output = [];
-  const seen = new Set();
+  const buckets = [];
   const failures = [];
   for (const query of (Array.isArray(queries) ? queries : []).slice(0, maxQueries)) {
     const value = String(query || '').replace(/\s+/g, ' ').trim();
     if (!value) continue;
     try {
       const result = await searchImages(value);
-      for (const asset of result.assets || []) {
-        if (!asset?.url || seen.has(asset.url)) continue;
-        seen.add(asset.url);
-        output.push(asset);
-        if (output.length >= maxAssets) return { assets: output, failures };
-      }
+      buckets.push(result.assets || []);
     } catch (error) {
       failures.push(`${value}: ${String(error?.message || error)}`);
     }
+  }
+  // Interleave query buckets so one broad query cannot consume the entire
+  // asset budget. This produces genuinely varied decks while still allowing
+  // a single successful provider/query to fill the budget when others fail.
+  const output = [];
+  const seen = new Set();
+  for (const asset of roundRobin(buckets)) {
+    if (!asset?.url || seen.has(asset.url)) continue;
+    seen.add(asset.url);
+    output.push(asset);
+    if (output.length >= maxAssets) break;
   }
   return { assets: output, failures: failures.slice(0, 8) };
 }
@@ -795,7 +885,19 @@ export async function downloadResearchAssets(assets, directory, { maxCount = 6 }
     if (!url || !sourceUrl || !license || seen.has(url)) continue;
     seen.add(url);
     try {
-      const downloaded = await fetchImage(url);
+      let downloaded;
+      let lastError;
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        try {
+          downloaded = await fetchImage(url);
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt === 2 || !/HTTP 429|aborted|fetch failed|timeout/i.test(String(error?.message || error))) throw error;
+          await new Promise(resolve => setTimeout(resolve, 500 * (attempt + 1)));
+        }
+      }
+      if (!downloaded) throw lastError || new Error('图片素材下载失败');
       const extension = imageExtension(downloaded.contentType, url);
       const id = `WEB${String(output.length + 1).padStart(2, '0')}`;
       const fileName = `${id}${extension}`;

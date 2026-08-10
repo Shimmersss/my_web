@@ -77,6 +77,13 @@ public class PptAgentRunner {
             try (Stream<Path> images = Files.list(session.getImagesDir())) {
                 List<Path> paths = images.filter(Files::isRegularFile)
                         .filter(path -> path.getFileName().toString().matches("(?i).+\\.(png|jpe?g|gif)$"))
+                        // PDF page renders are useful to the text extractor, but are
+                        // document thumbnails rather than presentation visuals. Passing
+                        // them to the Agent lets a full academic-paper page be inserted
+                        // into a small template image frame, which is unreadable at
+                        // slide scale. Extracted figures/tables remain eligible.
+                        .filter(path -> !path.getFileName().toString()
+                                .toLowerCase(java.util.Locale.ROOT).startsWith("paper-page-"))
                         .filter(path -> {
                             try {
                                 return Files.size(path) <= 4L * 1024 * 1024;

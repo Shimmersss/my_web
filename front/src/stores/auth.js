@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { getCurrentUser, getSiteSettings, loginAccount, logoutAccount, registerAccount } from '@/api'
+import { claimDailyCheckin, getCurrentUser, getSiteSettings, loginAccount, logoutAccount, registerAccount } from '@/api'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -12,6 +12,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isLoggedIn = computed(() => Boolean(user.value?.id))
   const isRoot = computed(() => Boolean(user.value?.root))
   const credits = computed(() => Number(user.value?.credits || 0))
+  const dailyCheckin = computed(() => user.value?.dailyCheckin || null)
 
   function clearPptTaskSession() {
     try {
@@ -73,6 +74,15 @@ export const useAuthStore = defineStore('auth', () => {
     if (user.value) user.value = { ...user.value, credits: Number(value || 0) }
   }
 
+  async function checkIn() {
+    const res = await claimDailyCheckin()
+    if (user.value) {
+      const data = res.data || {}
+      user.value = { ...user.value, credits: Number(data.balance ?? user.value.credits), dailyCheckin: { ...data } }
+    }
+    return res.data
+  }
+
   function canView(feature) {
     const level = visibility.value[feature] || 'PUBLIC'
     return level === 'PUBLIC' || (level === 'USER' && isLoggedIn.value) || (level === 'ROOT' && isRoot.value)
@@ -83,5 +93,5 @@ export const useAuthStore = defineStore('auth', () => {
   function clearAuthPrompt() { authPrompt.value = '' }
   function consumePendingPath() { const path = pendingPath.value; pendingPath.value = ''; authPrompt.value = ''; return path }
 
-  return { user, loading, isLoggedIn, isRoot, credits, visibility, authPrompt, canView, requestLogin, requestPermissionDenied, clearAuthPrompt, consumePendingPath, refresh, login, register, logout, updateCredits }
+  return { user, loading, isLoggedIn, isRoot, credits, dailyCheckin, visibility, authPrompt, canView, requestLogin, requestPermissionDenied, clearAuthPrompt, consumePendingPath, refresh, login, register, logout, updateCredits, checkIn }
 })

@@ -29,14 +29,17 @@
             </n-icon>
           </n-button>
 
-          <n-button v-if="!auth.isLoggedIn" size="small" secondary @click="openLogin">
+          <n-button v-if="!auth.isLoggedIn" size="small" secondary class="desktop-auth-action" @click="openLogin">
             登录
           </n-button>
-          <div v-else class="account-chip">
+          <div v-else class="account-chip desktop-auth-action">
             <button type="button" class="account-button" @click="auth.isRoot ? navigateTo('/admin') : null">
               <span>{{ auth.user?.username }}</span>
               <strong>{{ auth.credits }} credits</strong>
             </button>
+            <n-button size="small" secondary :disabled="!auth.dailyCheckin?.enabled || auth.dailyCheckin?.claimed" @click="handleDailyCheckin">
+              {{ auth.dailyCheckin?.claimed ? '已签到' : '签到' }}
+            </n-button>
             <n-button size="small" text @click="handleLogout">退出</n-button>
           </div>
 
@@ -62,6 +65,19 @@
           :options="mobileMenuOptions"
           class="mobile-nav-menu"
         />
+        <div class="mobile-account-actions">
+          <template v-if="auth.isLoggedIn">
+            <button type="button" class="mobile-account" @click="auth.isRoot ? navigateTo('/admin') : null">
+              <span>{{ auth.user?.username }}</span>
+              <strong>{{ auth.credits }} credits</strong>
+            </button>
+            <n-button block secondary :disabled="!auth.dailyCheckin?.enabled || auth.dailyCheckin?.claimed" @click="handleDailyCheckin">
+              {{ auth.dailyCheckin?.claimed ? '今日已签到' : `每日签到 +${auth.dailyCheckin?.credits || 0}` }}
+            </n-button>
+            <n-button block secondary @click="handleLogout">退出登录</n-button>
+          </template>
+          <n-button v-else block type="primary" @click="openLogin">登录 / 注册</n-button>
+        </div>
       </n-drawer-content>
     </n-drawer>
 
@@ -178,6 +194,7 @@ const toggleTheme = () => {
 }
 
 function openLogin() {
+  mobileMenuOpen.value = false
   authMode.value = 'login'
   authError.value = ''
   authModalOpen.value = true
@@ -213,9 +230,20 @@ async function submitAuth() {
 }
 
 async function handleLogout() {
+  mobileMenuOpen.value = false
   await auth.logout()
   message.success('已退出')
   if (route.name === 'Admin') navigateTo('/')
+}
+
+async function handleDailyCheckin() {
+  try {
+    const result = await auth.checkIn()
+    if (result?.granted) message.success(`签到成功，获得 ${result.granted} 积分`)
+    else message.info('今天已经签到过了')
+  } catch (error) {
+    message.error(error.message || '签到失败，请稍后重试')
+  }
 }
 </script>
 
@@ -411,6 +439,10 @@ async function handleLogout() {
   }
 }
 
+.mobile-account-actions {
+  display: none;
+}
+
 @media (max-width: 1200px) {
   .nav-menu {
     :deep(.n-menu) {
@@ -443,6 +475,35 @@ async function handleLogout() {
     display: inline-flex;
     min-width: 36px;
     min-height: 36px;
+  }
+
+  .desktop-auth-action {
+    display: none;
+  }
+
+  .mobile-account-actions {
+    display: grid;
+    gap: 12px;
+    margin-top: 18px;
+    padding-top: 18px;
+    border-top: 1px solid #e5e1d8;
+  }
+
+  .mobile-account {
+    width: 100%;
+    border: 1px solid #d7cfc0;
+    border-radius: 6px;
+    background: #fffaf0;
+    color: #2f2d27;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 48px;
+    padding: 10px 12px;
+    cursor: pointer;
+
+    strong { color: #8f2a22; font-size: 12px; }
   }
 }
 

@@ -85,7 +85,8 @@ public class AdminAccountController {
         try {
             authService.requireCsrf(request);
             authService.requireRoot(request);
-            quotaService.updateSettings(intValue(body.get("translationCreditPerPage"), 1), intValue(body.get("pptCreditPerTask"), 10));
+            quotaService.updateSettings(intValue(body.get("translationCreditPerPage"), 1), intValue(body.get("pptCreditPerTask"), 10),
+                    booleanValue(body.get("dailyCheckinEnabled"), true), intValue(body.get("dailyCheckinMinCredits"), intValue(body.get("dailyCheckinCredits"), 2)), intValue(body.get("dailyCheckinMaxCredits"), intValue(body.get("dailyCheckinCredits"), 2)));
             return ResponseEntity.ok(Map.of("code", 200, "data", quotaService.settings(), "message", "success"));
         } catch (AuthException e) {
             return error(e);
@@ -167,6 +168,15 @@ public class AdminAccountController {
         } catch (AuthException e) { return error(e); }
     }
 
+    @DeleteMapping("/invites/{id}")
+    public ResponseEntity<?> deleteInvite(HttpServletRequest request, @PathVariable long id) {
+        try {
+            authService.requireCsrf(request); authService.requireRoot(request);
+            quotaService.deleteUnusedInvite(id);
+            return ResponseEntity.ok(Map.of("code", 200, "data", quotaService.invites(), "message", "success"));
+        } catch (AuthException e) { return error(e); }
+    }
+
     @PatchMapping("/users/{id}")
     public ResponseEntity<?> userStatus(HttpServletRequest request, @PathVariable long id, @RequestBody Map<String, Object> body) {
         try {
@@ -193,6 +203,11 @@ public class AdminAccountController {
     }
     private int intValue(Object value, int fallback) {
         try { return Integer.parseInt(value(value)); } catch (Exception e) { return fallback; }
+    }
+    private boolean booleanValue(Object value, boolean fallback) {
+        if (value == null) return fallback;
+        String raw = value(value);
+        return raw.isBlank() ? fallback : Boolean.parseBoolean(raw);
     }
     private long longValue(Object value) {
         try { return Long.parseLong(value(value)); } catch (Exception e) { throw new AuthException(400, "用户 ID 无效"); }

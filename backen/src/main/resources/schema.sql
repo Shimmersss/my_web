@@ -54,6 +54,15 @@ CREATE TABLE IF NOT EXISTS credit_transactions (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS daily_checkins (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    checkin_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_daily_checkin_user_date UNIQUE (user_id, checkin_date),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
 CREATE TABLE IF NOT EXISTS app_settings (
     setting_key VARCHAR(96) PRIMARY KEY,
     setting_value VARCHAR(255) NOT NULL,

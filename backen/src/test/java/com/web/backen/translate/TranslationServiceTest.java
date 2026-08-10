@@ -1,6 +1,7 @@
 package com.web.backen.translate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.QuotaService;
 import com.web.backen.config.TranslationConfig;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,35 @@ class TranslationServiceTest {
 
     @TempDir
     Path tempDir;
+
+    @Test
+    void rootRecentHistoryUsesGlobalLimitWhileUsersUsePerUserLimit() throws Exception {
+        PdfParseService pdfParseService = mock(PdfParseService.class);
+        BabelDocService babelDocService = mock(BabelDocService.class);
+        TranslationConfig config = new TranslationConfig();
+        config.setStorageDir(tempDir.toString());
+        config.setMaxHistory(1);
+        config.setMaxGlobalHistory(4);
+        when(pdfParseService.getTotalPages(any(Path.class))).thenReturn(1);
+
+        TranslationService service = new TranslationService(
+                pdfParseService, babelDocService, config, new ObjectMapper());
+        service.initialize();
+        try {
+            for (long userId = 2; userId <= 5; userId++) {
+                TranslationSession session = service.createSessionPreview(
+                        "user-" + userId + ".pdf", new ByteArrayInputStream("pdf".getBytes()), userId);
+                session.setStatus("completed");
+            }
+            AuthUser root = new AuthUser(1, "root", "ROOT", 0, true);
+            AuthUser user = new AuthUser(2, "user2", "USER", 0, true);
+            assertEquals(4, service.getRecentSessions(root).size());
+            assertEquals(1, service.getRecentSessions(user).size());
+            assertEquals(2, service.getRecentSessions(user).get(0).getUserId());
+        } finally {
+            service.shutdown();
+        }
+    }
 
     @Test
     void queuesTranslationAndKeepsRecentResultFilesOnDisk() throws Exception {

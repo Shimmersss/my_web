@@ -13,6 +13,7 @@
     "smoke:presentations": "node scripts/ppt-agent/visual-smoke.mjs"
   },
   "dependencies": {
+    "image-size": "^1.2.1",
     "jszip": "3.10.1",
     "playwright-core": "1.62.1",
     "pptx-automizer": "0.8.2",

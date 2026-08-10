@@ -1,12 +1,16 @@
 package com.web.backen.auth;
 
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import jakarta.annotation.PostConstruct;
 
 import java.util.List;
 import java.util.Map;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class QuotaService {
@@ -20,6 +24,10 @@ public class QuotaService {
     public void initializeDefaults() {
         ensureSetting("translation.credit_per_page", "1");
         ensureSetting("ppt.credit_per_task", "10");
+        ensureSetting("daily_checkin.enabled", "true");
+        ensureSetting("daily_checkin.credits", "2");
+        ensureSetting("daily_checkin.min_credits", String.valueOf(dailyCheckinCredits()));
+        ensureSetting("daily_checkin.max_credits", String.valueOf(dailyCheckinCredits()));
     }
 
     public int translationCreditPerPage() {
@@ -33,7 +41,40 @@ public class QuotaService {
     public Map<String, Object> settings() {
         return Map.of(
                 "translationCreditPerPage", translationCreditPerPage(),
-                "pptCreditPerTask", pptCreditPerTask());
+                "pptCreditPerTask", pptCreditPerTask(),
+                "dailyCheckinEnabled", dailyCheckinEnabled(),
+                "dailyCheckinCredits", dailyCheckinCredits(),
+                "dailyCheckinMinCredits", dailyCheckinMinCredits(),
+                "dailyCheckinMaxCredits", dailyCheckinMaxCredits());
+    }
+
+    public boolean dailyCheckinEnabled() { return booleanSetting("daily_checkin.enabled", true); }
+    public int dailyCheckinCredits() { return intSetting("daily_checkin.credits", 2); }
+    public int dailyCheckinMinCredits() { return intSetting("daily_checkin.min_credits", dailyCheckinCredits()); }
+    public int dailyCheckinMaxCredits() { return Math.max(dailyCheckinMinCredits(), intSetting("daily_checkin.max_credits", dailyCheckinCredits())); }
+
+    public Map<String, Object> dailyCheckinStatus(long userId) {
+        LocalDate today = today();
+        Integer claimed = jdbc.queryForObject("SELECT COUNT(*) FROM daily_checkins WHERE user_id=? AND checkin_date=?", Integer.class, userId, today);
+        return Map.of("enabled", dailyCheckinEnabled(), "claimed", claimed != null && claimed > 0,
+                "credits", dailyCheckinCredits(), "minCredits", dailyCheckinMinCredits(), "maxCredits", dailyCheckinMaxCredits(), "date", today.toString());
+    }
+
+    @Transactional
+    public Map<String, Object> claimDailyCheckin(long userId) {
+        if (!dailyCheckinEnabled()) throw new AuthException(403, "每日签到暂未开启");
+        LocalDate today = today();
+        try {
+            jdbc.update("INSERT INTO daily_checkins (user_id, checkin_date) VALUES (?, ?)", userId, today);
+        } catch (DuplicateKeyException e) {
+            return dailyCheckinStatus(userId);
+        }
+        int reward = ThreadLocalRandom.current().nextInt(dailyCheckinMinCredits(), dailyCheckinMaxCredits() + 1);
+        jdbc.update("UPDATE users SET credits=credits+?, updated_at=CURRENT_TIMESTAMP WHERE id=?", reward, userId);
+        int balance = balance(userId);
+        jdbc.update("INSERT INTO credit_transactions (user_id, amount, balance_after, kind, note) VALUES (?, ?, ?, 'DAILY_CHECKIN', ?)",
+                userId, reward, balance, "每日签到奖励（" + today + "）");
+        return Map.of("enabled", true, "claimed", true, "credits", reward, "date", today.toString(), "balance", balance, "granted", reward);
     }
 
     @Transactional
@@ -111,6 +152,15 @@ public class QuotaService {
                 """);
     }
 
+    public List<Map<String, Object>> dailyCheckinLeaderboard() {
+        return jdbc.queryForList("""
+                SELECT u.username, t.amount, t.created_at
+                FROM credit_transactions t JOIN users u ON u.id=t.user_id
+                WHERE t.kind='DAILY_CHECKIN' AND CAST(t.created_at AS DATE)=?
+                ORDER BY t.amount DESC, t.created_at ASC LIMIT 10
+                """, today());
+    }
+
     public List<Map<String, Object>> invites() {
         return jdbc.queryForList("SELECT * FROM invite_codes ORDER BY id DESC LIMIT 100");
     }
@@ -137,6 +187,16 @@ public class QuotaService {
         if (updated == 0) throw new AuthException(404, "邀请码不存在");
     }
 
+    /** Remove only unused codes so registration and credit history stay auditable. */
+    @Transactional
+    public void deleteUnusedInvite(long id) {
+        int deleted = jdbc.update("DELETE FROM invite_codes WHERE id=? AND used_count=0", id);
+        if (deleted > 0) return;
+        Integer exists = jdbc.queryForObject("SELECT COUNT(*) FROM invite_codes WHERE id=?", Integer.class, id);
+        if (exists == null || exists == 0) throw new AuthException(404, "邀请码不存在");
+        throw new AuthException(400, "已使用的邀请码不能删除，请改为撤销");
+    }
+
     @Transactional
     public void updateUserStatus(long id, boolean enabled) {
         Map<String, Object> user = jdbc.queryForList("SELECT role FROM users WHERE id=?", id).stream().findFirst()
@@ -157,9 +217,20 @@ public class QuotaService {
                 "creditsSpent", Math.abs(sum("SELECT COALESCE(SUM(amount), 0) FROM credit_transactions WHERE kind='SPEND'")));
     }
 
-    public void updateSettings(int translationCreditPerPage, int pptCreditPerTask) {
+    public void updateSettings(int translationCreditPerPage, int pptCreditPerTask, boolean dailyCheckinEnabled, int dailyCheckinMinCredits, int dailyCheckinMaxCredits) {
         setSetting("translation.credit_per_page", String.valueOf(Math.max(1, translationCreditPerPage)));
         setSetting("ppt.credit_per_task", String.valueOf(Math.max(1, pptCreditPerTask)));
+        setSetting("daily_checkin.enabled", String.valueOf(dailyCheckinEnabled));
+        int min = Math.max(1, dailyCheckinMinCredits);
+        int max = Math.max(min, dailyCheckinMaxCredits);
+        setSetting("daily_checkin.credits", String.valueOf(min));
+        setSetting("daily_checkin.min_credits", String.valueOf(min));
+        setSetting("daily_checkin.max_credits", String.valueOf(max));
+    }
+
+    /** Compatibility for callers that still provide a fixed daily reward. */
+    public void updateSettings(int translationCreditPerPage, int pptCreditPerTask, boolean dailyCheckinEnabled, int dailyCheckinCredits) {
+        updateSettings(translationCreditPerPage, pptCreditPerTask, dailyCheckinEnabled, dailyCheckinCredits, dailyCheckinCredits);
     }
 
     private int intSetting(String key, int fallback) {
@@ -171,6 +242,13 @@ public class QuotaService {
             return fallback;
         }
     }
+
+    private boolean booleanSetting(String key, boolean fallback) {
+        List<String> values = jdbc.queryForList("SELECT setting_value FROM app_settings WHERE setting_key=?", String.class, key);
+        return values.isEmpty() ? fallback : Boolean.parseBoolean(values.get(0));
+    }
+
+    private LocalDate today() { return LocalDate.now(ZoneId.of("Asia/Shanghai")); }
 
     private void setSetting(String key, String value) {
         int updated = jdbc.update("UPDATE app_settings SET setting_value=?, updated_at=CURRENT_TIMESTAMP WHERE setting_key=?",

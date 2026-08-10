@@ -184,6 +184,7 @@ public class TranslateController {
 
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("taskId", session.getTaskId());
+        data.put("userId", session.getUserId());
         data.put("fileName", session.getFileName());
         data.put("inputKind", session.getInputKind());
         data.put("status", session.getStatus());
@@ -327,6 +328,7 @@ public class TranslateController {
     private Map<String, Object> toSummary(TranslationSession session) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("taskId", session.getTaskId());
+        data.put("userId", session.getUserId());
         data.put("fileName", session.getFileName());
         data.put("inputKind", session.getInputKind());
         data.put("status", session.getStatus());

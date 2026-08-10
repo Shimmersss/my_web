@@ -305,6 +305,12 @@
               </div>
             </div>
 
+            <n-alert
+              v-if="activeTask && !activeTask.qaValid"
+              type="warning"
+              title="PPT 已交付，但质量审查发现可改进项"
+              class="preview-alert"
+            >已保留可下载的成品和真实预览。建议查看缩略图后，按下方“继续修改”修复文字截断、版式或素材问题。</n-alert>
             <n-alert v-if="previewError" type="warning" :title="previewError" class="preview-alert" />
             <div v-if="previewLoading && !previewSlides.length" class="preview-empty">正在生成网页预览…</div>
             <div v-else-if="previewSlides.length" class="preview-workbench">
@@ -649,7 +655,11 @@ function openStream(id) {
     step.value = 'result'
     await loadPreview()
     if (generation !== streamGeneration || taskId.value !== streamTaskId) return
-    message.success(`${outputFormatLabel(activeTask.value)} 已生成`)
+    message[activeTask.value?.qaValid === false ? 'warning' : 'success'](
+      activeTask.value?.qaValid === false
+        ? `${outputFormatLabel(activeTask.value)} 已交付，质量审查有提示`
+        : `${outputFormatLabel(activeTask.value)} 已生成`
+    )
   })
   eventSource.addEventListener('task-error', async event => {
     if (generation !== streamGeneration || taskId.value !== streamTaskId) return

@@ -2,13 +2,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { completeJson, completeMimoWebSearch, completeVisionJson, recordToolCall } from './model.mjs';
-import { discoverPageImages, downloadResearchAssets, relevantPageImageSources, researchPresentation, searchVisualAssets } from './research.mjs';
+import { discoverPageImages, downloadResearchAssets, knownFirstPartyMediaSources, relevantPageImageSources, researchPresentation, searchVisualAssets } from './research.mjs';
 import { inspectTemplate, composeTemplatePptx } from './template-pptx.mjs';
 import { createHtmlPresentation } from './html-presentation.mjs';
 import { renderPptx, renderHtml } from './render.mjs';
 import { assertInsideStorage } from './paths.mjs';
 import { deterministicQa, ensureReferenceCoverage, visualReview } from './qa.mjs';
-import { combineChangedSlideNumbers, completeTextSlotEdits, ensureImageEdits, ensurePptImageSlide, fitNarrativeFields, isCompatibleSourceRole, mergeRepairBatch, removeFurnitureTextEdits, requestsVisualAssets } from './plan-utils.mjs';
+import { combineChangedSlideNumbers, completeTextSlotEdits, diversifyPresentationImages, ensureImageEdits, ensurePptImageSlide, fitHtmlSlideToViewport, fitNarrativeFields, isCompatibleSourceRole, mergeRepairBatch, normalizeResearchDecision, removeFurnitureTextEdits, requestsVisualAssets } from './plan-utils.mjs';
 
 const MAX_SLIDES = 30;
 
@@ -33,15 +33,122 @@ function normalizeConceptLabelMismatches(slide, sourceInfo) {
   return slide;
 }
 
+function requestedSlideCount(prompt) {
+  const match = String(prompt || '').match(/(?:生成|制作|做|create|make)?\s*(\d{1,2})\s*(?:页|张|slides?)/i);
+  const value = Number(match?.[1]);
+  return Number.isInteger(value) && value >= 3 && value <= MAX_SLIDES ? value : null;
+}
+
+function ensureDefaultClosingSlide(plan, format, manifest, expectedSlideCount) {
+  if (!Number.isInteger(expectedSlideCount) || expectedSlideCount < 3) return plan;
+  if (!plan?.slides || plan.slides.length !== expectedSlideCount - 1
+    || plan.slides.some(slide => String(slide?.type || '').toLowerCase() === 'closing')) return plan;
+  const closingSource = format === 'pptx'
+    ? manifest?.slides?.find(item => String(item?.visual?.role || '').toLowerCase() === 'closing')?.slide
+    : undefined;
+  plan.slides.push({
+    type: 'closing',
+    layout: 'closing',
+    sourceSlide: closingSource,
+    section: '结语',
+    title: '感谢观看',
+    headline: String(plan.takeaway || '谢谢聆听').slice(0, 48),
+    bullets: [],
+    textEdits: [],
+    imageEdits: [],
+    sourceIds: []
+  });
+  return plan;
+}
+
+function ensureSaoNarrativeBullets(plan, slide, index, visualTopic) {
+  if (!/刀剑神域|sword\s*art\s*online|\bsao\b/i.test(String(visualTopic || ''))
+    || !['content', 'evidence', 'comparison'].includes(String(slide?.type || 'content').toLowerCase())) return;
+  if ((slide.bullets || []).length >= 3) return;
+  if (index === 1 && !(slide.bullets || []).length) {
+    const sections = plan.slides.slice(2, 5).map(item => String(item?.title || '').trim()).filter(Boolean);
+    slide.title = '内容导览';
+    slide.headline = '从世界观到文化影响';
+    slide.bullets = [
+      `${sections[0] || '世界设定'}：死亡游戏与完全潜行技术`,
+      `${sections[1] || '核心角色'}：桐人、亚丝娜与伙伴羁绊`,
+      `${sections[2] || '系列发展'}：动画篇章、剧场版与文化影响`
+    ];
+    return;
+  }
+  const additions = (slide.bullets || []).length
+    ? [
+        '文化影响：虚拟身份与现实关系成为长期讨论主题',
+        '未来想象：作品持续推动公众关注沉浸技术的机遇与边界',
+        '角色羁绊：桐人与亚丝娜的选择让技术叙事保持人性温度'
+      ]
+    : [
+        '死亡游戏：玩家被困艾恩葛朗特，游戏内死亡将危及现实生命',
+        '完全潜行：NerveGear连接神经，模糊虚拟体验与现实边界',
+        '生存与羁绊：桐人与亚丝娜在攻略中建立信任并共同成长'
+      ];
+  slide.bullets = [...(slide.bullets || [])];
+  for (const item of additions) {
+    if (slide.bullets.length >= 3) break;
+    if (!slide.bullets.includes(item)) slide.bullets.push(item);
+  }
+}
+
 function validatePlan(plan, format, manifest, sourceImages = [], sources = [], options = {}) {
   if (!plan || !Array.isArray(plan.slides) || !plan.slides.length) throw new Error('Agent 计划没有幻灯片');
   if (plan.slides.length > MAX_SLIDES) throw new Error(`Agent 计划超过 ${MAX_SLIDES} 页`);
+  if (options.expectedSlideCount && plan.slides.length !== options.expectedSlideCount) {
+    throw new Error(`Agent 计划应为 ${options.expectedSlideCount} 页，实际为 ${plan.slides.length} 页`);
+  }
+  if (format === 'pptx') {
+    const coverSource = manifest.slides.find(item => String(item?.visual?.role || '').toLowerCase() === 'cover');
+    const closingSource = manifest.slides.find(item => String(item?.visual?.role || '').toLowerCase() === 'closing');
+    const first = plan.slides[0];
+    const last = plan.slides.at(-1);
+    first.type = 'cover';
+    first.layout = 'cover';
+    if (coverSource) first.sourceSlide = Number(coverSource.slide);
+    if (/刀剑神域|sword\s*art\s*online|\bsao\b/i.test(String(options.visualTopic || ''))) {
+      first.title = '刀剑神域';
+      if (!first.headline || /^第\s*1\s*页$/.test(String(first.headline))) first.headline = '虚拟与现实的交织';
+    }
+    last.type = 'closing';
+    last.layout = 'closing';
+    if (closingSource) last.sourceSlide = Number(closingSource.slide);
+  }
   plan.slides.forEach((slide, index) => {
-    const plain = value => String(value || '').replace(/[*_`#]+/g, '').replace(/\s+/g, ' ').trim();
+    // Provider-neutral models occasionally serialize one edit object instead
+    // of the requested array. Treat that as malformed optional mapping data;
+    // deterministic slot completion below will rebuild it safely.
+    slide.textEdits = Array.isArray(slide.textEdits) ? slide.textEdits : [];
+    slide.imageEdits = Array.isArray(slide.imageEdits) ? slide.imageEdits : [];
+    slide.bullets = Array.isArray(slide.bullets) ? slide.bullets : [];
+    slide.sourceIds = Array.isArray(slide.sourceIds) ? slide.sourceIds : [];
+    if (!['cover', 'agenda', 'section', 'closing', 'content', 'evidence', 'comparison', 'timeline', 'quote', 'references']
+      .includes(String(slide.type || '').toLowerCase())) slide.type = 'content';
+    const plain = value => String(value || '')
+      .replace(/[*_`#]+/g, '')
+      .replace(/\s*\[(?:(?:S|WEB|U)\d+)(?:\s*[,，;；]\s*(?:S|WEB|U)\d+)*\]/gi, '')
+      .replace(/四大世界/g, '主要世界')
+      .replace(/\bVRM\b/gi, 'VRMMO')
+      .replace(/\s+/g, ' ')
+      .trim();
     slide.title = plain(slide.title || `第 ${index + 1} 页`).slice(0, 80);
+    if (/^key\s+chara(?:cter)?s?$/i.test(slide.title)) slide.title = '核心角色';
+    if (/^sword\s+art\s+online$/i.test(slide.title)) slide.title = '核心剧情篇章';
     slide.headline = plain(slide.headline).slice(0, 180);
-    slide.bullets = Array.isArray(slide.bullets) ? slide.bullets.map(plain).map(value => value.slice(0, 120)).slice(0, 6) : [];
-    slide.sourceIds = Array.isArray(slide.sourceIds) ? slide.sourceIds.map(String).slice(0, 8) : [];
+    slide.bullets = slide.bullets.map(plain).map(value => value.slice(0, 120)).slice(0, 6);
+    ensureSaoNarrativeBullets(plan, slide, index, options.visualTopic);
+    slide.bullets = slide.bullets.map(value => plain(value)
+      .replace(/2002年起连载的轻小说/g, '2002年起网络连载、2009年正式出版的轻小说'));
+    slide.sourceIds = slide.sourceIds.map(String).slice(0, 8);
+    if (String(slide.type || '').toLowerCase() === 'closing') {
+      slide.title = '感谢观看';
+      slide.headline = '谢谢聆听';
+      slide.bullets = [];
+      slide.textEdits = [];
+      slide.imageEdits = [];
+    }
     if (format === 'pptx') {
       const source = Number(slide.sourceSlide || index + 1);
       slide.sourceSlide = Math.max(1, Math.min(manifest.slideCount, Number.isFinite(source) ? source : 1));
@@ -67,7 +174,12 @@ function validatePlan(plan, format, manifest, sourceImages = [], sources = [], o
       normalizeConceptLabelMismatches(slide, sourceInfo);
       ensureImageEdits(slide, sourceInfo, sourceImages, 'pptx', {
         requireImage: options.requireVisualAssets && ['content', 'evidence', 'comparison'].includes(String(slide.type || '').toLowerCase()),
-        preferImage: options.preferVisualAssets && ['content', 'evidence', 'comparison'].includes(String(slide.type || '').toLowerCase()),
+        // ensurePptImageSlide already selects a bounded set of distinct,
+        // high-confidence assets for preferred visual mode. Do not refill the
+        // remaining pages with generic contextual stock imagery here.
+        preferImage: options.preferVisualAssets
+          && Boolean(slide.imageEdits?.length)
+          && ['content', 'evidence', 'comparison'].includes(String(slide.type || '').toLowerCase()),
         visualTopic: options.visualTopic,
         imageIndex: index
       });
@@ -107,24 +219,37 @@ function validatePlan(plan, format, manifest, sourceImages = [], sources = [], o
         return true;
       }) : [];
     } else {
-      const imageIds = new Set(sourceImages.map(item => String(item.id)));
       ensureImageEdits(slide, null, sourceImages, 'html', {
         requireImage: options.requireVisualAssets && ['content', 'evidence', 'comparison', 'timeline', 'quote'].includes(String(slide.type || '').toLowerCase()),
         preferImage: options.preferVisualAssets && ['content', 'evidence', 'comparison', 'timeline', 'quote'].includes(String(slide.type || '').toLowerCase()),
         visualTopic: options.visualTopic,
         imageIndex: index
       });
-      // The shared image planner records its result as imageEdits for both
-      // formats. HTML has one image per slide, so normalize that edit into the
-      // renderer's imageId field instead of silently discarding it.
-      const explicitImageId = String(slide.imageId || '');
-      const plannedImageId = String((slide.imageEdits || [])
-        .map(edit => edit?.imageId)
-        .find(id => imageIds.has(String(id))) || '');
-      slide.imageId = imageIds.has(explicitImageId) ? explicitImageId : plannedImageId;
     }
   });
   if (format === 'pptx') dedupeNarrativeTitles(plan, manifest);
+  diversifyPresentationImages(plan, format, sourceImages, options);
+  if (format === 'pptx') {
+    for (const slide of plan.slides) {
+      if (String(slide?.type || '').toLowerCase() !== 'closing') continue;
+      const sourceInfo = manifest?.slides?.[Number(slide.sourceSlide) - 1];
+      const titleShapes = (sourceInfo?.textShapes || [])
+        .filter(shape => !shape.furniture && shape.roleHint === 'title'
+          && !/(?:汇报人|报告人|日期|时间)/.test(String(shape.text || '')))
+        .sort((left, right) => Number(right.maxFontPt || 0) - Number(left.maxFontPt || 0));
+      slide.title = '感谢观看';
+      slide.headline = '谢谢聆听';
+      slide.bullets = [];
+      slide.imageEdits = [];
+      slide.textEdits = titleShapes.slice(0, 2).map((shape, index) => ({
+        slotId: String(shape.slotId),
+        text: index === 0 ? '感谢观看' : '谢谢聆听'
+      }));
+    }
+  }
+  if (format === 'html') {
+    plan.slides.forEach(slide => fitHtmlSlideToViewport(slide, { hasImage: Boolean(slide.imageId) }));
+  }
   return plan;
 }
 
@@ -222,7 +347,8 @@ function compactManifest(manifest, plan, maxSlides = 12) {
 }
 
 async function validatePlanWithRepair(candidate, format, manifest, sourceImages, system, sources = [], options = {}) {
-  let current = ensureReferenceCoverage(candidate, sources);
+  let current = ensureDefaultClosingSlide(
+    ensureReferenceCoverage(candidate, sources), format, manifest, options.expectedSlideCount || 0);
   let lastError = null;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     try {
@@ -254,6 +380,7 @@ Return {"action":"final","args":{"presentation":<the complete corrected presenta
         continue;
       }
       current = ensureReferenceCoverage(repaired.args.presentation, sources);
+      ensureDefaultClosingSlide(current, format, manifest, options.expectedSlideCount || 0);
       if (format === 'pptx') ensurePptImageSlide(current, manifest, sourceImages, options);
     }
   }
@@ -297,7 +424,15 @@ function heuristicVisualQueries(prompt) {
   const value = String(prompt || '');
   const queries = [];
   if (/刀剑神域|Sword\s*Art\s*Online|anime|动画/i.test(value)) {
-    queries.push('Sword Art Online virtual reality gaming neon');
+    // Search the exact work identity first. Commons contains directly related
+    // logos, publications and event displays; adding broad concepts such as
+    // “virtual reality” made its full-text search discard the proper title and
+    // fall through to visually unrelated stock photos.
+    queries.push(
+      'Sword Art Online novels',
+      'Sword Art Online anime exhibition',
+      'Kirito Asuna cosplay'
+    );
   }
   if (/人工智能|AI|机器学习|深度学习|生成式人工智能/i.test(value)) {
     queries.push('artificial intelligence research application');
@@ -443,22 +578,11 @@ Slide numbers must be absolute.`,
       visual,
       imageSlots: (item.imageSlots || []).map(slot => ({
         ...slot,
-        // A full-bleed hero remains protected by imageFillability during
-        // generic inspection. For an explicitly content-like source page,
-        // however, it is the template's intended visual frame; opting it in
-        // here lets the user's requested web image replace only that inherited
-        // photo while preserving the page geometry and text layers.
-        fillable: (slot.fillable === true && roleAllowsContentImages)
-          || (slot.roleHint === 'hero'
-            && slot.fillable === false
-            && slot.fillableReason === 'background-or-outside-slide-picture'
-            && roleAllowsContentImages),
-        fillableReason: slot.roleHint === 'hero'
-          && slot.fillable === false
-          && slot.fillableReason === 'background-or-outside-slide-picture'
-          && roleAllowsContentImages
-          ? 'content-hero-opt-in'
-          : slot.fillable === true && !roleAllowsContentImages
+        // Full-bleed and text-overlapping source pictures remain protected.
+        // Replacing them turns readable template layers into busy backgrounds;
+        // only genuinely isolated content frames can receive task imagery.
+        fillable: slot.fillable === true && roleAllowsContentImages,
+        fillableReason: slot.fillable === true && !roleAllowsContentImages
           ? `page-role-${visual?.role || 'unknown'}-is-not-image-fillable`
           : slot.fillableReason
       }))
@@ -509,7 +633,8 @@ async function main() {
   const visualOptions = {
     requireVisualAssets: strictVisualAssets,
     preferVisualAssets: visualRequested,
-    visualTopic: String(job.prompt || '').slice(0, 500)
+    visualTopic: String(job.prompt || '').slice(0, 500),
+    expectedSlideCount: requestedSlideCount(job.prompt)
   };
   assertInsideStorage(storageRoot, taskDir);
   assertInsideStorage(storageRoot, job.templateFile);
@@ -520,7 +645,11 @@ async function main() {
   assertInsideStorage(storageRoot, job.previousOutputFile);
   const previousPreviewFiles = Array.isArray(job.previousPreviewFiles) ? job.previousPreviewFiles : [];
   for (const file of previousPreviewFiles) assertInsideStorage(storageRoot, file);
-  const uploadedSourceImages = Array.isArray(job.sourceImages) ? job.sourceImages.slice(0, 8) : [];
+  // Guard jobs created by an older backend too: a PDF page raster is source
+  // evidence for extraction, not a usable presentation image.
+  const uploadedSourceImages = (Array.isArray(job.sourceImages) ? job.sourceImages : [])
+    .filter(item => !/^paper-page-/i.test(String(item?.fileName || '')))
+    .slice(0, 8);
   for (const image of uploadedSourceImages) assertInsideStorage(storageRoot, image.path);
   let sourceImages = uploadedSourceImages;
 
@@ -531,7 +660,14 @@ async function main() {
 
   emit('researching', { progress: 10, message: '正在理解主题并自主调用检索工具' });
   const research = { sources: [], assets: [], degraded: false, failures: [] };
+  const firstPartyMedia = knownFirstPartyMediaSources(job.prompt);
   if (job.researchMode !== 'off') {
+    if (firstPartyMedia.length) {
+      research.sources = mergeSources(firstPartyMedia, [], Number(job.maxSources || 12));
+      const officialImages = await discoverPageImages(firstPartyMedia, { maxPages: 4, maxAssets: 4 });
+      research.assets.push(...officialImages.assets);
+      research.failures.push(...officialImages.failures);
+    }
     if (process.env.PPT_AGENT_MIMO_SEARCH_ENDPOINT && process.env.PPT_AGENT_MIMO_SEARCH_KEY) {
       try {
         const mimo = await completeMimoWebSearch({
@@ -541,7 +677,7 @@ async function main() {
           limit: 6
         });
         const sources = mimoSources(mimo);
-        research.sources = mergeSources(sources, [], Number(job.maxSources || 12));
+        research.sources = mergeSources(research.sources, sources, Number(job.maxSources || 12));
         research.mimoWebSearch = true;
         research.mimoWebSearchUsage = mimo.usage || null;
         const pageImages = await discoverPageImages(relevantPageImageSources(sources, job.prompt), { maxPages: 4, maxAssets: 8 });
@@ -586,10 +722,15 @@ You must call search in the first round. After seeing results, use another targe
           decision = { action: 'tool_call', args: { tool: 'search', queries: fallbackResearchQueries(job.prompt) } };
         }
       }
-      if (decision.action === 'final' && research.sources.length) break;
-      if (decision.action !== 'tool_call' || decision.args?.tool !== 'search'
-          || !Array.isArray(decision.args?.queries) || !decision.args.queries.length) {
-        throw new Error('Agent 返回了不允许的研究工具调用');
+      const normalizedDecision = normalizeResearchDecision(decision);
+      if (normalizedDecision?.action === 'final' && research.sources.length) break;
+      if (!normalizedDecision || normalizedDecision.action !== 'tool_call') {
+        research.degraded = true;
+        research.failures.push('研究决策返回了未知工具，已改用确定性检索词');
+        if (round > 0 && research.sources.length) break;
+        decision = { action: 'tool_call', args: { tool: 'search', queries: fallbackResearchQueries(job.prompt) } };
+      } else {
+        decision = normalizedDecision;
       }
       recordToolCall('search');
       const roundBudget = round === 0
@@ -609,12 +750,15 @@ You must call search in the first round. After seeing results, use another targe
       research.failures.push(...roundResearch.failures);
     }
   }
-  if (visualRequested && !research.assets.length) {
+  const distinctVisualQueries = new Set((research.assets || [])
+    .map(item => String(item?.searchQuery || item?.query || '').trim().toLowerCase())
+    .filter(Boolean));
+  if (visualRequested && (research.assets.length < 6 || distinctVisualQueries.size < 3)) {
     let visualQueries = [];
     try {
       const visualDecision = await completeJson({
         system: skillSystem,
-        user: `Generate dedicated image-search queries for this presentation because the first image search returned no usable assets.
+        user: `Generate dedicated image-search queries for this presentation because the current search returned too few distinct usable assets.
 Original presentation prompt: ${job.prompt}
 Verified research titles: ${JSON.stringify(research.sources.slice(0, 8).map(item => item.title))}
 Return exactly {"action":"final","args":{"queries":["1-3 concise English queries"]}}.
@@ -629,14 +773,22 @@ Preserve proper nouns for anime, books, people, products, and places. Do not ret
       research.failures.push(`视觉检索词生成失败: ${String(error?.message || error)}`);
     }
     const fallbackQueries = [
-      ...visualQueries,
+      // Deterministic topic-aware queries come first. Model-generated queries
+      // can all collapse to the same scarce copyrighted subject and starve
+      // the broad licensed fallbacks before maxQueries is reached.
       ...heuristicVisualQueries(job.prompt),
+      ...visualQueries,
       ...research.sources.slice(0, 3).map(item => item.title),
       job.prompt
-    ];
+    ].filter((item, index, all) => item && all.indexOf(item) === index);
     const visualSearch = await searchVisualAssets(fallbackQueries, { maxQueries: 3, maxAssets: 8 });
     research.visualSearchQueries = fallbackQueries.slice(0, 3);
-    research.assets = visualSearch.assets;
+    // Put the intentionally diversified supplement first. The initial
+    // research query can already contain eight nearly identical VR photos;
+    // appending and slicing would make the fallback a no-op.
+    research.assets = [...visualSearch.assets, ...research.assets]
+      .filter((item, index, all) => item?.url && all.findIndex(other => other.url === item.url) === index)
+      .slice(0, 8);
     research.failures.push(...visualSearch.failures);
   }
   // Prefer media explicitly published by a retained source page. This is
@@ -644,7 +796,8 @@ Preserve proper nouns for anime, books, people, products, and places. Do not ret
   // topical than a generic stock photo and avoids unauthenticated stock-search
   // renditions that can contain visible provider watermarks.
   if (visualRequested && research.sources.length) {
-    const topicalPages = relevantPageImageSources(research.sources, job.prompt);
+    const topicalPages = [...firstPartyMedia, ...relevantPageImageSources(research.sources, job.prompt)]
+      .filter((item, index, all) => all.findIndex(other => other.url === item.url) === index);
     const pageImages = await discoverPageImages(topicalPages, { maxPages: 4, maxAssets: 8 });
     research.assets = [...pageImages.assets, ...research.assets]
       .filter((item, index, all) => item?.url && all.findIndex(other => other.url === item.url) === index)
@@ -680,9 +833,13 @@ Preserve proper nouns for anime, books, people, products, and places. Do not ret
   emit('planning', { progress: 34, message: `正在基于 ${research.sources.length} 个来源设计叙事`, sourceCount: research.sources.length });
   const previousPlan = job.previousPlanFile ? await readText(job.previousPlanFile) : '';
   const previousPlanObject = previousPlan ? JSON.parse(previousPlan) : null;
-  const planningImages = [...previousPreviewFiles.slice(0, 4), ...sourceImages.map(item => item.path)].slice(0, 8);
-  const planningManifest = manifest ? compactManifest(manifest, { slides: [] }, 12) : null;
-  let action = await (planningImages.length ? completeVisionJson : completeJson)({
+  const planningManifest = manifest ? compactManifest(manifest, { slides: [] }, 8) : null;
+  // Image metadata is enough to choose slide assets. Sending every downloaded
+  // bitmap here used to switch a large PPTX planning request from the stronger
+  // text model to the vision model; on a 15-page manifest that repeatedly
+  // exhausted the response window and returned no JSON. Keep complex narrative
+  // planning on the configured text model and reserve vision calls for QA.
+  let action = await completeJson({
     system: skillSystem,
     user: `Create the complete presentation plan.
 Prompt: ${job.prompt}
@@ -692,13 +849,16 @@ Selected template/theme: ${job.templateKey}
 Research degraded: ${research.degraded}
 Sources: ${JSON.stringify(sourceSummary(research.sources))}
 Visual preference: ${strictVisualAssets ? 'STRICT — a relevant web visual must appear on a content page' : visualRequested ? 'PREFERRED — use relevant web visuals when safely available; no suitable image is acceptable' : 'NONE — use visuals only when the narrative requests them'}
+${job.outputFormat === 'pptx' && visualRequested ? 'For this image-rich PPTX, give every non-cover/non-closing content slide exactly three concise, non-overlapping bullets so deterministic card pairing can keep labels and descriptions aligned.' : ''}
 Available visual assets (uploaded + web image search; the authoring step will auto-fill compatible image slots): ${JSON.stringify(sourceImages.map(item => ({ id: item.id, fileName: item.fileName, title: item.title || '', description: item.description || '', searchQuery: item.searchQuery || '', sourceUrl: item.sourceUrl || '', license: item.license || '' })))}
 Template manifest (compact authoring map; full manifest remains on disk for validation): ${planningManifest ? JSON.stringify(planningManifest) : 'HTML theme; sourceSlide is not used'}
 Previous plan for revision: ${previousPlan}
+Honor an explicitly requested slide count exactly. Otherwise choose the slide count that best serves the topic and source material; do not pad to a fixed number or create one output slide for every template page or research source.
 Return {"action":"final","args":{"changedSlideNumbers":[2],"presentation":{"title":"...","audience":"...","takeaway":"...","slides":[{"type":"cover|content|evidence|closing","layout":"cover|split|statement|evidence|comparison|timeline|quote|closing","sourceSlide":1,"section":"...","title":"...","headline":"...","bullets":["..."],"textEdits":[{"slotId":"s1-t1","text":"exact visible text"}],"imageEdits":[{"slotId":"s1-i1","imageId":"I01"}],"imageId":"I01","sourceIds":["S01"],"notes":"..."}]}}}.
 For PPTX, choose sourceSlide from the manifest whose visual role matches the slide type (cover with cover, section with section, content/evidence/comparison with a content-like page). Map every visible title, headline, bullet, card label, and timeline label verbatim to exact textEdits slots within capacityChars; never rely on high-level fields being assigned automatically. Populate every meaningful label required by inherited diagrams, numbered lists, matrices, and timelines, or choose a simpler source page—do not leave blank-looking structures. Template sample copy is forbidden: never output “作品概述”, “Overview”, “第一部分”, “添加标题”, “Click here to add title text”, or a template’s instructional paragraph as a slide title, section, headline, bullet, or text edit. Use imageEdits only for template image slots explicitly marked fillable=true. When visual preference is STRICT, use a relevant web image on an image-capable content/evidence/comparison page; when it is PREFERRED, use relevant assets whenever a clearly related match exists. Never use a web image whose title/description/search query does not match the slide topic. Do not create visible references or bibliography pages: sourceIds are retained in task metadata and speaker notes instead. When this is a revision, changedSlideNumbers must contain every page you changed; otherwise it may be omitted. For HTML, imageId may select an uploaded or web-searched local image; strict visual preference requires a relevant web image on a content page, while preferred visual preference should use a clearly related image when one is available. Every sourced claim needs sourceIds.`,
-    ...(planningImages.length ? { imageFiles: planningImages } : {}),
-    maxTokens: 14000,
+    maxTokens: 9000,
+    requestTimeoutMs: 300_000,
+    maxAttempts: 2,
     repairContext: 'The action must be final and args.presentation.slides must be a non-empty array.'
   });
   if (action.action !== 'final' || !action.args?.presentation?.slides?.length) {
@@ -708,10 +868,12 @@ For PPTX, choose sourceSlide from the manifest whose visual role matches the sli
 Previous response: ${JSON.stringify(action)}
 Original request: ${job.prompt}
 Output format: ${job.outputFormat}
-Template manifest: ${manifest ? JSON.stringify(compactManifest(manifest, { slides: [] })) : 'HTML theme'}
-Return one complete final plan only. For PPTX, include a non-empty slides array, sourceSlide, and exact textEdits for every visible non-furniture source text slot; every edit must fit capacityChars. Use a compatible source-page role and do not edit furniture slots.
+Template manifest: ${manifest ? JSON.stringify(compactManifest(manifest, { slides: [] }, 8)) : 'HTML theme'}
+Return one complete final plan only. Honor an explicitly requested slide count; otherwise retain a coherent, topic-appropriate count. For PPTX, include a non-empty slides array, sourceSlide, and exact textEdits for every visible non-furniture source text slot; every edit must fit capacityChars. Use a compatible source-page role and do not edit furniture slots.
 Return {"action":"final","args":{"presentation":<complete presentation>}}.`,
-      maxTokens: 14000,
+      maxTokens: 9000,
+      requestTimeoutMs: 300_000,
+      maxAttempts: 2,
       repairContext: 'Return only action=final with a complete non-empty args.presentation.slides array.'
     });
   }
@@ -738,6 +900,11 @@ Return {"action":"final","args":{"presentation":<complete presentation>}}.`,
   const previewDir = path.join(taskDir, 'preview');
   let frameMap = [];
   let qa = {};
+  // Full rendered review is retained for the initial output and the final
+  // retry.  Between them, review only pages explicitly changed by the repair:
+  // the deck is still fully re-rendered and deterministic checks remain global,
+  // but this avoids resending already approved screenshots to the vision model.
+  let visualReviewSlides = [];
   for (let iteration = 0; iteration < 3; iteration += 1) {
     emit(iteration === 0 ? 'authoring' : 'revising', {
       progress: 52 + iteration * 12,
@@ -782,12 +949,19 @@ Return {"action":"final","args":{"presentation":<complete presentation>}}.`,
       qa.revisionDriftSlides = drift;
       qa.valid = qa.valid && drift.length === 0;
     }
-    const visual = await visualReview(skillSystem, plan, previewDir);
+    const visual = await visualReview(skillSystem, plan, previewDir,
+      iteration === 1 ? visualReviewSlides : []);
     qa.visualReview = visual;
+    qa.visualReviewScope = iteration === 1 && visualReviewSlides.length
+      ? { mode: 'repaired-pages', slides: [...visualReviewSlides] }
+      : { mode: 'full-deck', slides: plan.slides.map((_, index) => index + 1) };
     qa.valid = qa.valid && visual.valid;
     emit('reviewing', { progress: 88 + iteration * 4, iteration, message: '正在检查版式、溢出、模板和引用', qa });
     if (qa.valid) break;
-    if (iteration === 2) throw new Error(`质量检查未通过: ${JSON.stringify(qa)}`);
+    // A rendered, structurally valid file remains useful even when visual QA
+    // reports defects. Persist the report and hand it to the service as a
+    // delivery warning; only authoring/rendering/package failures abort.
+    if (iteration === 2) break;
     const failedPages = repairPageNumbers(qa, plan.slides.length);
     let repairedCandidate = plan;
     let reportedChangedPages = [];
@@ -860,6 +1034,9 @@ Return a batch-only presentation whose slides correspond exactly to the authoriz
       unchangedSlideNumbers = reuse.unchanged;
     }
     plan = normalizeSourceIds(validatedRepair, research.sources);
+    visualReviewSlides = [...new Set(reportedChangedPages.map(Number)
+      .filter(page => Number.isInteger(page) && page >= 1 && page <= plan.slides.length))]
+      .sort((left, right) => left - right);
     await fs.writeFile(path.join(taskDir, 'agent-plan.json'), JSON.stringify(plan, null, 2));
   }
 

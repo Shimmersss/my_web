@@ -216,6 +216,14 @@ export function logoutAccount() {
   return post('/auth/logout', {})
 }
 
+export function claimDailyCheckin() {
+  return post('/auth/daily-checkin', {})
+}
+
+export function getDailyCheckinLeaderboard() {
+  return get('/auth/daily-checkin/leaderboard')
+}
+
 export function getQuotaSettings() {
   return get('/auth/quota-settings')
 }
@@ -236,8 +244,9 @@ export function adjustUserCredits({ userId, amount, note }) {
   return post('/admin/accounts/credits', { userId, amount, note })
 }
 
-export function updateQuotaSettings({ translationCreditPerPage, pptCreditPerTask }) {
-  return put('/admin/accounts/settings', { translationCreditPerPage, pptCreditPerTask })
+export function updateQuotaSettings({ translationCreditPerPage, pptCreditPerTask, dailyCheckinEnabled, dailyCheckinCredits, dailyCheckinMinCredits, dailyCheckinMaxCredits }) {
+  const fallback = dailyCheckinCredits ?? 2
+  return put('/admin/accounts/settings', { translationCreditPerPage, pptCreditPerTask, dailyCheckinEnabled, dailyCheckinMinCredits: dailyCheckinMinCredits ?? fallback, dailyCheckinMaxCredits: dailyCheckinMaxCredits ?? fallback })
 }
 
 export function updateAdminApiSettings(settings) {
@@ -257,6 +266,10 @@ export function updateInviteStatus(id, enabled, expiresAt = '') {
     method: 'PATCH',
     body: JSON.stringify({ enabled, expiresAt })
   })
+}
+
+export function deleteInviteCode(id) {
+  return requestWithOptions(`/admin/accounts/invites/${id}`, { method: 'DELETE' })
 }
 
 export function updateAdminUserStatus(id, enabled) {

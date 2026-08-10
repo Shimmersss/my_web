@@ -4,12 +4,20 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import JSZip from 'jszip';
-import { imageFillability, inspectTemplate, physicalSlideNumber, sanitizeGeneratedPptx, stripStaticTemplateArtwork } from './template-pptx.mjs';
+import { imageFillability, inspectTemplate, physicalSlideNumber, sanitizeGeneratedPptx, stripEmptyClosingPlaceholderGroups, stripNonUserClosingPictures, stripStaticTemplateArtwork } from './template-pptx.mjs';
 
 test('full-slide and out-of-bounds pictures cannot become fillable content slots', () => {
   assert.equal(imageFillability({ name: 'Picture 3', descr: '', x: 0, y: 0, width: 15294988, height: 7967314 }).fillable, false);
   assert.equal(imageFillability({ name: 'photo', descr: '', x: 2500000, y: 1500000, width: 4000000, height: 3000000 }).fillable, true);
   assert.equal(imageFillability({ name: 'photo', descr: '', x: 2500000, y: 1500000, width: 4000000, height: 3000000 }, { width: 18288000, height: 10287000 }).fillable, true);
+  assert.deepEqual(
+    imageFillability(
+      { name: 'photo', descr: '', x: 2500000, y: 1500000, width: 4000000, height: 3000000 },
+      { width: 18288000, height: 10287000 },
+      [{ x: 3000000, y: 2000000, width: 2000000, height: 1000000, furniture: false }]
+    ),
+    { fillable: false, fillableReason: 'overlaps-visible-text' }
+  );
 });
 
 test('inspectTemplate follows presentation order and records duplicate-name selectors', async () => {
@@ -33,6 +41,22 @@ test('inspectTemplate follows presentation order and records duplicate-name sele
     assert.deepEqual(manifest.slides[0].textShapes.map(shape => shape.nameIdx), [0, 1]);
     assert.equal(manifest.slides[0].imageSlots[0].fillable, false);
     assert.equal(manifest.slides[1].sampleText, 'physical-one');
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
+test('inspectTemplate classifies instructional paragraph placeholders as body text', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'ppt-agent-role-'));
+  const templateFile = path.join(directory, 'template.pptx');
+  try {
+    const zip = new JSZip();
+    zip.file('ppt/presentation.xml', '<p:presentation xmlns:p="p" xmlns:r="r"><p:sldIdLst><p:sldId id="256" r:id="rId1"/></p:sldIdLst></p:presentation>');
+    zip.file('ppt/_rels/presentation.xml.rels', '<Relationships><Relationship Id="rId1" Type="x/slide" Target="slides/slide1.xml"/></Relationships>');
+    zip.file('ppt/slides/slide1.xml', '<p:sld xmlns:p="p" xmlns:a="a"><p:sp><p:nvSpPr><p:cNvPr id="2" name="Text Box 2"/></p:nvSpPr><p:spPr><a:xfrm><a:off x="1" y="1"/><a:ext cx="4000000" cy="1000000"/></a:xfrm></p:spPr><p:txBody><a:p><a:r><a:rPr sz="1800"/><a:t>此处添加详细文本描述，建议与标题相关并符合整体语言风格</a:t></a:r></a:p></p:txBody></p:sp></p:sld>');
+    await fs.writeFile(templateFile, await zip.generateAsync({ type: 'nodebuffer' }));
+    const manifest = await inspectTemplate(templateFile);
+    assert.equal(manifest.slides[0].textShapes[0].roleHint, 'body');
   } finally {
     await fs.rm(directory, { recursive: true, force: true });
   }
@@ -112,4 +136,22 @@ test('stripStaticTemplateArtwork removes unfilled content photos but keeps user-
   assert.doesNotMatch(cleaned, /template-a\.png/);
   assert.match(cleaned, /rId2/);
   assert.match(cleaned, /rId3/);
+});
+
+test('closing cleanup removes a wide empty callout group but preserves text and artwork groups', () => {
+  const emptyBar = '<p:grpSp><p:nvGrpSpPr/><p:grpSpPr><a:xfrm><a:off x="1" y="1"/><a:ext cx="6100000" cy="680000"/></a:xfrm></p:grpSpPr><p:sp><p:nvSpPr/><p:spPr/></p:sp></p:grpSp>';
+  const textGroup = '<p:grpSp><p:nvGrpSpPr/><p:grpSpPr><a:xfrm><a:off x="1" y="1"/><a:ext cx="6100000" cy="680000"/></a:xfrm></p:grpSpPr><p:sp><p:txBody><a:t>感谢聆听</a:t></p:txBody></p:sp></p:grpSp>';
+  const pictureGroup = '<p:grpSp><p:nvGrpSpPr/><p:grpSpPr><a:xfrm><a:off x="1" y="1"/><a:ext cx="6100000" cy="680000"/></a:xfrm></p:grpSpPr><p:pic/></p:grpSp>';
+  const cleaned = stripEmptyClosingPlaceholderGroups(`<p:sld xmlns:p="p" xmlns:a="a">${emptyBar}${textGroup}${pictureGroup}</p:sld>`);
+  assert.doesNotMatch(cleaned, /<p:sp><p:nvSpPr\/><p:spPr\/><\/p:sp>/);
+  assert.match(cleaned, /感谢聆听/);
+  assert.match(cleaned, /<p:pic\/>/);
+});
+
+test('closing cleanup removes inherited mascot pictures but keeps current task images', () => {
+  const xml = '<p:sld xmlns:p="p" xmlns:a="a" xmlns:r="r"><p:pic><p:blipFill><a:blip r:embed="rId1"/></p:blipFill></p:pic><p:pic><p:blipFill><a:blip r:embed="rId2"/></p:blipFill></p:pic></p:sld>';
+  const rels = '<Relationships><Relationship Id="rId1" Target="../media/template-mascot.png"/><Relationship Id="rId2" Target="../media/WEB01.jpg"/></Relationships>';
+  const cleaned = stripNonUserClosingPictures(xml, rels, ['WEB01.jpg']);
+  assert.doesNotMatch(cleaned, /rId1/);
+  assert.match(cleaned, /rId2/);
 });

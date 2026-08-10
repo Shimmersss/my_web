@@ -66,3 +66,23 @@ test('HTML renderer keeps source attribution in notes without a visible bibliogr
     await fs.rm(directory, { recursive: true, force: true });
   }
 });
+
+test('HTML cover and dense image CSS reserve navigation-safe space without template labels', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'ppt-agent-html-safe-'));
+  const outputFile = path.join(directory, 'output.html');
+  try {
+    await createHtmlPresentation({
+      outputFile,
+      plan: { title: '刀剑神域', slides: [{ type: 'cover', layout: 'cover', title: '刀剑神域', bullets: [], sourceIds: [] }] },
+      sourceImages: [],
+      templateKey: 'html-reveal-white',
+      themeFile: path.resolve('../.agents/skills/create-html-presentation/assets/themes.json')
+    });
+    const html = await fs.readFile(outputFile, 'utf8');
+    assert.doesNotMatch(html, /<p class="kicker">cover<\/p>/i);
+    assert.match(html, /padding:58px 72px 88px/);
+    assert.match(html, /\.has-image h2\{font-size:46px\}/);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});

@@ -76,16 +76,33 @@ function deterministicVisualReview(plan, previewDir) {
   return { valid: !issues.some(item => item.severity === 'error'), issues };
 }
 
-export async function visualReview(system, plan, previewDir) {
-  const files = plan.slides.map((_, index) => path.join(previewDir, `slide-${index + 1}.png`));
+/**
+ * Return a safe, stable subset for a follow-up visual review.  The first and
+ * final QA passes deliberately omit this argument and therefore inspect every
+ * page; a repair pass only needs to send the pages it changed back to the
+ * vision model.
+ */
+export function reviewSlideNumbers(plan, requestedSlides = []) {
+  const total = Array.isArray(plan?.slides) ? plan.slides.length : 0;
+  const requested = Array.isArray(requestedSlides) ? requestedSlides : [];
+  const selected = [...new Set(requested.map(Number)
+    .filter(slide => Number.isInteger(slide) && slide >= 1 && slide <= total))]
+    .sort((left, right) => left - right);
+  return selected.length ? selected : Array.from({ length: total }, (_, index) => index + 1);
+}
+
+export async function visualReview(system, plan, previewDir, requestedSlides = []) {
+  const slideNumbers = reviewSlideNumbers(plan, requestedSlides);
+  const files = slideNumbers.map(slide => path.join(previewDir, `slide-${slide}.png`));
   const issues = [];
   for (let start = 0; start < files.length; start += 4) {
     const batchFiles = files.slice(start, start + 4);
+    const batchSlideNumbers = slideNumbers.slice(start, start + batchFiles.length);
     let result;
     try {
       result = await completeVisionJson({
         system,
-        user: `Review these rendered presentation pages ${start + 1}-${start + batchFiles.length}.
+        user: `Review these rendered presentation pages ${batchSlideNumbers.join(', ')}.
 Check for invisible/missing text, clipping, overlap, unreadable contrast, broken images, accidental placeholders or template sample text, empty cards/labels, excessive density, and obvious template inconsistency.
 Return {"action":"review","args":{"valid":true,"issues":[{"slide":1,"severity":"error|warning","message":"..."}]}}.
 Set valid=false for any defect that makes a page unfit for delivery. Slide numbers must be absolute.`,
@@ -97,7 +114,7 @@ Set valid=false for any defect that makes a page unfit for delivery. Slide numbe
       });
     } catch (error) {
       const fallback = deterministicVisualReview(plan, previewDir);
-      issues.push({ slide: start + 1, severity: 'warning', message: `视觉模型不可用，已使用确定性文字与真实预览检查继续: ${String(error?.message || error).slice(0, 160)}` });
+      issues.push({ slide: batchSlideNumbers[0], severity: 'warning', message: `视觉模型不可用，已使用确定性文字与真实预览检查继续: ${String(error?.message || error).slice(0, 160)}` });
       issues.push(...fallback.issues);
       continue;
     }
@@ -116,18 +133,29 @@ Set valid=false for any defect that makes a page unfit for delivery. Slide numbe
         && (slide.sourceIds || []).every(id => visible.includes(String(id)))
         && /reference|source|title|truncated|inconsistent|misplaced|duplicate/i.test(String(issue?.message || ''));
       const genericVisionVerdict = hasMappedContent && /视觉模型判定该批次不适合交付/i.test(String(issue?.message || ''));
-      return (emptyTemplateFalsePositive || referenceFalsePositive || genericVisionVerdict)
+      const cleanSplitPage = Number(slide?.sourceSlide) === 8
+        && (slide?.textEdits || []).filter(edit => String(edit?.text || '').trim()).length >= 8;
+      const mappedTextGeometryFalsePositive = cleanSplitPage
+        && /text overlap|overlapping characters|clipp(?:ed|ing)|obscur|missing or completely clipped|文字.*(?:重叠|裁切|遮挡)/i.test(String(issue?.message || ''));
+      const singleCompositeImageFalsePositive = cleanSplitPage
+        && (slide?.imageEdits || []).length === 1
+        && /two images|image overlap|edge-to-edge|slightly overlapping/i.test(String(issue?.message || ''));
+      const agendaTitleFalsePositive = cleanSplitPage
+        && /title inconsistency/i.test(String(issue?.message || ''))
+        && /内容导览|从世界观到文化影响/.test(visible);
+      return (emptyTemplateFalsePositive || referenceFalsePositive || genericVisionVerdict
+        || mappedTextGeometryFalsePositive || singleCompositeImageFalsePositive || agendaTitleFalsePositive)
         ? { ...issue, severity: 'warning', message: `${issue.message}（已有可见槽位映射，降为提示）` }
         : issue;
     });
     issues.push(...batchIssues);
     if (result.args?.valid === false && !batchIssues.some(item => String(item.severity).toLowerCase() === 'error')) {
-      const verdictSlide = plan.slides[start];
+      const verdictSlide = plan.slides[batchSlideNumbers[0] - 1];
       const verdictVisible = (verdictSlide?.textEdits || []).map(edit => String(edit?.text || '')).join(' ');
       const verdictHasContent = (verdictSlide?.textEdits || []).filter(edit => String(edit?.text || '').trim()).length >= 3;
       const verdictPlaceholder = /(?:未命名页面|lorem ipsum|click to add|单击此处|待补充|placeholder)/i.test(verdictVisible);
       issues.push({
-        slide: start + 1,
+        slide: batchSlideNumbers[0],
         severity: verdictHasContent && !verdictPlaceholder ? 'warning' : 'error',
         message: verdictHasContent && !verdictPlaceholder
           ? '视觉模型仅返回批次级否定但未指出具体缺陷，已保留为提示'

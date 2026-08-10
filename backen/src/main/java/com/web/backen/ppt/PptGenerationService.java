@@ -435,7 +435,7 @@ public class PptGenerationService {
             session.setProgressStage("completed");
             session.setCompletedAt(System.currentTimeMillis());
             saveMetadata(session);
-            emit(session, "done", Map.of("taskId", session.getTaskId(), "qaValid", true,
+            emit(session, "done", Map.of("taskId", session.getTaskId(), "qaValid", session.isQaValid(),
                     "sourceCount", session.getSourceCount()));
             completeEmitters(session.getTaskId());
         } catch (Exception e) {
@@ -470,7 +470,9 @@ public class PptGenerationService {
         preview.put("qa", objectMapper.convertValue(qa, Map.class));
         objectMapper.writerWithDefaultPrettyPrinter().writeValue(session.getPreviewPath().toFile(), preview);
         session.setQaValid(qa.path("valid").asBoolean(false));
-        if (!session.isQaValid()) throw new IllegalStateException("Agent 质量检查未通过");
+        // Visual QA is delivery guidance, not an availability gate. The output
+        // has already passed real rendering and, for PPTX, package integrity
+        // validation above; keep the report so the UI can show its warnings.
     }
 
     private void handleAgentEvent(PptGenerationSession session, String eventName, Map<String, Object> data) {

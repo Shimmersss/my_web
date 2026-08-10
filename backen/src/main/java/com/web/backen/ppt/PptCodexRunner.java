@@ -44,7 +44,6 @@ public class PptCodexRunner {
     public void run(PptGenerationSession session, BiConsumer<String, Map<String, Object>> events)
             throws IOException, InterruptedException {
         String apiKey = runtime.codexPptKey();
-        if (apiKey == null || apiKey.isBlank()) throw new IllegalStateException("Codex PPT OpenAI API Key 未配置");
         Path vendor = resolve(config.getCodexVendorRoot());
         Path skill = vendor.resolve("skills/open-kimi-ppt");
         Path codex = resolve(config.getCodexCommand());
@@ -78,14 +77,12 @@ public class PptCodexRunner {
             }
             Files.writeString(input.resolve("request.txt"), session.getPrompt(), StandardCharsets.UTF_8);
 
-            events.accept("planning", Map.of("progress", 10, "message", "正在启动隔离的 Codex PPTD Agent"));
-            login(codex, codexHome, apiKey);
+            AuthSource auth = prepareAuth(codex, codexHome, apiKey);
+            events.accept("planning", Map.of("progress", 10, "message",
+                    auth.localCli() ? "正在复用本机 Codex CLI 登录态" : "正在启动隔离的 Codex PPTD Agent"));
             String prompt = prompt(session);
-            List<String> command = new ArrayList<>(List.of(
-                    codex.toString(), "exec", "-", "--ephemeral", "--ignore-user-config", "--ignore-rules",
-                    "--skip-git-repo-check", "--sandbox", "workspace-write", "--json", "--color", "never",
-                    "--model", runtime.codexPptModel(), "--config",
-                    "model_reasoning_effort=\"" + runtime.codexPptReasoningEffort() + "\"", "--cd", workspace.toString()));
+            List<String> command = execCommand(codex, workspace, runtime.codexPptModel(),
+                    runtime.codexPptReasoningEffort(), "workspace-write", auth.localCli());
             String log = run(command, workspace, codexHome, prompt, Duration.ofSeconds(config.getCodexTimeoutSeconds()), events, true);
             Files.writeString(session.getTaskDir().resolve("codex-events.jsonl"), log, StandardCharsets.UTF_8);
             Path manifest = singleManifest(deck);
@@ -109,7 +106,6 @@ public class PptCodexRunner {
 
     public Map<String, Object> testConnection(String apiKey, String model, String effort)
             throws IOException, InterruptedException {
-        if (apiKey == null || apiKey.isBlank()) throw new IllegalArgumentException("Codex PPT API Key 未配置");
         if (!Set.of("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna").contains(model)) {
             throw new IllegalArgumentException("Codex PPT 模型不在允许列表");
         }
@@ -123,12 +119,10 @@ public class PptCodexRunner {
         setOwnerOnly(workspace);
         setOwnerOnly(home);
         try {
-            login(codex, home, apiKey);
-            List<String> command = List.of(codex.toString(), "exec", "-", "--ephemeral", "--ignore-user-config",
-                    "--ignore-rules", "--skip-git-repo-check", "--sandbox", "read-only", "--json", "--color", "never",
-                    "--model", model, "--config", "model_reasoning_effort=\"" + effort + "\"", "--cd", workspace.toString());
+            AuthSource auth = prepareAuth(codex, home, apiKey);
+            List<String> command = execCommand(codex, workspace, model, effort, "read-only", auth.localCli());
             run(command, workspace, home, "Reply exactly OK. Do not use tools.\n", Duration.ofSeconds(45), (a, b) -> {}, true);
-            return Map.of("message", "Codex CLI 连接成功", "configured", true,
+            return Map.of("message", auth.localCli() ? "已复用本机 Codex CLI 登录态" : "Codex CLI 连接成功", "configured", true,
                     "model", model, "reasoningEffort", effort, "cliVersion", "0.147.0");
         } finally {
             deleteTree(workspace);
@@ -144,6 +138,110 @@ public class PptCodexRunner {
             throw new IllegalStateException("Codex API Key 登录失败");
         }
     }
+
+    /** Returns only availability metadata; never returns a path or credential material. */
+    public Map<String, Object> localCliStatus() {
+        return Map.of("available", localCodexHome() != null, "mode", "local-cli-fallback");
+    }
+
+    private AuthSource prepareAuth(Path codex, Path temporaryHome, String apiKey) throws IOException, InterruptedException {
+        if (apiKey != null && !apiKey.isBlank()) {
+            login(codex, temporaryHome, apiKey);
+            return new AuthSource(false);
+        }
+        Path localHome = localCodexHome();
+        if (localHome == null) throw new IllegalStateException("未配置 Codex PPT API Key，且未检测到已登录的本机 Codex CLI");
+        copyLocalCliProfile(localHome, temporaryHome);
+        return new AuthSource(true);
+    }
+
+    private Path localCodexHome() {
+        String configured = System.getenv("CODEX_HOME");
+        Path home = configured == null || configured.isBlank()
+                ? Path.of(System.getProperty("user.home"), ".codex") : Path.of(configured);
+        Path auth = home.toAbsolutePath().normalize().resolve("auth.json");
+        try {
+            return Files.isRegularFile(auth) && Files.size(auth) > 2 && Files.size(auth) <= 2L * 1024 * 1024
+                    ? auth.getParent() : null;
+        } catch (IOException ignored) {
+            return null;
+        }
+    }
+
+    /**
+     * CCSwitch-compatible fallback: copy auth plus only the active model-provider
+     * block. This deliberately excludes MCP servers, rules, plugins and other
+     * user configuration before Codex runs in the disposable CODEX_HOME.
+     */
+    private void copyLocalCliProfile(Path localHome, Path temporaryHome) throws IOException {
+        copyOwnerReadWrite(localHome.resolve("auth.json"), temporaryHome.resolve("auth.json"));
+        Path sourceConfig = localHome.resolve("config.toml");
+        if (!Files.isRegularFile(sourceConfig) || Files.size(sourceConfig) > 512L * 1024) return;
+        String filtered = filteredProviderConfig(Files.readAllLines(sourceConfig, StandardCharsets.UTF_8));
+        if (!copyReferencedCatalog(localHome, temporaryHome, filtered)) {
+            // Do not leave a dangling external catalog path in the isolated home.
+            filtered = filtered.replaceAll("(?m)^\\s*model_catalog_json\\s*=.*(?:\\R|$)", "");
+        }
+        if (!filtered.isBlank()) Files.writeString(temporaryHome.resolve("config.toml"), filtered, StandardCharsets.UTF_8);
+    }
+
+    private String filteredProviderConfig(List<String> lines) {
+        String provider = "";
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("model_provider") && trimmed.contains("=")) {
+                String value = trimmed.substring(trimmed.indexOf('=') + 1).trim().replaceAll("^\"|\"$", "");
+                if (value.matches("[A-Za-z0-9_.-]{1,80}")) provider = value;
+            }
+        }
+        Set<String> topLevel = Set.of("model", "model_provider", "model_reasoning_effort", "web_search", "model_catalog_json");
+        String prefix = provider.isBlank() ? "" : "[model_providers." + provider;
+        boolean inActiveProvider = false;
+        StringBuilder kept = new StringBuilder();
+        for (String line : lines) {
+            String trimmed = line.trim();
+            if (trimmed.startsWith("[")) {
+                inActiveProvider = !prefix.isBlank() && (trimmed.equals(prefix + "]") || trimmed.startsWith(prefix + "."));
+            }
+            if (inActiveProvider) {
+                kept.append(line).append('\n');
+                continue;
+            }
+            int equals = trimmed.indexOf('=');
+            if (equals > 0 && !trimmed.startsWith("#") && topLevel.contains(trimmed.substring(0, equals).trim())) {
+                kept.append(line).append('\n');
+            }
+        }
+        return kept.toString();
+    }
+
+    private boolean copyReferencedCatalog(Path localHome, Path temporaryHome, String configText) throws IOException {
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(?m)^\\s*model_catalog_json\\s*=\\s*\\\"([^\\\"]+)\\\"").matcher(configText);
+        if (!matcher.find()) return false;
+        Path relative = Path.of(matcher.group(1)).normalize();
+        if (relative.isAbsolute() || relative.startsWith("..") || relative.getNameCount() != 1) return false;
+        Path source = localHome.resolve(relative).normalize();
+        if (!source.startsWith(localHome) || !Files.isRegularFile(source) || Files.size(source) > 4L * 1024 * 1024) return false;
+        copyOwnerReadWrite(source, temporaryHome.resolve(relative));
+        return true;
+    }
+
+    private void copyOwnerReadWrite(Path source, Path target) throws IOException {
+        Files.copy(source, target, StandardCopyOption.REPLACE_EXISTING);
+        try { Files.setPosixFilePermissions(target, EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE)); }
+        catch (UnsupportedOperationException ignored) {}
+    }
+
+    private List<String> execCommand(Path codex, Path workspace, String model, String effort, String sandbox, boolean localCli) {
+        List<String> command = new ArrayList<>(List.of(codex.toString(), "exec", "-", "--ephemeral"));
+        // The temporary home only contains a filtered CCSwitch-compatible provider profile.
+        if (!localCli) command.add("--ignore-user-config");
+        command.addAll(List.of("--ignore-rules", "--skip-git-repo-check", "--sandbox", sandbox, "--json", "--color", "never",
+                "--model", model, "--config", "model_reasoning_effort=\"" + effort + "\"", "--cd", workspace.toString()));
+        return command;
+    }
+
+    private record AuthSource(boolean localCli) {}
 
     private void runFinalize(Path script, Path taskDir, Path vendor,
                              BiConsumer<String, Map<String, Object>> events) throws IOException, InterruptedException {

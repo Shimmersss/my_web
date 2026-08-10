@@ -53,7 +53,7 @@ public class AdminAccountController {
                             "invites", quotaService.invites(),
                             "transactions", quotaService.transactions(),
                             "settings", quotaService.settings(),
-                            "apiSettings", runtimeConfigService.publicSettings(),
+                            "apiSettings", publicApiSettings(),
                             "stats", quotaService.stats())));
         } catch (AuthException e) {
             return error(e);
@@ -105,7 +105,7 @@ public class AdminAccountController {
             runtimeConfigService.update(body);
             pptGenerationService.cleanupHistory();
             translationService.cleanupHistory();
-            return ResponseEntity.ok(Map.of("code", 200, "data", runtimeConfigService.publicSettings(), "message", "success"));
+            return ResponseEntity.ok(Map.of("code", 200, "data", publicApiSettings(), "message", "success"));
         } catch (AuthException e) { return error(e); }
     }
 
@@ -196,6 +196,21 @@ public class AdminAccountController {
 
     private ResponseEntity<?> error(AuthException e) {
         return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus(), "message", e.getMessage()));
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> publicApiSettings() {
+        Map<String, Object> data = new LinkedHashMap<>(runtimeConfigService.publicSettings());
+        Object raw = data.get("codexPpt");
+        if (raw instanceof Map<?, ?> map) {
+            Map<String, Object> codex = new LinkedHashMap<>((Map<String, Object>) map);
+            Map<String, Object> localCli = pptCodexRunner.localCliStatus();
+            codex.put("localCli", localCli);
+            codex.put("configured", Boolean.TRUE.equals(codex.get("configured"))
+                    || Boolean.TRUE.equals(localCli.get("available")));
+            data.put("codexPpt", codex);
+        }
+        return data;
     }
 
     private String value(Object value) { return value == null ? "" : value.toString().trim(); }

@@ -30,6 +30,7 @@ import java.util.stream.Stream;
 /** Root-only PPTD generator. Codex can write only a disposable task workspace. */
 @Component
 public class PptCodexRunner {
+    private static final int MAX_VISUAL_PREFLIGHT_REPAIRS = 2;
     private final PptGenerationConfig config;
     private final RuntimeConfigService runtime;
     private final ObjectMapper objectMapper;
@@ -83,15 +84,14 @@ public class PptCodexRunner {
             String prompt = prompt(session);
             List<String> command = execCommand(codex, workspace, runtime.codexPptModel(),
                     runtime.codexPptReasoningEffort(), "workspace-write", auth.localCli());
-            String log = run(command, workspace, codexHome, prompt, Duration.ofSeconds(config.getCodexTimeoutSeconds()), events, true);
-            Files.writeString(session.getTaskDir().resolve("codex-events.jsonl"), log, StandardCharsets.UTF_8);
+            StringBuilder log = new StringBuilder(run(command, workspace, codexHome, prompt,
+                    Duration.ofSeconds(config.getCodexTimeoutSeconds()), events, true));
             Path manifest = singleManifest(deck);
             if (manifest == null) throw new IllegalStateException("Codex 未生成唯一的 deck/*.pptd");
             Path target = session.getTaskDir().resolve("pptd-project");
-            deleteTree(target);
-            copyTree(deck, target, config.getCodexMaxProjectFiles(), config.getCodexMaxProjectBytes());
-            events.accept("rendering", Map.of("progress", 82, "message", "正在用服务器固定导出器生成 PPTX"));
-            runFinalize(finalizeScript, session.getTaskDir(), vendor, session.getFontFamily(), events);
+            finalizeWithVisualRepairs(session, events, finalizeScript, vendor, workspace, codexHome,
+                    command, deck, target, log);
+            Files.writeString(session.getTaskDir().resolve("codex-events.jsonl"), log.toString(), StandardCharsets.UTF_8);
         } finally {
             deleteTree(workspace);
         }
@@ -255,6 +255,60 @@ public class PptCodexRunner {
                 "PPT_CODEX_MAX_BYTES", Long.toString(config.getCodexMaxProjectBytes()),
                 "PPT_CODEX_REQUESTED_FONT", fontFamily == null || fontFamily.isBlank() ? "Microsoft YaHei" : fontFamily);
         run(command, script.getParent(), null, "", Duration.ofSeconds(600), events, true, env);
+    }
+
+    /**
+     * The fixed exporter owns the quality gates. Feed a rejected candidate back
+     * to the author in its existing isolated workspace before failing the task.
+     */
+    private void finalizeWithVisualRepairs(PptGenerationSession session,
+                                           BiConsumer<String, Map<String, Object>> events,
+                                           Path finalizeScript, Path vendor, Path workspace, Path codexHome,
+                                           List<String> command, Path deck, Path target, StringBuilder log)
+            throws IOException, InterruptedException {
+        for (int attempt = 0; ; attempt++) {
+            copyDeckToTask(deck, target);
+            events.accept("rendering", Map.of("progress", attempt == 0 ? 82 : 84,
+                    "message", attempt == 0 ? "正在用服务器固定导出器生成 PPTX" : "正在复核修复后的 PPTD 排版"));
+            try {
+                runFinalize(finalizeScript, session.getTaskDir(), vendor, session.getFontFamily(), events);
+                return;
+            } catch (IllegalStateException failure) {
+                if (!isVisualPreflightFailure(failure) || attempt >= MAX_VISUAL_PREFLIGHT_REPAIRS) throw failure;
+                events.accept("reviewing", Map.of("progress", 76,
+                        "message", "发现文字排版问题，正在让 Codex 按真实检测结果修复"));
+                log.append(run(command, workspace, codexHome, repairPrompt(failure.getMessage()),
+                        Duration.ofSeconds(config.getCodexTimeoutSeconds()), events, true));
+                if (singleManifest(deck) == null) throw new IllegalStateException("Codex 修复后未保留唯一的 deck/*.pptd");
+            }
+        }
+    }
+
+    private void copyDeckToTask(Path deck, Path target) throws IOException {
+        deleteTree(target);
+        copyTree(deck, target, config.getCodexMaxProjectFiles(), config.getCodexMaxProjectBytes());
+    }
+
+    private boolean isVisualPreflightFailure(IllegalStateException failure) {
+        String message = failure.getMessage();
+        return message != null && (message.contains("PPTD visual preflight failed")
+                || message.contains("PPTX text-frame boundary check failed"));
+    }
+
+    private String repairPrompt(String failure) {
+        return """
+                Repair the existing PPTD project in ./deck only. Do not create a second deck, do not export PPTX,
+                and do not use browser tools, package managers, network downloaders, scripts, or binaries.
+                The server's fixed visual preflight rejected your project with the following exact findings:
+
+                %s
+
+                Fix every listed finding. Shorten text before reducing font size; increase text bounds for legitimate
+                multi-line copy; keep every element inside the 16:9 canvas; remove raw full-page PDF screenshots and
+                replace them with readable extracted figures or vector redraws. Preserve the requested visual language,
+                source-grounded content, page count, and explicit requested font. Re-read the relevant .page files and
+                validate the complete ./deck project before finishing.
+                """.formatted(tail(failure == null ? "" : failure, 12000));
     }
 
     private String run(List<String> command, Path cwd, Path codexHome, String stdin, Duration timeout,

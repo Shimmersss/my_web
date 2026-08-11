@@ -67,6 +67,7 @@ public class PptAgentRunner {
         job.put("outputFormat", session.getOutputFormat());
         job.put("researchMode", session.getResearchMode());
         job.put("visualMode", session.getVisualMode());
+        job.put("imageGenerationMode", session.getImageGenerationMode());
         job.put("fontFamily", session.getFontFamily());
         job.put("maxSources", config.getAgentMaxSources());
         job.put("maxSearches", runtime.tavilyMaxSearches());

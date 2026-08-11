@@ -248,13 +248,14 @@ export function downloadTranslatedPdf(taskId, mode = 'translated') {
 
 // ==================== PPT 生成 API ====================
 
-export async function createPptGenerationTask({ prompt, templateKey, outputFormat = 'pptx', researchMode = 'auto', visualMode = 'best_effort', fontFamily = 'Microsoft YaHei', templateFile, sourceFile, paperFile, idempotencyKey }) {
+export async function createPptGenerationTask({ prompt, templateKey, outputFormat = 'pptx', researchMode = 'auto', visualMode = 'best_effort', imageGenerationMode = 'off', fontFamily = 'Microsoft YaHei', templateFile, sourceFile, paperFile, idempotencyKey }) {
   const formData = new FormData()
   if (prompt?.trim()) formData.append('prompt', prompt.trim())
   if (templateKey) formData.append('templateKey', templateKey)
   if (outputFormat) formData.append('outputFormat', outputFormat)
   formData.append('researchMode', researchMode === 'off' ? 'off' : 'auto')
   formData.append('visualMode', visualMode === 'strict' ? 'strict' : 'best_effort')
+  formData.append('imageGenerationMode', ['supplement', 'prefer'].includes(imageGenerationMode) && outputFormat === 'pptx' ? imageGenerationMode : 'off')
   if (fontFamily) formData.append('fontFamily', fontFamily)
   if (templateFile) formData.append('templateFile', templateFile)
   if (sourceFile || paperFile) formData.append('sourceFile', sourceFile || paperFile)

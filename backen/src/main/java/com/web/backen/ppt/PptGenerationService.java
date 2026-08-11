@@ -251,6 +251,14 @@ public class PptGenerationService {
                                            MultipartFile templateFile, MultipartFile sourceFile, AuthUser user,
                                            String clientRequestId, String outputFormat, String researchMode,
                                            String visualMode, String fontFamily) throws IOException {
+        return createTask(prompt, templateKey, extractionPercent, templateFile, sourceFile, user,
+                clientRequestId, outputFormat, researchMode, visualMode, fontFamily, "off");
+    }
+
+    public PptGenerationSession createTask(String prompt, String templateKey, int extractionPercent,
+                                           MultipartFile templateFile, MultipartFile sourceFile, AuthUser user,
+                                           String clientRequestId, String outputFormat, String researchMode,
+                                           String visualMode, String fontFamily, String imageGenerationMode) throws IOException {
         assertDeploymentNotLocked();
         String cleanPrompt = validatePrompt(prompt);
         String normalizedOutputFormat = normalizeOutputFormat(outputFormat);
@@ -282,6 +290,7 @@ public class PptGenerationService {
         session.setTemplateKey(normalizeTemplateKey(templateKey, normalizedOutputFormat));
         session.setResearchMode(normalizeResearchMode(researchMode));
         session.setVisualMode(normalizeVisualMode(visualMode));
+        session.setImageGenerationMode(normalizeImageGenerationMode(imageGenerationMode, normalizedOutputFormat));
         session.setFontFamily(normalizeFontFamily(fontFamily));
         session.setQuotaRequired(user != null && quotaService != null && !user.isRoot());
         session.setExtractionPercent(100);
@@ -345,6 +354,7 @@ public class PptGenerationService {
         session.setParentTaskId(original.getTaskId());
         session.setResearchMode(original.getResearchMode());
         session.setVisualMode(original.getVisualMode());
+        session.setImageGenerationMode(original.getImageGenerationMode());
         session.setFontFamily(original.getFontFamily());
         session.setTemplateFileName(original.getTemplateFileName());
         session.setPaperFileName(original.getPaperFileName());
@@ -840,6 +850,15 @@ public class PptGenerationService {
             throw new IllegalArgumentException("配图模式只能是 best_effort 或 strict");
         }
         return value;
+    }
+
+    private String normalizeImageGenerationMode(String imageGenerationMode, String outputFormat) {
+        String value = imageGenerationMode == null ? "off" : imageGenerationMode.trim().toLowerCase(Locale.ROOT);
+        if (!Set.of("off", "supplement", "prefer").contains(value)) {
+            throw new IllegalArgumentException("AI 生图模式只能是 off、supplement 或 prefer");
+        }
+        // The legacy HTML worker deliberately retains its existing licensed/web-image pipeline.
+        return "pptx".equals(outputFormat) ? value : "off";
     }
 
     private String normalizeFontFamily(String fontFamily) {

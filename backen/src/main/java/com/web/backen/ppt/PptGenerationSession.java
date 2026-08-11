@@ -17,6 +17,8 @@ public class PptGenerationSession {
     private String outputFormat = "pptx";
     private String researchMode = "auto";
     private String visualMode = "best_effort";
+    /** off | supplement | prefer. PPTX-only; HTML keeps its existing visual pipeline. */
+    private String imageGenerationMode = "off";
     private String fontFamily = "Microsoft YaHei";
     private String templateFileName;
     private int extractionPercent = 50;
@@ -74,6 +76,11 @@ public class PptGenerationSession {
     public void setResearchMode(String researchMode) { this.researchMode = researchMode; touch(); }
     public String getVisualMode() { return "strict".equals(visualMode) ? "strict" : "best_effort"; }
     public void setVisualMode(String visualMode) { this.visualMode = visualMode; touch(); }
+    public String getImageGenerationMode() {
+        return "prefer".equals(imageGenerationMode) || "supplement".equals(imageGenerationMode)
+                ? imageGenerationMode : "off";
+    }
+    public void setImageGenerationMode(String imageGenerationMode) { this.imageGenerationMode = imageGenerationMode; touch(); }
     public String getFontFamily() { return fontFamily == null || fontFamily.isBlank() ? "Microsoft YaHei" : fontFamily; }
     public void setFontFamily(String fontFamily) { this.fontFamily = fontFamily; touch(); }
     public String getTemplateFileName() { return templateFileName; }

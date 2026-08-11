@@ -46,6 +46,11 @@ public class RuntimeConfigService {
     private static final String CODEX_PPT_KEY = "ppt.codex.api-key";
     private static final String CODEX_PPT_MODEL = "ppt.codex.model";
     private static final String CODEX_PPT_REASONING = "ppt.codex.reasoning-effort";
+    private static final String IMAGE_GENERATION_URL = "ppt.image-generation.url";
+    private static final String IMAGE_GENERATION_KEY = "ppt.image-generation.key";
+    private static final String IMAGE_GENERATION_MODEL = "ppt.image-generation.model";
+    private static final String IMAGE_GENERATION_QUALITY = "ppt.image-generation.quality";
+    private static final String IMAGE_GENERATION_MAX_IMAGES = "ppt.image-generation.max-images";
     private static final Set<String> CODEX_MODELS = Set.of("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna");
     private static final Set<String> CODEX_REASONING = Set.of("low", "medium", "high", "xhigh", "max", "ultra");
     private static final String PPT_MAX_HISTORY = "ppt.history.max-per-user";
@@ -152,6 +157,35 @@ public class RuntimeConfigService {
         String effort = value(CODEX_PPT_REASONING, "high").toLowerCase();
         return CODEX_REASONING.contains(effort) ? effort : "high";
     }
+    /** Accept an OpenAI-compatible base URL or the complete generations endpoint. */
+    public String imageGenerationEndpoint() {
+        String base = value(IMAGE_GENERATION_URL,
+                pptGeneration == null ? "https://api.openai.com/v1" : pptGeneration.getImageGenerationEndpoint());
+        return imageGenerationEndpoint(base);
+    }
+    private String imageGenerationEndpoint(String base) {
+        base = url(base, "https://api.openai.com/v1");
+        return base.endsWith("/images/generations") ? base
+                : (base.endsWith("/v1") ? base : base + "/v1") + "/images/generations";
+    }
+    public String imageGenerationKey() {
+        return value(IMAGE_GENERATION_KEY,
+                pptGeneration == null ? "" : pptGeneration.getImageGenerationKey());
+    }
+    public String imageGenerationModel() {
+        String model = value(IMAGE_GENERATION_MODEL,
+                pptGeneration == null ? "gpt-image-2" : pptGeneration.getImageGenerationModel());
+        return model.matches("[A-Za-z0-9._:-]{1,100}") ? model : "gpt-image-2";
+    }
+    public String imageGenerationQuality() {
+        String quality = value(IMAGE_GENERATION_QUALITY,
+                pptGeneration == null ? "medium" : pptGeneration.getImageGenerationQuality()).toLowerCase();
+        return Set.of("low", "medium", "high").contains(quality) ? quality : "medium";
+    }
+    public int imageGenerationMaxImages() {
+        int fallback = pptGeneration == null ? 3 : pptGeneration.getImageGenerationMaxImages();
+        return safeInt(IMAGE_GENERATION_MAX_IMAGES, fallback, 1, 4);
+    }
     public String visibilityLevel(String feature) { return value("visibility." + feature, VISIBILITY_DEFAULTS.getOrDefault(feature, "PUBLIC")); }
 
     public Map<String, Object> publicSettings() {
@@ -186,6 +220,11 @@ public class RuntimeConfigService {
                 "reasoningEffort", codexPptReasoningEffort(), "cliVersion", "0.147.0",
                 "configured", !codexPptKey().isBlank(), "apiKeyConfigured", !codexPptKey().isBlank(),
                 "apiKeyHint", secretHint(codexPptKey()))));
+        data.put("imageGeneration", new LinkedHashMap<>(Map.of(
+                "name", "GPT Image 2", "baseUrl", imageGenerationEndpoint(), "model", imageGenerationModel(),
+                "quality", imageGenerationQuality(), "maxImages", imageGenerationMaxImages(),
+                "configured", !imageGenerationKey().isBlank(), "apiKeyConfigured", !imageGenerationKey().isBlank(),
+                "apiKeyHint", secretHint(imageGenerationKey()))));
         Map<String, String> visibility = new LinkedHashMap<>();
         VISIBILITY_DEFAULTS.forEach((feature, fallback) -> visibility.put(feature, value("visibility." + feature, fallback)));
         data.put("visibility", visibility);
@@ -229,6 +268,18 @@ public class RuntimeConfigService {
             save(CODEX_PPT_MODEL, model);
             save(CODEX_PPT_REASONING, effort);
             saveSecret(CODEX_PPT_KEY, codexPptBody.get("apiKey"), codexPptKey());
+        }
+        Map<String, Object> imageGenerationBody = map(body.get("imageGeneration"));
+        if (!imageGenerationBody.isEmpty()) {
+            save(IMAGE_GENERATION_URL, imageGenerationEndpoint(text(string(imageGenerationBody, "baseUrl"), imageGenerationEndpoint())));
+            String model = text(string(imageGenerationBody, "model"), imageGenerationModel());
+            if (!model.matches("[A-Za-z0-9._:-]{1,100}")) throw new AuthException(400, "Image 模型名称不合法");
+            String quality = text(string(imageGenerationBody, "quality"), imageGenerationQuality()).toLowerCase();
+            if (!Set.of("low", "medium", "high").contains(quality)) throw new AuthException(400, "Image 质量只能是 low、medium 或 high");
+            save(IMAGE_GENERATION_MODEL, model);
+            save(IMAGE_GENERATION_QUALITY, quality);
+            save(IMAGE_GENERATION_MAX_IMAGES, Integer.toString(clamp(intValue(imageGenerationBody.get("maxImages"), imageGenerationMaxImages()), 1, 4)));
+            saveSecret(IMAGE_GENERATION_KEY, imageGenerationBody.get("apiKey"), imageGenerationKey());
         }
         Map<String, Object> rankingBody = map(body.get("githubRanking"));
         if (!rankingBody.isEmpty()) {

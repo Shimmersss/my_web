@@ -102,6 +102,13 @@ PPT_GENERATION_CODEX_COMMAND=./node_modules/.bin/codex
 PPT_GENERATION_CODEX_VENDOR_ROOT=../vendor/open-kimi-ppt-skill
 PPT_GENERATION_CODEX_FINALIZE_SCRIPT=./scripts/ppt-codex/finalize.mjs
 PPT_GENERATION_CODEX_TIMEOUT_SECONDS=1800
+# Optional, for the root-only PPTX “AI 生图” option. Use an OpenAI-compatible
+# Images API endpoint and a dedicated service Key; Codex CLI auth is never sent here.
+PPT_GENERATION_IMAGE_GENERATION_ENDPOINT=https://api.openai.com/v1
+PPT_GENERATION_IMAGE_GENERATION_KEY=
+PPT_GENERATION_IMAGE_GENERATION_MODEL=gpt-image-2
+PPT_GENERATION_IMAGE_GENERATION_QUALITY=medium
+PPT_GENERATION_IMAGE_GENERATION_MAX_IMAGES=3
 TAVILY_API_URL=https://api.tavily.com/search
 TAVILY_API_KEY=
 TAVILY_MAX_SEARCHES=6
@@ -112,7 +119,7 @@ SEMANTIC_SCHOLAR_API_KEY=
 
 `project.sh` sources `.env.local` automatically for local development and turns locally discovered `soffice`/`pdftoppm` binaries into absolute paths when those variables are not explicitly set. For production systemd, put equivalent values in an environment file or in the service unit; set `PPT_GENERATION_SOFFICE_COMMAND` and `PPT_GENERATION_PDFTOPPM_COMMAND` to absolute paths so the service does not depend on an interactive shell PATH. PPTX/HTML generation requires Node.js 20+, stable LibreOffice, Poppler, Chromium, fontconfig and Noto CJK. The deploy installer treats these as hard preconditions and runs `npm ci --omit=dev` under the backend directory.
 
-The PPT generator accepts `outputFormat=pptx|html` and `researchMode=auto|off`. HTML keeps the existing reveal.js Agent worker. New PPTX tasks are root-only and run the locked `@openai/codex@0.147.0` CLI in a disposable owner-only workspace with a temporary `CODEX_HOME` and `workspace-write` sandbox. Codex writes only a self-contained PPTD v2 project; the server then invokes the fixed vendored exporter, validates closed page/media paths, exports PPTX, renders it with stable LibreOffice/Poppler, and packages the complete PPTD project. A saved Key is sent to `codex login --with-api-key` over stdin and must not appear in commands, logs or task metadata. When no Key is saved, local development may automatically reuse a logged-in local Codex CLI: only `auth.json` and the active CCSwitch-compatible model-provider block (`base_url`, `wire_api`, model catalog) are copied to the owner-only temporary home; MCP servers, rules and plugins are excluded. Production should use an explicit service Key unless the service account has an intentionally managed Codex home.
+The PPT generator accepts `outputFormat=pptx|html` and `researchMode=auto|off`. HTML keeps the existing reveal.js Agent worker. New PPTX tasks are root-only and run the locked `@openai/codex@0.147.0` CLI in a disposable owner-only workspace with a temporary `CODEX_HOME` and `workspace-write` sandbox. Codex writes only a self-contained PPTD v2 project; the server then invokes the fixed vendored exporter, validates closed page/media paths, exports PPTX, renders it with stable LibreOffice/Poppler, and packages the complete PPTD project. A saved Key is sent to `codex login --with-api-key` over stdin and must not appear in commands, logs or task metadata. When no Key is saved, local development may automatically reuse a logged-in local Codex CLI: only `auth.json` and the active CCSwitch-compatible model-provider block (`base_url`, `wire_api`, model catalog) are copied to the owner-only temporary home; MCP servers, rules and plugins are excluded. Production should use an explicit service Key unless the service account has an intentionally managed Codex home. The optional root-only GPT Image 2 setting generates at most four server-side PNG assets before Codex authoring; configure a separate OpenAI-compatible `POST /v1/images/generations` service Key. It accepts only `data[0].b64_json`, never forwards local Codex auth, and a configured option failure aborts/refunds the task rather than silently switching credentials or source provenance.
 
 The vendored runtime is fixed under `vendor/open-kimi-ppt-skill/`; source commit and file hashes are recorded there. `front` build runs `prepare:pptd-editor` and copies the upstream editor plus the website overlay into `/pptd-editor/`. The initial production migration creates a readable `ppt-generation-tasks-pre-codex-<timestamp>.tar.gz` before clearing incompatible legacy PPT task files. Do not open Codex PPTX to ordinary users until per-task container isolation, read-only Skill mounts, restricted network egress, and CPU/memory/PID limits have passed a separate review.
 

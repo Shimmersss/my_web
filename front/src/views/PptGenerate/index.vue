@@ -227,6 +227,21 @@
                       </button>
                     </div>
                   </div>
+                  <div v-if="outputFormat === 'pptx' && auth.isRoot">
+                    <div class="field-label">AI 生图（GPT Image 2）</div>
+                    <div class="output-format-picker" role="radiogroup" aria-label="AI 生图">
+                      <button type="button" role="radio" :class="['output-format-card', { active: imageGenerationMode === 'off' }]" :aria-checked="imageGenerationMode === 'off'" @click="imageGenerationMode = 'off'">
+                        <strong>关闭</strong><span>只使用资料、研究和可追溯网络素材</span>
+                      </button>
+                      <button type="button" role="radio" :class="['output-format-card', { active: imageGenerationMode === 'supplement' }]" :aria-checked="imageGenerationMode === 'supplement'" @click="imageGenerationMode = 'supplement'">
+                        <strong>补充生图</strong><span>生成少量无文字视觉素材，优先补齐缺图页面</span>
+                      </button>
+                      <button type="button" role="radio" :class="['output-format-card', { active: imageGenerationMode === 'prefer' }]" :aria-checked="imageGenerationMode === 'prefer'" @click="imageGenerationMode = 'prefer'">
+                        <strong>优先 AI 生图</strong><span>优先采用生成图，但资料原图与可信来源仍可覆盖</span>
+                      </button>
+                    </div>
+                    <p class="field-hint">需要在 root 后台配置 GPT Image 2 的 OpenAI-compatible Images endpoint 与 Key；每张图会增加上游图像费用。</p>
+                  </div>
                 </div>
               </div>
             </details>
@@ -448,6 +463,7 @@ const templateKey = ref('pptd-navy-cyan-technology')
 const outputFormat = ref('pptx')
 const researchMode = ref('auto')
 const visualMode = ref('best_effort')
+const imageGenerationMode = ref('off')
 const fontFamily = ref('Microsoft YaHei')
 const templateFile = ref(null)
 const sourceFile = ref(null)
@@ -498,7 +514,7 @@ const previewSlides = computed(() => previewData.value?.slides || [])
 const formatTemplates = computed(() => templates.value.filter(item => !Array.isArray(item.formats) || item.formats.includes(outputFormat.value)))
 const selectedTemplate = computed(() => formatTemplates.value.find(item => item.key === templateKey.value) || formatTemplates.value[0] || null)
 const selectedPreviewSlide = computed(() => previewSlides.value[previewSelectedIndex.value] || null)
-const preferenceSummary = computed(() => `${fontOptions.find(item => item.value === fontFamily.value)?.label || fontFamily.value} · ${researchMode.value === 'auto' ? '自动研究' : '仅本地资料'} · ${visualMode.value === 'strict' ? '严格配图' : '尽力配图'}`)
+const preferenceSummary = computed(() => `${fontOptions.find(item => item.value === fontFamily.value)?.label || fontFamily.value} · ${researchMode.value === 'auto' ? '自动研究' : '仅本地资料'} · ${visualMode.value === 'strict' ? '严格配图' : '尽力配图'} · ${imageGenerationMode.value === 'prefer' ? '优先 AI 生图' : imageGenerationMode.value === 'supplement' ? '补充 AI 生图' : '不开启 AI 生图'}`)
 const editorUrl = computed(() => taskId.value ? `/pptd-editor/upstream/?taskId=${encodeURIComponent(taskId.value)}` : '')
 const templatePreviewSlides = computed(() => buildTemplatePreviewSlides(selectedTemplate.value))
 const templateGroups = computed(() => {
@@ -539,6 +555,7 @@ onMounted(async () => {
 
 watch(outputFormat, () => {
   if (outputFormat.value === 'html') templateFile.value = null
+  if (outputFormat.value === 'html') imageGenerationMode.value = 'off'
   const first = formatTemplates.value[0]
   if (first && !formatTemplates.value.some(item => item.key === templateKey.value)) templateKey.value = first.key
   templatePreviewIndex.value = 0
@@ -623,6 +640,7 @@ async function submitTask() {
       outputFormat: outputFormat.value,
       researchMode: researchMode.value,
       visualMode: visualMode.value,
+      imageGenerationMode: imageGenerationMode.value,
       fontFamily: fontFamily.value,
       templateFile: templateFile.value,
       sourceFile: sourceFile.value,
@@ -948,6 +966,7 @@ function setActiveTask(data) {
   templateKey.value = data.templateKey || templateKey.value
   outputFormat.value = normalizeOutputFormat(data.outputFormat || outputFormat.value)
   visualMode.value = data.visualMode === 'strict' ? 'strict' : 'best_effort'
+  imageGenerationMode.value = ['supplement', 'prefer'].includes(data.imageGenerationMode) ? data.imageGenerationMode : 'off'
   fontFamily.value = data.fontFamily || fontFamily.value
   progress.value = Number(data.progress || 0)
   progressStage.value = data.progressStage || 'queued'
@@ -987,6 +1006,7 @@ function resetForm() {
   prompt.value = ''
   researchMode.value = 'auto'
   visualMode.value = 'best_effort'
+  imageGenerationMode.value = 'off'
   fontFamily.value = 'Microsoft YaHei'
   templateFile.value = null
   sourceFile.value = null

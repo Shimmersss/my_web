@@ -44,6 +44,12 @@ public class PptGenerationConfig {
     private long codexMaxLogBytes = 2L * 1024 * 1024;
     private long codexMaxProjectBytes = 100L * 1024 * 1024;
     private int codexMaxProjectFiles = 500;
+    /** OpenAI-compatible Images API. Kept separate from Codex CLI authentication. */
+    private String imageGenerationEndpoint = "https://api.openai.com/v1";
+    private String imageGenerationKey = "";
+    private String imageGenerationModel = "gpt-image-2";
+    private String imageGenerationQuality = "medium";
+    private int imageGenerationMaxImages = 3;
 
     public String getStorageDir() { return storageDir; }
     public void setStorageDir(String storageDir) { this.storageDir = storageDir; }
@@ -117,4 +123,14 @@ public class PptGenerationConfig {
     public void setCodexMaxProjectBytes(long codexMaxProjectBytes) { this.codexMaxProjectBytes = codexMaxProjectBytes; }
     public int getCodexMaxProjectFiles() { return codexMaxProjectFiles; }
     public void setCodexMaxProjectFiles(int codexMaxProjectFiles) { this.codexMaxProjectFiles = codexMaxProjectFiles; }
+    public String getImageGenerationEndpoint() { return imageGenerationEndpoint; }
+    public void setImageGenerationEndpoint(String imageGenerationEndpoint) { this.imageGenerationEndpoint = imageGenerationEndpoint; }
+    public String getImageGenerationKey() { return imageGenerationKey; }
+    public void setImageGenerationKey(String imageGenerationKey) { this.imageGenerationKey = imageGenerationKey; }
+    public String getImageGenerationModel() { return imageGenerationModel; }
+    public void setImageGenerationModel(String imageGenerationModel) { this.imageGenerationModel = imageGenerationModel; }
+    public String getImageGenerationQuality() { return imageGenerationQuality; }
+    public void setImageGenerationQuality(String imageGenerationQuality) { this.imageGenerationQuality = imageGenerationQuality; }
+    public int getImageGenerationMaxImages() { return imageGenerationMaxImages; }
+    public void setImageGenerationMaxImages(int imageGenerationMaxImages) { this.imageGenerationMaxImages = imageGenerationMaxImages; }
 }

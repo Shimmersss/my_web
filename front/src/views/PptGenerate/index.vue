@@ -227,8 +227,8 @@
               <p class="field-hint">提示词和资料至少提供一个；只上传资料时，系统会自动提炼主题、结构、重点数据和适合的视觉素材。</p>
             </div>
 
-            <details class="generation-options">
-              <summary><span>生成偏好</span><small>{{ preferenceSummary }}</small></summary>
+            <section class="generation-options" aria-label="生成偏好">
+              <div class="generation-options__header"><div><span>生成偏好</span><small>生成前确认内容来源、视觉策略与版式语言</small></div><strong>{{ preferenceSummary }}</strong></div>
               <div class="generation-options__body">
                 <div class="font-family-block">
                   <div class="field-label">生成字体</div>
@@ -241,7 +241,7 @@
                   <p class="field-hint">PPTX 会把这个选择写入全部生成文字；标题过长会先缩写或换行，不会再压住正文。</p>
                 </div>
                 <div class="generation-options__grid">
-                  <div>
+                  <div class="preference-group">
                     <div class="field-label">联网研究</div>
                     <div class="output-format-picker" role="radiogroup" aria-label="联网研究">
                       <button type="button" role="radio" :class="['output-format-card', { active: researchMode === 'auto' }]" :aria-checked="researchMode === 'auto'" @click="researchMode = 'auto'">
@@ -252,7 +252,7 @@
                       </button>
                     </div>
                   </div>
-                  <div>
+                  <div class="preference-group">
                     <div class="field-label">网络配图</div>
                     <div class="output-format-picker" role="radiogroup" aria-label="网络配图">
                       <button type="button" role="radio" :class="['output-format-card', { active: visualMode === 'best_effort' }]" :aria-checked="visualMode === 'best_effort'" @click="visualMode = 'best_effort'">
@@ -263,7 +263,7 @@
                       </button>
                     </div>
                   </div>
-                  <div v-if="outputFormat === 'html'">
+                  <div v-if="outputFormat === 'html'" class="preference-group preference-group--wide">
                     <div class="field-label">演示动效</div>
                     <div class="output-format-picker motion-mode-picker" role="radiogroup" aria-label="HTML 演示动效">
                       <button type="button" role="radio" :class="['output-format-card', { active: motionMode === 'auto' }]" :aria-checked="motionMode === 'auto'" @click="motionMode = 'auto'">
@@ -281,7 +281,7 @@
                     </div>
                     <p class="field-hint">系统“减少动态效果”设置始终优先；下载文件也支持按 L 切换低功耗静态模式。</p>
                   </div>
-                  <div v-if="outputFormat === 'pptx'">
+                  <div v-if="outputFormat === 'pptx'" class="preference-group preference-group--wide">
                     <div class="field-label">AI 生图（GPT Image 2）</div>
                     <div class="output-format-picker" role="radiogroup" aria-label="AI 生图">
                       <button type="button" role="radio" :class="['output-format-card', { active: imageGenerationMode === 'off' }]" :aria-checked="imageGenerationMode === 'off'" @click="imageGenerationMode = 'off'">
@@ -303,7 +303,7 @@
                   </div>
                 </div>
               </div>
-            </details>
+            </section>
 
             <div class="actions">
               <n-button type="primary" size="large" :loading="isSubmitting" @click="submitTask">
@@ -1037,7 +1037,7 @@ async function loadQuotaSettings() {
     const res = await getQuotaSettings()
     pptCreditPerTask.value = Number(res.data?.pptCreditPerTask || 10)
     imageGenerationQuality.value = ['low', 'medium', 'high'].includes(res.data?.pptImageGenerationQuality) ? res.data.pptImageGenerationQuality : 'medium'
-    imageGenerationMaxImages.value = Math.min(4, Math.max(1, Number(res.data?.pptImageGenerationMaxImages || 3)))
+    imageGenerationMaxImages.value = Math.min(10, Math.max(1, Number(res.data?.pptImageGenerationMaxImages || 3)))
     imageCredits.value = {
       low: Number(res.data?.imageLowCredits || 2),
       medium: Number(res.data?.imageMediumCredits || 4),
@@ -1566,50 +1566,43 @@ p {
 .generation-options {
   margin-top: 22px;
   border: 1px solid #d2cabc;
-  border-radius: 10px;
-  background: #f8f4ed;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #fbf9f3;
+  box-shadow: 0 10px 24px rgba(95, 55, 31, .055);
 }
 
-.generation-options summary {
+.generation-options__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  min-height: 56px;
-  padding: 0 16px;
-  color: #0f172a;
-  cursor: pointer;
-  list-style: none;
-}
-
-.generation-options summary::-webkit-details-marker {
-  display: none;
-}
-
-.generation-options summary::after {
-  content: '＋';
-  order: 3;
-  color: #8f2a22;
-  font-size: 20px;
-  font-weight: 400;
-}
-
-.generation-options[open] summary {
+  gap: 20px;
+  min-height: 70px;
+  padding: 12px 18px;
   border-bottom: 1px solid #ded6c7;
+  color: #0f172a;
+  background: linear-gradient(105deg, #f5ede2, #fbf9f3 62%);
 }
 
-.generation-options[open] summary::after {
-  content: '−';
+.generation-options__header > div {
+  display: grid;
+  gap: 4px;
 }
 
-.generation-options summary > span {
+.generation-options__header span {
+  font-size: 16px;
   font-weight: 800;
 }
 
-.generation-options summary > small {
-  flex: 1;
-  overflow: hidden;
+.generation-options__header small {
   color: #64748b;
+  font-size: 12px;
+}
+
+.generation-options__header > strong {
+  max-width: 48%;
+  overflow: hidden;
+  color: #8f2a22;
   font-size: 12px;
   text-align: right;
   text-overflow: ellipsis;
@@ -1618,14 +1611,42 @@ p {
 
 .generation-options__body {
   display: grid;
-  gap: 18px;
-  padding: 16px;
+  gap: 20px;
+  padding: 20px;
+  background: linear-gradient(180deg, rgba(248, 244, 237, .72), #fbf9f3 32%);
 }
 
 .generation-options__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  gap: 14px;
+}
+
+.preference-group {
+  min-width: 0;
+  padding: 15px;
+  border: 1px solid #e0d7c9;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .62);
+}
+
+.preference-group--wide {
+  grid-column: 1 / -1;
+}
+
+.preference-group > .field-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.preference-group > .field-label::after {
+  content: '可随时调整';
+  color: #9a8c7e;
+  font-size: 11px;
+  font-weight: 500;
 }
 
 .output-format-picker {
@@ -1637,9 +1658,10 @@ p {
 .output-format-card {
   display: grid;
   gap: 5px;
-  padding: 14px 16px;
+  min-height: 86px;
+  padding: 13px 14px;
   border: 1px solid #d2cabc;
-  border-radius: 2px;
+  border-radius: 10px;
   background: #fbf9f3;
   color: #334155;
   text-align: left;
@@ -1659,8 +1681,8 @@ p {
 
 .output-format-card.active {
   border-color: #b83126;
-  background: #f3eadf;
-  box-shadow: 0 0 0 3px rgba(184, 49, 38, .1);
+  background: linear-gradient(135deg, #fff8ef, #f3e7d9);
+  box-shadow: inset 3px 0 0 #b83126, 0 0 0 3px rgba(184, 49, 38, .08);
 }
 
 .output-format-card:focus-visible,
@@ -1761,12 +1783,12 @@ p {
 .image-count-control {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-top: 12px;
-  padding: 10px 12px;
-  border: 1px solid #ded6c7;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, .52);
+  gap: 12px;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid #e2c8b7;
+  border-radius: 10px;
+  background: #fff9f3;
 }
 
 .image-count-control > span:first-child {
@@ -1783,7 +1805,16 @@ p {
 }
 
 .image-count-control :deep(.n-input-number) {
-  width: 78px;
+  width: 86px;
+}
+
+.preference-group--wide .output-format-picker:not(.motion-mode-picker) {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.preference-group--wide .field-hint {
+  margin: 12px 2px 0;
+  line-height: 1.55;
 }
 
 .template-picker {
@@ -2965,6 +2996,10 @@ p {
     grid-template-columns: 1fr;
   }
 
+  .preference-group--wide .output-format-picker:not(.motion-mode-picker) {
+    grid-template-columns: 1fr;
+  }
+
   .resource-field-block {
     padding: 14px;
   }
@@ -2994,8 +3029,23 @@ p {
     padding-right: 5px;
   }
 
-  .generation-options summary > small {
+  .generation-options__header {
+    align-items: flex-start;
+    min-height: 0;
+    padding: 14px;
+  }
+
+  .generation-options__header > strong {
     display: none;
+  }
+
+  .generation-options__body {
+    gap: 14px;
+    padding: 14px;
+  }
+
+  .preference-group {
+    padding: 13px;
   }
 
   .template-picker {

@@ -54,6 +54,7 @@ import java.util.stream.Stream;
 @Service
 public class PptGenerationService {
     private static final Logger log = LoggerFactory.getLogger(PptGenerationService.class);
+    private static final int MAX_AI_IMAGES_PER_TASK = 10;
     private static final String AUTO_PROMPT =
             "请根据上传的资料自动提炼重点，判断合适的受众和叙事方式，生成一份结构清晰、视觉专业、可编辑的演示文稿。"
                     + "保留关键事实、数据和结论，必要时补充目录、图表解读、行动建议或下一步。";
@@ -935,10 +936,11 @@ public class PptGenerationService {
 
     private int normalizeRequestedImageGenerationCount(Integer requestedCount, String mode, String outputFormat) {
         if (!"pptx".equals(outputFormat) || "off".equals(mode) || requestedCount == null || requestedCount == 0) return 0;
-        if (requestedCount < 1 || requestedCount > 4) {
-            throw new IllegalArgumentException("AI 生图数量请设置在 1 到 4 张之间");
+        if (requestedCount < 1 || requestedCount > MAX_AI_IMAGES_PER_TASK) {
+            throw new IllegalArgumentException("AI 生图数量请设置在 1 到 " + MAX_AI_IMAGES_PER_TASK + " 张之间");
         }
-        int configuredMaximum = runtimeConfig == null ? 4 : Math.max(1, Math.min(4, runtimeConfig.imageGenerationMaxImages()));
+        int configuredMaximum = runtimeConfig == null ? MAX_AI_IMAGES_PER_TASK
+                : Math.max(1, Math.min(MAX_AI_IMAGES_PER_TASK, runtimeConfig.imageGenerationMaxImages()));
         int modeMaximum = "supplement".equals(mode) ? Math.min(2, configuredMaximum) : configuredMaximum;
         if (requestedCount > modeMaximum) {
             throw new IllegalArgumentException("当前 AI 生图模式最多可生成 " + modeMaximum + " 张");

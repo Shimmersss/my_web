@@ -200,6 +200,37 @@ class PptGenerationServiceTest {
     }
 
     @Test
+    void explicitTenImageRequestUsesTheExpandedMaximumAndSingleQuotaCharge() throws Exception {
+        PptAgentRunner runner = mock(PptAgentRunner.class);
+        doThrow(new IllegalStateException("generation failed")).when(runner).run(any(), any(), any());
+        QuotaService quota = mock(QuotaService.class);
+        RuntimeConfigService runtime = mock(RuntimeConfigService.class);
+        when(quota.pptCreditPerTask()).thenReturn(10);
+        when(quota.imageCredit("medium")).thenReturn(4);
+        when(runtime.imageGenerationQuality()).thenReturn("medium");
+        when(runtime.imageGenerationMaxImages()).thenReturn(10);
+        when(quota.spend(anyLong(), anyInt(), anyString(), anyString(), anyString())).thenReturn(93L);
+        PptGenerationService service = service(runner, quota, runtime);
+        try {
+            AuthUser owner = new AuthUser(9, "owner", "USER", 100, true);
+            PptGenerationSession task = service.createTask(
+                    "Deck", "pptd-navy-cyan-technology", 100, null, null,
+                    owner, "ppt-ten-images", "pptx", "off", "best_effort", "Microsoft YaHei",
+                    "prefer", "auto", 0, 10);
+
+            assertEquals(10, task.getRequestedImageGenerationCount());
+            assertEquals(10, task.getImageGenerationCount());
+            assertEquals(40, task.getImageGenerationCreditCost());
+            assertEquals(50, task.getCreditCost());
+            verify(quota).spend(eq(owner.id()), eq(50), eq("PPT"), eq(task.getTaskId()),
+                    contains("GPT Image 2 10 张，medium"));
+            awaitStatus(service, task.getTaskId(), "error");
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void visualQaWarningStillDeliversTheRenderedDeck() throws Exception {
         PptAgentRunner runner = mock(PptAgentRunner.class);
         doAnswer(invocation -> {

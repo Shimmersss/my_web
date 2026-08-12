@@ -198,7 +198,7 @@ public class RuntimeConfigService {
     }
     public int imageGenerationMaxImages() {
         int fallback = pptGeneration == null ? 3 : pptGeneration.getImageGenerationMaxImages();
-        return safeInt(IMAGE_GENERATION_MAX_IMAGES, fallback, 1, 4);
+        return safeInt(IMAGE_GENERATION_MAX_IMAGES, fallback, 1, 10);
     }
 
     /**
@@ -342,7 +342,7 @@ public class RuntimeConfigService {
             if (!Set.of("low", "medium", "high").contains(quality)) throw new AuthException(400, "Image 质量只能是 low、medium 或 high");
             save(IMAGE_GENERATION_MODEL, model);
             save(IMAGE_GENERATION_QUALITY, quality);
-            save(IMAGE_GENERATION_MAX_IMAGES, Integer.toString(clamp(intValue(imageGenerationBody.get("maxImages"), imageGenerationMaxImages()), 1, 4)));
+            save(IMAGE_GENERATION_MAX_IMAGES, Integer.toString(clamp(intValue(imageGenerationBody.get("maxImages"), imageGenerationMaxImages()), 1, 10)));
             saveSecret(IMAGE_GENERATION_KEY, imageGenerationBody.get("apiKey"), imageGenerationKey());
         }
         Map<String, Object> rankingBody = map(body.get("githubRanking"));

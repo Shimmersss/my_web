@@ -53,4 +53,16 @@ class RuntimeConfigImageTest {
         assertEquals(2, runtime.translationMaxGlobalHistory());
         assertEquals(3, runtime.imageMaxGlobalHistory());
     }
+
+    @Test
+    void acceptsTenAsThePptImageGenerationMaximum() {
+        JdbcTemplate jdbc = new JdbcTemplate(new EmbeddedDatabaseBuilder().generateUniqueName(true)
+                .setType(EmbeddedDatabaseType.H2).addScript("schema.sql").build());
+        RuntimeConfigService runtime = new RuntimeConfigService(jdbc, new LlmConfig(), new BabelDocConfig(),
+                new ZoteroConfig(), new PptGenerationConfig(), new TranslationConfig(), new ImageGenerationConfig());
+
+        runtime.update(Map.of("imageGeneration", Map.of("maxImages", 10)));
+
+        assertEquals(10, runtime.imageGenerationMaxImages());
+    }
 }

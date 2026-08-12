@@ -285,7 +285,7 @@ export async function createPptGenerationTask({ prompt, templateKey, outputForma
   formData.append('motionMode', outputFormat === 'html' && ['subtle', 'expressive', 'off'].includes(motionMode) ? motionMode : 'auto')
   formData.append('imageGenerationMode', ['supplement', 'prefer'].includes(imageGenerationMode) && outputFormat === 'pptx' ? imageGenerationMode : 'off')
   if (Number.isInteger(Number(pageCount)) && Number(pageCount) >= 3 && Number(pageCount) <= 30) formData.append('pageCount', String(pageCount))
-  if (outputFormat === 'pptx' && Number.isInteger(Number(imageGenerationCount)) && Number(imageGenerationCount) >= 1 && Number(imageGenerationCount) <= 4) formData.append('imageGenerationCount', String(imageGenerationCount))
+  if (outputFormat === 'pptx' && Number.isInteger(Number(imageGenerationCount)) && Number(imageGenerationCount) >= 1 && Number(imageGenerationCount) <= 10) formData.append('imageGenerationCount', String(imageGenerationCount))
   if (fontFamily) formData.append('fontFamily', fontFamily)
   if (templateFile) formData.append('templateFile', templateFile)
   if (sourceFile || paperFile) formData.append('sourceFile', sourceFile || paperFile)

@@ -24,7 +24,12 @@ import java.util.function.BiConsumer;
 @Component
 public class PptImageGenerationService {
     private static final Logger log = LoggerFactory.getLogger(PptImageGenerationService.class);
+    private static final int MAX_IMAGES_PER_TASK = 10;
     private static final long MAX_IMAGE_BYTES = 12L * 1024 * 1024;
+    private static final List<String> IMAGE_SUBJECTS = List.of(
+            "hero scene", "process or relationship", "outcome or future scene", "detail visual",
+            "context or environment", "comparison or contrast", "human workflow", "data-inspired abstract visual",
+            "close-up mechanism or texture", "supporting scene");
     private final RuntimeConfigService runtime;
     private final ObjectMapper objectMapper;
     private final OpenAiImageClient imageClient;
@@ -46,7 +51,6 @@ public class PptImageGenerationService {
         }
         Files.createDirectories(outputDir);
         int requested = requestedImageCount(mode, runtime.imageGenerationMaxImages(), session.getRequestedImageGenerationCount());
-        List<String> subjects = List.of("hero scene", "process or relationship", "outcome or future scene", "detail visual");
         Map<String, Object> manifest = new LinkedHashMap<>();
         manifest.put("provider", "openai-compatible-images");
         manifest.put("model", runtime.imageGenerationModel());
@@ -57,7 +61,7 @@ public class PptImageGenerationService {
                     "message", "正在生成 AI 视觉素材（" + (index + 1) + "/" + requested + "）"));
             byte[] image;
             try {
-                image = imageClient.generate(prompt(session, subjects.get(index)), "1536x1024", runtime.imageGenerationQuality());
+                image = imageClient.generate(prompt(session, IMAGE_SUBJECTS.get(index)), "1536x1024", runtime.imageGenerationQuality());
             } catch (OpenAiImageClient.ImageProviderException e) {
                 log.error("PPT Images API 调用失败: taskId={}, imageIndex={}", session.getTaskId(), index + 1, e);
                 throw new IllegalStateException("GPT Image 2 生图失败，请稍后重试");
@@ -82,7 +86,7 @@ public class PptImageGenerationService {
      * smaller ceiling while allowing the user to choose any quantity below it.
      */
     public static int requestedImageCount(String mode, int maxImages, int requestedCount) {
-        int bounded = Math.max(1, Math.min(4, maxImages));
+        int bounded = Math.max(1, Math.min(MAX_IMAGES_PER_TASK, maxImages));
         int modeMaximum = "supplement".equals(mode) ? Math.min(2, bounded) : bounded;
         if (!"prefer".equals(mode) && !"supplement".equals(mode)) return 0;
         return requestedCount > 0 ? Math.min(modeMaximum, requestedCount) : modeMaximum;

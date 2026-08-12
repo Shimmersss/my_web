@@ -163,6 +163,40 @@ class PptGenerationServiceTest {
     }
 
     @Test
+    void explicitPageAndImageCountsAreStoredAndUsedForTheSingleQuotaCharge() throws Exception {
+        PptAgentRunner runner = mock(PptAgentRunner.class);
+        doAnswer(invocation -> {
+            writeAgentArtifacts(invocation.getArgument(0));
+            return null;
+        }).when(runner).run(any(), any(), any());
+        QuotaService quota = mock(QuotaService.class);
+        RuntimeConfigService runtime = mock(RuntimeConfigService.class);
+        when(quota.pptCreditPerTask()).thenReturn(10);
+        when(quota.imageCredit("medium")).thenReturn(4);
+        when(runtime.imageGenerationQuality()).thenReturn("medium");
+        when(runtime.imageGenerationMaxImages()).thenReturn(3);
+        when(quota.spend(anyLong(), anyInt(), anyString(), anyString(), anyString())).thenReturn(92L);
+        PptGenerationService service = service(runner, quota, runtime);
+        try {
+            AuthUser owner = new AuthUser(9, "owner", "USER", 100, true);
+            PptGenerationSession task = service.createTask(
+                    "Deck", "pptd-navy-cyan-technology", 100, null, null,
+                    owner, "ppt-explicit-controls", "pptx", "off", "best_effort", "Microsoft YaHei",
+                    "prefer", "auto", 12, 2);
+
+            assertEquals(12, task.getRequestedPageCount());
+            assertEquals(2, task.getRequestedImageGenerationCount());
+            assertEquals(2, task.getImageGenerationCount());
+            assertEquals(8, task.getImageGenerationCreditCost());
+            assertEquals(18, task.getCreditCost());
+            verify(quota).spend(eq(owner.id()), eq(18), eq("PPT"), eq(task.getTaskId()),
+                    contains("GPT Image 2 2 张，medium"));
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void visualQaWarningStillDeliversTheRenderedDeck() throws Exception {
         PptAgentRunner runner = mock(PptAgentRunner.class);
         doAnswer(invocation -> {

@@ -45,7 +45,7 @@ public class PptImageGenerationService {
             throw new IllegalStateException("已选择 AI 生图，但后台尚未配置 GPT Image 2 的 Images API Key");
         }
         Files.createDirectories(outputDir);
-        int requested = requestedImageCount(mode, runtime.imageGenerationMaxImages());
+        int requested = requestedImageCount(mode, runtime.imageGenerationMaxImages(), session.getRequestedImageGenerationCount());
         List<String> subjects = List.of("hero scene", "process or relationship", "outcome or future scene", "detail visual");
         Map<String, Object> manifest = new LinkedHashMap<>();
         manifest.put("provider", "openai-compatible-images");
@@ -74,9 +74,18 @@ public class PptImageGenerationService {
 
     /** Keep the billed image count and the actual bounded generation count identical. */
     public static int requestedImageCount(String mode, int maxImages) {
+        return requestedImageCount(mode, maxImages, 0);
+    }
+
+    /**
+     * The runtime maximum remains the hard ceiling. Supplement keeps its intentionally
+     * smaller ceiling while allowing the user to choose any quantity below it.
+     */
+    public static int requestedImageCount(String mode, int maxImages, int requestedCount) {
         int bounded = Math.max(1, Math.min(4, maxImages));
-        if ("prefer".equals(mode)) return bounded;
-        return "supplement".equals(mode) ? Math.min(2, bounded) : 0;
+        int modeMaximum = "supplement".equals(mode) ? Math.min(2, bounded) : bounded;
+        if (!"prefer".equals(mode) && !"supplement".equals(mode)) return 0;
+        return requestedCount > 0 ? Math.min(modeMaximum, requestedCount) : modeMaximum;
     }
 
     private String prompt(PptGenerationSession session, String subject) {

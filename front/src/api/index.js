@@ -275,7 +275,7 @@ export function downloadTranslatedPdf(taskId, mode = 'translated') {
 
 // ==================== PPT 生成 API ====================
 
-export async function createPptGenerationTask({ prompt, templateKey, outputFormat = 'pptx', researchMode = 'auto', visualMode = 'best_effort', motionMode = 'auto', imageGenerationMode = 'off', fontFamily = 'Microsoft YaHei', templateFile, sourceFile, paperFile, idempotencyKey }) {
+export async function createPptGenerationTask({ prompt, templateKey, outputFormat = 'pptx', researchMode = 'auto', visualMode = 'best_effort', motionMode = 'auto', imageGenerationMode = 'off', pageCount = 0, imageGenerationCount = 0, fontFamily = 'Microsoft YaHei', templateFile, sourceFile, paperFile, idempotencyKey }) {
   const formData = new FormData()
   if (prompt?.trim()) formData.append('prompt', prompt.trim())
   if (templateKey) formData.append('templateKey', templateKey)
@@ -284,6 +284,8 @@ export async function createPptGenerationTask({ prompt, templateKey, outputForma
   formData.append('visualMode', visualMode === 'strict' ? 'strict' : 'best_effort')
   formData.append('motionMode', outputFormat === 'html' && ['subtle', 'expressive', 'off'].includes(motionMode) ? motionMode : 'auto')
   formData.append('imageGenerationMode', ['supplement', 'prefer'].includes(imageGenerationMode) && outputFormat === 'pptx' ? imageGenerationMode : 'off')
+  if (Number.isInteger(Number(pageCount)) && Number(pageCount) >= 3 && Number(pageCount) <= 30) formData.append('pageCount', String(pageCount))
+  if (outputFormat === 'pptx' && Number.isInteger(Number(imageGenerationCount)) && Number(imageGenerationCount) >= 1 && Number(imageGenerationCount) <= 4) formData.append('imageGenerationCount', String(imageGenerationCount))
   if (fontFamily) formData.append('fontFamily', fontFamily)
   if (templateFile) formData.append('templateFile', templateFile)
   if (sourceFile || paperFile) formData.append('sourceFile', sourceFile || paperFile)

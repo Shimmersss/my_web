@@ -14,7 +14,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.net.URI;
-import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -42,10 +41,6 @@ public class RuntimeConfigService {
     private static final String TAVILY_URL = "api.tavily.url";
     private static final String TAVILY_KEY = "api.tavily.key";
     private static final String TAVILY_MAX_SEARCHES = "api.tavily.max-searches";
-    private static final String BRAVE_IMAGES_KEY = "api.brave-images.key";
-    private static final String BRAVE_IMAGES_COUNT = "api.brave-images.count";
-    private static final String BRAVE_IMAGES_MAX_QUERIES = "api.brave-images.max-queries";
-    private static final String BRAVE_IMAGES_ENDPOINT = "https://api.search.brave.com/res/v1/images/search";
     private static final String SEMANTIC_SCHOLAR_KEY = "api.semantic-scholar.key";
     private static final String CODEX_PPT_KEY = "ppt.codex.api-key";
     private static final String CODEX_PPT_MODEL = "ppt.codex.model";
@@ -150,19 +145,6 @@ public class RuntimeConfigService {
     public int tavilyMaxSearches() {
         int fallback = clamp(intValue(System.getenv("TAVILY_MAX_SEARCHES"), 6), 1, 12);
         return safeInt(TAVILY_MAX_SEARCHES, fallback, 1, 12);
-    }
-    /** Brave Images uses its official API route only; the endpoint is deliberately not admin-editable. */
-    public String braveImagesEndpoint() { return BRAVE_IMAGES_ENDPOINT; }
-    public String braveImagesKey() {
-        return value(BRAVE_IMAGES_KEY, System.getenv().getOrDefault("BRAVE_SEARCH_API_KEY", ""));
-    }
-    public int braveImagesCount() {
-        int fallback = clamp(intValue(System.getenv("BRAVE_IMAGES_COUNT"), 20), 1, 50);
-        return safeInt(BRAVE_IMAGES_COUNT, fallback, 1, 50);
-    }
-    public int braveImagesMaxQueries() {
-        int fallback = clamp(intValue(System.getenv("BRAVE_IMAGES_MAX_QUERIES"), 3), 1, 3);
-        return safeInt(BRAVE_IMAGES_MAX_QUERIES, fallback, 1, 3);
     }
     public String semanticScholarKey() { return value(SEMANTIC_SCHOLAR_KEY, System.getenv().getOrDefault("SEMANTIC_SCHOLAR_API_KEY", "")); }
     public String codexPptKey() { return value(CODEX_PPT_KEY, System.getenv().getOrDefault("PPT_GENERATION_CODEX_API_KEY", "")); }
@@ -300,16 +282,6 @@ public class RuntimeConfigService {
                 "apiKeyConfigured", !tavilyKey().isBlank(),
                 "apiKeyHint", secretHint(tavilyKey()),
                 "semanticScholarKeyHint", secretHint(semanticScholarKey()))));
-        data.put("braveImages", new LinkedHashMap<>(Map.of(
-                "name", "Brave 图片搜索",
-                "baseUrl", braveImagesEndpoint(),
-                "count", braveImagesCount(),
-                "maxQueries", braveImagesMaxQueries(),
-                "safeSearch", "strict",
-                "configured", !braveImagesKey().isBlank(),
-                "apiKeyConfigured", !braveImagesKey().isBlank(),
-                "apiKeyHint", secretHint(braveImagesKey()),
-                "configSource", braveImagesConfigSource())));
         data.put("codexPpt", new LinkedHashMap<>(Map.of(
                 "name", "Codex 演示生成", "model", codexPptModel(),
                 "reasoningEffort", codexPptReasoningEffort(), "cliVersion", "0.147.0",
@@ -348,14 +320,6 @@ public class RuntimeConfigService {
             save(TAVILY_MAX_SEARCHES, Integer.toString(clamp(intValue(researchBody.get("maxSearches"), tavilyMaxSearches()), 1, 12)));
             saveSecret(TAVILY_KEY, researchBody.get("apiKey"), tavilyKey());
             saveSecret(SEMANTIC_SCHOLAR_KEY, researchBody.get("semanticScholarApiKey"), semanticScholarKey());
-        }
-        Map<String, Object> braveImagesBody = map(body.get("braveImages"));
-        if (!braveImagesBody.isEmpty()) {
-            save(BRAVE_IMAGES_COUNT, Integer.toString(clamp(
-                    intValue(braveImagesBody.get("count"), braveImagesCount()), 1, 50)));
-            save(BRAVE_IMAGES_MAX_QUERIES, Integer.toString(clamp(
-                    intValue(braveImagesBody.get("maxQueries"), braveImagesMaxQueries()), 1, 3)));
-            saveSecret(BRAVE_IMAGES_KEY, braveImagesBody.get("apiKey"), braveImagesKey());
         }
         Map<String, Object> codexPptBody = map(body.get("codexPpt"));
         if (!codexPptBody.isEmpty()) {
@@ -452,82 +416,9 @@ public class RuntimeConfigService {
         }
     }
 
-    /** Performs one non-download Brave Images request against the fixed official endpoint. */
-    public Map<String, Object> testBraveImagesConnection(String apiKey) {
-        if (apiKey == null || apiKey.isBlank()) throw new AuthException(400, "Brave Search API Key 未配置");
-        try {
-            String query = URLEncoder.encode("OpenAI logo", StandardCharsets.UTF_8);
-            URI endpoint = URI.create(braveImagesEndpoint()
-                    + "?q=" + query + "&count=1&safesearch=strict");
-            HttpRequest request = HttpRequest.newBuilder(endpoint)
-                    .timeout(Duration.ofSeconds(20))
-                    .header("Accept", "application/json")
-                    .header("X-Subscription-Token", apiKey)
-                    .GET().build();
-            BraveImagesResponse response = sendBraveImagesRequest(request);
-            int status = response.statusCode();
-            if (status < 200 || status >= 300) throw braveImagesTestFailure(status);
-
-            @SuppressWarnings("unchecked")
-            Map<String, Object> root = objectMapper.readValue(response.body(), Map.class);
-            int resultCount = root.get("results") instanceof List<?> results ? results.size() : 0;
-            Map<String, Object> result = new LinkedHashMap<>();
-            result.put("message", "Brave 图片搜索连接成功（未下载图片）");
-            result.put("configured", true);
-            result.put("endpoint", braveImagesEndpoint());
-            result.put("safeSearch", "strict");
-            result.put("resultCount", resultCount);
-            String alteredQuery = braveAlteredQuery(root);
-            if (!alteredQuery.isBlank()) result.put("alteredQuery", alteredQuery);
-            return result;
-        } catch (AuthException e) {
-            throw e;
-        } catch (Exception e) {
-            // Do not expose a provider body, request headers, or the submitted secret.
-            throw new AuthException(502, "Brave 图片搜索延迟测试失败，请检查网络或稍后重试");
-        }
-    }
-
-    /** Kept as a narrow seam for deterministic tests; production always uses the JDK client. */
-    protected BraveImagesResponse sendBraveImagesRequest(HttpRequest request) throws Exception {
-        HttpResponse<String> response = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofSeconds(10)).build()
-                .send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
-        return new BraveImagesResponse(response.statusCode(), response.body());
-    }
-
-    protected record BraveImagesResponse(int statusCode, String body) { }
-
-    private AuthException braveImagesTestFailure(int status) {
-        if (status == 401) return new AuthException(401, "Brave 图片搜索认证失败（HTTP 401），请检查 API Key");
-        if (status == 403) return new AuthException(403, "Brave 图片搜索被拒绝（HTTP 403），请检查订阅权限");
-        if (status == 422) return new AuthException(422, "Brave 图片搜索请求未通过校验（HTTP 422）");
-        if (status == 429) return new AuthException(429, "Brave 图片搜索请求过于频繁或额度已用尽（HTTP 429）");
-        return new AuthException(502, "Brave 图片搜索延迟测试失败：HTTP " + status);
-    }
-
-    private String braveAlteredQuery(Map<String, Object> root) {
-        Object query = root.get("query");
-        if (query instanceof Map<?, ?> queryMap) {
-            Object altered = queryMap.containsKey("altered") ? queryMap.get("altered") : queryMap.get("alteredQuery");
-            if (altered != null) return altered.toString().trim();
-        }
-        Object altered = root.get("altered_query");
-        return altered == null ? "" : altered.toString().trim();
-    }
-
-    private String braveImagesConfigSource() {
-        if (hasStoredValue(BRAVE_IMAGES_KEY)) return "database";
-        return System.getenv().getOrDefault("BRAVE_SEARCH_API_KEY", "").isBlank() ? "none" : "environment";
-    }
-
     private String value(String key, String fallback) {
         List<String> values = jdbc.queryForList("SELECT setting_value FROM app_settings WHERE setting_key=?", String.class, key);
         return values.isEmpty() || values.get(0).isBlank() ? (fallback == null ? "" : fallback) : values.get(0);
-    }
-    private boolean hasStoredValue(String key) {
-        List<String> values = jdbc.queryForList("SELECT setting_value FROM app_settings WHERE setting_key=?", String.class, key);
-        return !values.isEmpty() && values.get(0) != null && !values.get(0).isBlank();
     }
     private void save(String key, String value) {
         int updated = jdbc.update("UPDATE app_settings SET setting_value=?, updated_at=CURRENT_TIMESTAMP WHERE setting_key=?", value, key);

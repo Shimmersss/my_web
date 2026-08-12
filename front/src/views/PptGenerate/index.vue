@@ -32,11 +32,26 @@
                   <span>单文件网页演示，可直接分享</span>
                 </button>
               </div>
+              <div class="presentation-setup">
+                <div>
+                  <div class="field-label">演示页数</div>
+                  <div class="page-count-picker" role="radiogroup" aria-label="演示页数">
+                    <button type="button" role="radio" :class="['page-count-card', { active: requestedPageCount === 0 }]" :aria-checked="requestedPageCount === 0" @click="requestedPageCount = 0">
+                      <span class="page-count-card__copy"><strong>智能推荐</strong><small>Codex 根据主题与资料组织合适篇幅</small></span>
+                    </button>
+                    <label :class="['page-count-card', { active: requestedPageCount > 0 }]">
+                      <span class="page-count-card__copy"><strong>指定页数</strong><small>含封面与结束页，3–30 页</small></span>
+                      <n-input-number v-model:value="requestedPageCount" :min="3" :max="30" :show-button="false" placeholder="页数" aria-label="指定 PPT 页数" @update:value="requestedPageCount = $event || 3" />
+                    </label>
+                  </div>
+                </div>
+                <p class="field-hint">选择“智能推荐”时不会强行补页；指定后会严格按该页数生成。</p>
+              </div>
             </div>
 
             <div class="field-block template-field-block">
-              <details ref="templateSelector" class="template-selector">
-                <summary>
+              <section class="template-selector">
+                <div class="template-selector__header">
                   <span class="template-selector__title">
                     <small>{{ outputFormat === 'html' ? 'HTML 交互主题' : 'PPTX 通用模板' }}</small>
                     <strong>{{ selectedTemplate?.name || '选择模板' }}</strong>
@@ -45,12 +60,12 @@
                     <span class="swatches" aria-label="当前模板配色">
                       <i v-for="color in (selectedTemplate?.palette || []).slice(0, 5)" :key="color" :style="{ backgroundColor: `#${color}` }"></i>
                     </span>
-                    <small>{{ formatTemplates.length }} 套可选 · 展开预览</small>
+                    <small>{{ formatTemplates.length }} 套可选 · 始终展开</small>
                   </span>
-                </summary>
+                </div>
                 <div class="template-selector__body">
                   <div class="template-selector__intro">
-                    <p>模板默认收起，展开后可浏览缩略图与 5 页样稿；选择后会自动收起，保持工作区紧凑。</p>
+                    <p>选择模板后会保留全部样式与 5 页预览，方便继续比较和调整。</p>
                     <span>当前：{{ selectedTemplate?.categoryLabel || '通用风格' }}</span>
                   </div>
                   <div class="template-picker">
@@ -177,7 +192,7 @@
                 </section>
               </div>
                 </div>
-              </details>
+              </section>
             </div>
 
             <div class="field-block resource-field-block">
@@ -278,6 +293,11 @@
                       <button type="button" role="radio" :class="['output-format-card', { active: imageGenerationMode === 'prefer' }]" :aria-checked="imageGenerationMode === 'prefer'" @click="imageGenerationMode = 'prefer'">
                         <strong>优先 AI 生图</strong><span>优先采用生成图，但资料原图与可信来源仍可覆盖</span>
                       </button>
+                    </div>
+                    <div v-if="imageGenerationMode !== 'off'" class="image-count-control">
+                      <span><strong>生图数量</strong><small>{{ imageGenerationMode === 'supplement' ? '补充模式最多 2 张' : `最多 ${imageGenerationMaxImages} 张` }}</small></span>
+                      <n-input-number v-model:value="requestedImageGenerationCount" :min="1" :max="imageGenerationCountMax" :show-button="false" aria-label="Codex 生图数量" />
+                      <span class="image-count-control__unit">张</span>
                     </div>
                     <p class="field-hint">与“Codex 生图”共用同一余额和 low / medium / high 单价；当前会预扣 {{ pptImageCredits }} credits（{{ pptImageCount }} 张 {{ imageGenerationQuality }}），任务失败会连同 PPT 基础额度一并退回。</p>
                   </div>
@@ -471,7 +491,7 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useMessage } from 'naive-ui'
-import { NAlert, NButton, NEmpty, NIcon, NInput, NProgress, NTag } from 'naive-ui'
+import { NAlert, NButton, NEmpty, NIcon, NInput, NInputNumber, NProgress, NTag } from 'naive-ui'
 import {
   ColorPaletteOutline,
   DocumentTextOutline,
@@ -507,6 +527,8 @@ const researchMode = ref('auto')
 const visualMode = ref('best_effort')
 const motionMode = ref('auto')
 const imageGenerationMode = ref('off')
+const requestedPageCount = ref(0)
+const requestedImageGenerationCount = ref(0)
 const fontFamily = ref('Microsoft YaHei')
 const templateFile = ref(null)
 const sourceFile = ref(null)
@@ -528,7 +550,6 @@ const editorVisible = ref(false)
 const editorExpanded = ref(false)
 const editorStatus = ref('正在加载项目编辑器…')
 const taskFailed = ref(false)
-const templateSelector = ref(null)
 const templatePreviewIndex = ref(0)
 const templatePreviewImageErrors = ref(new Set())
 const previewSelectedIndex = ref(0)
@@ -551,10 +572,13 @@ const pptCreditPerTask = ref(10)
 const imageGenerationQuality = ref('medium')
 const imageGenerationMaxImages = ref(3)
 const imageCredits = ref({ low: 2, medium: 4, high: 8 })
+const imageGenerationCountMax = computed(() => imageGenerationMode.value === 'supplement'
+  ? Math.min(2, imageGenerationMaxImages.value)
+  : imageGenerationMaxImages.value)
 const pptImageCount = computed(() => {
   if (outputFormat.value !== 'pptx') return 0
-  if (imageGenerationMode.value === 'prefer') return imageGenerationMaxImages.value
-  return imageGenerationMode.value === 'supplement' ? Math.min(2, imageGenerationMaxImages.value) : 0
+  if (!['supplement', 'prefer'].includes(imageGenerationMode.value)) return 0
+  return Math.min(imageGenerationCountMax.value, Math.max(1, Number(requestedImageGenerationCount.value || imageGenerationCountMax.value)))
 })
 const pptImageCredits = computed(() => pptImageCount.value * (imageCredits.value[imageGenerationQuality.value] || imageCredits.value.medium))
 const pptEstimatedCredits = computed(() => pptCreditPerTask.value + pptImageCredits.value)
@@ -576,6 +600,7 @@ const preferenceSummary = computed(() => {
     researchMode.value === 'auto' ? '自动研究' : '仅本地资料',
     visualMode.value === 'strict' ? '严格配图' : '尽力配图'
   ]
+  parts.push(requestedPageCount.value ? `${requestedPageCount.value} 页` : '智能页数')
   if (outputFormat.value === 'html') parts.push(motionModeLabels[motionMode.value] || motionModeLabels.auto)
   else parts.push(imageGenerationMode.value === 'prefer' ? '优先 AI 生图' : imageGenerationMode.value === 'supplement' ? '补充 AI 生图' : '不开启 AI 生图')
   return parts.join(' · ')
@@ -625,6 +650,14 @@ watch(outputFormat, () => {
   const first = formatTemplates.value[0]
   if (first && !formatTemplates.value.some(item => item.key === templateKey.value)) templateKey.value = first.key
   templatePreviewIndex.value = 0
+})
+
+watch([imageGenerationMode, imageGenerationCountMax], ([mode, maximum]) => {
+  if (mode === 'off') {
+    requestedImageGenerationCount.value = 0
+    return
+  }
+  requestedImageGenerationCount.value = Math.min(maximum, Math.max(1, Number(requestedImageGenerationCount.value || maximum)))
 })
 
 onBeforeUnmount(() => {
@@ -704,6 +737,8 @@ async function submitTask() {
       visualMode: visualMode.value,
       motionMode: motionMode.value,
       imageGenerationMode: imageGenerationMode.value,
+      pageCount: requestedPageCount.value || 0,
+      imageGenerationCount: pptImageCount.value,
       fontFamily: fontFamily.value,
       templateFile: templateFile.value,
       sourceFile: sourceFile.value,
@@ -834,7 +869,6 @@ function selectTemplate(template) {
   if (!template?.key) return
   templateKey.value = template.key
   templatePreviewIndex.value = 0
-  templateSelector.value?.removeAttribute('open')
 }
 
 function templatePreviewAssetKey(index, template = selectedTemplate.value) {
@@ -1042,6 +1076,8 @@ function setActiveTask(data) {
   visualMode.value = data.visualMode === 'strict' ? 'strict' : 'best_effort'
   motionMode.value = ['subtle', 'expressive', 'off'].includes(data.motionMode) ? data.motionMode : 'auto'
   imageGenerationMode.value = ['supplement', 'prefer'].includes(data.imageGenerationMode) ? data.imageGenerationMode : 'off'
+  requestedPageCount.value = Number(data.requestedPageCount) >= 3 && Number(data.requestedPageCount) <= 30 ? Number(data.requestedPageCount) : 0
+  requestedImageGenerationCount.value = Number(data.requestedImageGenerationCount) || Number(data.imageGenerationCount) || 0
   fontFamily.value = data.fontFamily || fontFamily.value
   progress.value = Number(data.progress || 0)
   progressStage.value = data.progressStage || 'queued'
@@ -1100,6 +1136,8 @@ function resetForm() {
   visualMode.value = 'best_effort'
   motionMode.value = 'auto'
   imageGenerationMode.value = 'off'
+  requestedPageCount.value = 0
+  requestedImageGenerationCount.value = 0
   fontFamily.value = 'Microsoft YaHei'
   templateFile.value = null
   sourceFile.value = null
@@ -1443,6 +1481,63 @@ p {
   color: #334155;
 }
 
+.presentation-setup {
+  margin-top: 16px;
+  padding: 16px;
+  border: 1px solid #ded6c7;
+  border-radius: 10px;
+  background: #f8f4ed;
+}
+
+.presentation-setup .field-hint {
+  margin-bottom: 0;
+}
+
+.page-count-picker {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, .8fr);
+  gap: 10px;
+}
+
+.page-count-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 62px;
+  padding: 12px 14px;
+  border: 1px solid #d2cabc;
+  border-radius: 8px;
+  color: #334155;
+  background: #fbf9f3;
+  text-align: left;
+  cursor: pointer;
+}
+
+.page-count-card__copy {
+  display: grid;
+  gap: 4px;
+}
+
+.page-count-card strong {
+  color: #0f172a;
+}
+
+.page-count-card small {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.page-count-card :deep(.n-input-number) {
+  width: 86px;
+}
+
+.page-count-card.active {
+  border-color: #b83126;
+  background: #f3eadf;
+  box-shadow: 0 0 0 3px rgba(184, 49, 38, .1);
+}
+
 .font-family-control {
   display: flex;
   align-items: center;
@@ -1591,34 +1686,14 @@ p {
   background: #f8f4ed;
 }
 
-.template-selector summary {
+.template-selector__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
   min-height: 70px;
   padding: 12px 16px;
-  cursor: pointer;
-  list-style: none;
-}
-
-.template-selector summary::-webkit-details-marker {
-  display: none;
-}
-
-.template-selector summary::after {
-  content: '＋';
-  order: 3;
-  color: #8f2a22;
-  font-size: 20px;
-}
-
-.template-selector[open] summary {
   border-bottom: 1px solid #ded6c7;
-}
-
-.template-selector[open] summary::after {
-  content: '−';
 }
 
 .template-selector__title {
@@ -1681,6 +1756,34 @@ p {
   color: #8f2a22;
   font-size: 12px;
   font-weight: 700;
+}
+
+.image-count-control {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid #ded6c7;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, .52);
+}
+
+.image-count-control > span:first-child {
+  display: grid;
+  flex: 1;
+  gap: 2px;
+  color: #0f172a;
+}
+
+.image-count-control small,
+.image-count-control__unit {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.image-count-control :deep(.n-input-number) {
+  width: 78px;
 }
 
 .template-picker {
@@ -2241,7 +2344,6 @@ p {
   align-items: flex-start;
 }
 
-.template-selector summary:focus-visible,
 .file-box:focus-within {
   outline: 3px solid rgba(37, 99, 235, .28);
   outline-offset: 3px;
@@ -2867,7 +2969,7 @@ p {
     padding: 14px;
   }
 
-  .template-selector summary {
+  .template-selector__header {
     min-height: 64px;
     padding: 10px 13px;
     gap: 10px;
@@ -3009,6 +3111,10 @@ p {
   .file-box,
   .output-format-card {
     min-height: 44px;
+  }
+
+  .page-count-picker {
+    grid-template-columns: 1fr;
   }
 }
 </style>

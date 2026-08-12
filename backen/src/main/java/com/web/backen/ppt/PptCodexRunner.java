@@ -344,7 +344,7 @@ public class PptCodexRunner {
                 If revising, return the complete revised deck, preserving unaffected good pages.
                 Finish only after valid JSON exists at exactly ./output/agent-plan.json.
                 """.formatted(session.getTemplateKey(), session.getFontFamily(), session.getMotionMode(),
-                session.getVisualMode(), session.getResearchMode(), requestedPageCountInstruction(session.getPrompt()));
+                session.getVisualMode(), session.getResearchMode(), requestedPageCountInstruction(session));
     }
 
     public void finalizeExisting(PptGenerationSession session, BiConsumer<String, Map<String, Object>> events)
@@ -377,7 +377,7 @@ public class PptCodexRunner {
             Map<String, Object> payload = Map.of(
                     "prompt", trimForVisualSearch(session.getPrompt()),
                     "maxImages", 6,
-                    "maxQueries", runtime.braveImagesMaxQueries());
+                    "maxQueries", 3);
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(request.toFile(), payload);
             events.accept("researching", Map.of("progress", 7, "message", "正在通过受控搜索查找相关图片"));
 
@@ -385,10 +385,6 @@ public class PptCodexRunner {
                     "--max-old-space-size=" + config.getAgentNodeMaxOldSpaceMb(),
                     script.toString(), request.toString(), staging.toString());
             Map<String, String> env = new LinkedHashMap<>();
-            putIfConfigured(env, "PPT_AGENT_BRAVE_IMAGES_ENDPOINT", runtime.braveImagesEndpoint());
-            putIfConfigured(env, "PPT_AGENT_BRAVE_IMAGES_KEY", runtime.braveImagesKey());
-            env.put("PPT_AGENT_BRAVE_IMAGES_COUNT", Integer.toString(runtime.braveImagesCount()));
-            env.put("PPT_AGENT_BRAVE_IMAGES_MAX_QUERIES", Integer.toString(runtime.braveImagesMaxQueries()));
             putIfConfigured(env, "PPT_AGENT_TAVILY_ENDPOINT", runtime.tavilyUrl());
             putIfConfigured(env, "PPT_AGENT_TAVILY_KEY", runtime.tavilyKey());
             putIfConfigured(env, "PPT_AGENT_PROXY_URL", outboundProxyUrl());
@@ -907,9 +903,9 @@ public class PptCodexRunner {
                 source-grounded material. In prefer mode, use them as the first visual option where semantically suitable.
                 They are not factual sources: never display a source URL/citation for them and never add text to them.
                 If ./input/web-images/ exists, it contains server-downloaded, validation-passed search candidates plus
-                image-assets.json. Prefer topical uploaded/extracted figures and explicitly licensed assets. Brave-indexed
-                candidates have rightsStatus=unverified: use them only when clearly relevant, retain their source metadata
-                in page notes, and never describe them as licensed. Do not display a bibliography page.
+                image-assets.json. Prefer topical uploaded/extracted figures and explicitly licensed assets. Search-indexed
+                candidates may have rightsStatus=unverified: use them only when clearly relevant, retain their source metadata
+                in page notes, and never describe unverified items as licensed. Do not display a bibliography page.
                 Work only inside this disposable workspace. Create the final self-contained project at ./deck with exactly
                 one ./deck/deck.pptd, ./deck/pages/*.page, and ./deck/media/ as needed. Produce 3-30 pages. %s
                 Do not run export_pptx.py, browser tools, package managers, network downloaders, or create scripts/binaries.
@@ -923,10 +919,16 @@ public class PptCodexRunner {
                 When a custom template exists at ./input/template.pptx, use it as the visual reference as described by the Skill.
                 Finish only after the complete PPTD project is present. The server will export and render it using fixed vendored code.
                 """.formatted(session.getTemplateKey(), session.getFontFamily(), session.getResearchMode(), session.getImageGenerationMode(),
-                requestedPageCountInstruction(session.getPrompt()));
+                requestedPageCountInstruction(session));
     }
 
-    private String requestedPageCountInstruction(String request) {
+    private String requestedPageCountInstruction(PptGenerationSession session) {
+        int explicitCount = session == null ? 0 : session.getRequestedPageCount();
+        if (explicitCount > 0) {
+            return "The user selected " + explicitCount + " pages: create exactly " + explicitCount
+                    + " pages, including cover and final page.";
+        }
+        String request = session == null ? "" : session.getPrompt();
         if (request == null || request.isBlank()) return "Choose an appropriate page count from the request.";
         java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(?i)(?<!\\d)([3-9]|[12]\\d|30)\\s*(?:页(?:PPT|演示文稿|幻灯片)?|slides?)")
                 .matcher(request);

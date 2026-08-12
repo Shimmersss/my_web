@@ -21,6 +21,10 @@ public class PptGenerationSession {
     private String motionMode = "auto";
     /** off | supplement | prefer. PPTX-only; HTML keeps its existing visual pipeline. */
     private String imageGenerationMode = "off";
+    /** 0 means let the author choose an appropriate page count; otherwise 3-30. */
+    private int requestedPageCount;
+    /** User-selected bounded number of GPT Image 2 assets; 0 uses the mode default. */
+    private int requestedImageGenerationCount;
     private String fontFamily = "Microsoft YaHei";
     private String templateFileName;
     private int extractionPercent = 50;
@@ -93,6 +97,10 @@ public class PptGenerationSession {
                 ? imageGenerationMode : "off";
     }
     public void setImageGenerationMode(String imageGenerationMode) { this.imageGenerationMode = imageGenerationMode; touch(); }
+    public int getRequestedPageCount() { return requestedPageCount >= 3 && requestedPageCount <= 30 ? requestedPageCount : 0; }
+    public void setRequestedPageCount(int requestedPageCount) { this.requestedPageCount = requestedPageCount; touch(); }
+    public int getRequestedImageGenerationCount() { return Math.max(0, requestedImageGenerationCount); }
+    public void setRequestedImageGenerationCount(int requestedImageGenerationCount) { this.requestedImageGenerationCount = Math.max(0, requestedImageGenerationCount); touch(); }
     public String getFontFamily() { return fontFamily == null || fontFamily.isBlank() ? "Microsoft YaHei" : fontFamily; }
     public void setFontFamily(String fontFamily) { this.fontFamily = fontFamily; touch(); }
     public String getTemplateFileName() { return templateFileName; }

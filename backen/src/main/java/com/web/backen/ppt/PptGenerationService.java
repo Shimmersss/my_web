@@ -274,6 +274,17 @@ public class PptGenerationService {
                                            String clientRequestId, String outputFormat, String researchMode,
                                            String visualMode, String fontFamily, String imageGenerationMode,
                                            String motionMode) throws IOException {
+        return createTask(prompt, templateKey, extractionPercent, templateFile, sourceFile, user,
+                clientRequestId, outputFormat, researchMode, visualMode, fontFamily, imageGenerationMode,
+                motionMode, 0, 0);
+    }
+
+    public PptGenerationSession createTask(String prompt, String templateKey, int extractionPercent,
+                                           MultipartFile templateFile, MultipartFile sourceFile, AuthUser user,
+                                           String clientRequestId, String outputFormat, String researchMode,
+                                           String visualMode, String fontFamily, String imageGenerationMode,
+                                           String motionMode, Integer requestedPageCount,
+                                           Integer requestedImageGenerationCount) throws IOException {
         assertDeploymentNotLocked();
         String cleanPrompt = validatePrompt(prompt);
         String normalizedOutputFormat = normalizeOutputFormat(outputFormat);
@@ -307,6 +318,9 @@ public class PptGenerationService {
         session.setVisualMode(normalizeVisualMode(visualMode));
         session.setMotionMode(normalizeMotionMode(motionMode, normalizedOutputFormat));
         session.setImageGenerationMode(normalizeImageGenerationMode(imageGenerationMode, normalizedOutputFormat));
+        session.setRequestedPageCount(normalizeRequestedPageCount(requestedPageCount));
+        session.setRequestedImageGenerationCount(normalizeRequestedImageGenerationCount(
+                requestedImageGenerationCount, session.getImageGenerationMode(), normalizedOutputFormat));
         session.setFontFamily(normalizeFontFamily(fontFamily));
         session.setQuotaRequired(user != null && quotaService != null && !user.isRoot());
         session.setExtractionPercent(100);
@@ -372,6 +386,8 @@ public class PptGenerationService {
         session.setVisualMode(original.getVisualMode());
         session.setMotionMode(original.getMotionMode());
         session.setImageGenerationMode(original.getImageGenerationMode());
+        session.setRequestedPageCount(original.getRequestedPageCount());
+        session.setRequestedImageGenerationCount(original.getRequestedImageGenerationCount());
         session.setFontFamily(original.getFontFamily());
         session.setTemplateFileName(original.getTemplateFileName());
         session.setPaperFileName(original.getPaperFileName());
@@ -458,7 +474,8 @@ public class PptGenerationService {
 
     private int requestedImageGenerationCount(PptGenerationSession session) {
         if (runtimeConfig == null || session == null || !"pptx".equals(session.getOutputFormat())) return 0;
-        return PptImageGenerationService.requestedImageCount(session.getImageGenerationMode(), runtimeConfig.imageGenerationMaxImages());
+        return PptImageGenerationService.requestedImageCount(session.getImageGenerationMode(),
+                runtimeConfig.imageGenerationMaxImages(), session.getRequestedImageGenerationCount());
     }
 
     private void queue(PptGenerationSession session, String claimKey, String message) {
@@ -906,6 +923,27 @@ public class PptGenerationService {
         // HTML Codex plans use the controlled visual-search prefetcher; paid Images API
         // generation remains a PPTX-only option until its HTML credit/UI contract exists.
         return "pptx".equals(outputFormat) ? value : "off";
+    }
+
+    private int normalizeRequestedPageCount(Integer requestedPageCount) {
+        if (requestedPageCount == null || requestedPageCount == 0) return 0;
+        if (requestedPageCount < 3 || requestedPageCount > 30) {
+            throw new IllegalArgumentException("PPT 页数请设置在 3 到 30 页之间");
+        }
+        return requestedPageCount;
+    }
+
+    private int normalizeRequestedImageGenerationCount(Integer requestedCount, String mode, String outputFormat) {
+        if (!"pptx".equals(outputFormat) || "off".equals(mode) || requestedCount == null || requestedCount == 0) return 0;
+        if (requestedCount < 1 || requestedCount > 4) {
+            throw new IllegalArgumentException("AI 生图数量请设置在 1 到 4 张之间");
+        }
+        int configuredMaximum = runtimeConfig == null ? 4 : Math.max(1, Math.min(4, runtimeConfig.imageGenerationMaxImages()));
+        int modeMaximum = "supplement".equals(mode) ? Math.min(2, configuredMaximum) : configuredMaximum;
+        if (requestedCount > modeMaximum) {
+            throw new IllegalArgumentException("当前 AI 生图模式最多可生成 " + modeMaximum + " 张");
+        }
+        return requestedCount;
     }
 
     private String normalizeFontFamily(String fontFamily) {

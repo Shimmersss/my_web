@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   downloadResearchAssets,
-  normalizeBraveImageQuery,
+  normalizeImageQuery,
   searchVisualAssets
 } from './research.mjs';
 
@@ -26,7 +26,7 @@ export function visualQueriesFromPrompt(prompt, maxQueries = 3) {
   const queries = [];
   const seen = new Set();
   for (const candidate of candidates) {
-    const query = normalizeBraveImageQuery(candidate);
+    const query = normalizeImageQuery(candidate);
     const key = query.toLowerCase();
     if (!query || seen.has(key)) continue;
     seen.add(key);

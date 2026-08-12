@@ -665,8 +665,7 @@ async function main() {
 
   const researchSkill = await readText(path.join(root, '.agents/skills/research-presentation/SKILL.md'));
   const formatSkill = await readText(path.join(root, `.agents/skills/${job.outputFormat === 'html' ? 'create-html-presentation' : 'create-template-pptx'}/SKILL.md`));
-  const imageSearchSkill = await readText(path.join(root, '.agents/skills/images-search/SKILL.md'));
-  const skillSystem = `${researchSkill}\n\n${formatSkill}\n\n${imageSearchSkill}\n\nThe service executes image search itself; never emit curl commands, API keys, or remote download instructions. Brave results are indexed candidates with unverified reuse rights unless a separate license is recorded. You are the presentation Agent. Return the exact JSON action requested. Do not expose internal reasoning.`;
+  const skillSystem = `${researchSkill}\n\n${formatSkill}\n\nThe service executes image search itself; never emit curl commands, API keys, or remote download instructions. Search-indexed images may have unverified reuse rights unless a separate license is recorded. You are the presentation Agent. Return the exact JSON action requested. Do not expose internal reasoning.`;
   const sourceText = job.sourceTextFile ? (await readText(job.sourceTextFile)).slice(0, 40_000) : '';
 
   emit('researching', { progress: 10, message: '正在理解主题并自主调用检索工具' });

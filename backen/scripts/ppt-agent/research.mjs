@@ -11,10 +11,7 @@ const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const MAX_IMAGE_PIXELS = 16_000_000;
 const MAX_REDIRECTS = 3;
-const BRAVE_IMAGES_ENDPOINT = 'https://api.search.brave.com/res/v1/images/search';
-const BRAVE_RIGHTS_NOTE = 'Brave indexed image; reuse rights require verification';
 const ALLOWED_SEARCH_HOSTS = new Set([
-  'api.search.brave.com',
   'api.tavily.com',
   'api.openalex.org',
   'api.crossref.org',
@@ -25,7 +22,6 @@ const ALLOWED_SEARCH_HOSTS = new Set([
   'unsplash.com'
 ]);
 const TRUSTED_SYNTHETIC_ASSET_HOSTS = new Set([
-  'imgs.search.brave.com',
   'api.openverse.org',
   'commons.wikimedia.org',
   'upload.wikimedia.org',
@@ -223,8 +219,6 @@ async function fetchImage(url) {
   let dispatcher;
   let resolution = await resolveResearchAsset(url);
   let current = resolution.endpoint;
-  const lockedAssetHost = current.hostname.toLowerCase() === 'imgs.search.brave.com'
-    ? current.hostname.toLowerCase() : '';
   try {
     for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
       recordToolCall('image-fetch');
@@ -246,9 +240,6 @@ async function fetchImage(url) {
         await dispatcher?.close().catch(() => {});
         dispatcher = undefined;
         const next = await resolveResearchAsset(new URL(location, current));
-        if (lockedAssetHost && next.endpoint.hostname.toLowerCase() !== lockedAssetHost) {
-          throw new Error('Brave 图片代理不允许跨域重定向');
-        }
         resolution = next;
         current = resolution.endpoint;
         continue;
@@ -706,7 +697,7 @@ async function openverseImages(query) {
   })).filter(item => item.url && item.sourceUrl && item.license);
 }
 
-export function normalizeBraveImageQuery(value) {
+export function normalizeImageQuery(value) {
   const compact = String(value || '').replace(/\s+/g, ' ').trim();
   if (!compact) return '';
   const words = compact.split(' ').slice(0, 50).join(' ');
@@ -716,62 +707,6 @@ export function normalizeBraveImageQuery(value) {
 function boundedInteger(value, fallback, min, max) {
   const parsed = Number.parseInt(String(value ?? ''), 10);
   return Number.isFinite(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback;
-}
-
-/** Map Brave's index metadata without implying that the result has a reuse license. */
-export function parseBraveImageResults(payload, query) {
-  const mightBeOffensive = payload?.extra?.might_be_offensive === true;
-  if (mightBeOffensive) return [];
-  return (Array.isArray(payload?.results) ? payload.results : []).map(item => {
-    const thumbnailUrl = safeProvenanceUrl(item?.thumbnail?.src);
-    let thumbnailHost = '';
-    try { thumbnailHost = new URL(thumbnailUrl).hostname.toLowerCase(); } catch { /* filtered below */ }
-    const sourceUrl = safeProvenanceUrl(item?.url);
-    const originalUrl = safeProvenanceUrl(item?.properties?.url);
-    let sourceHost = text(item?.source);
-    try { sourceHost ||= new URL(sourceUrl).hostname; } catch { /* filtered below */ }
-    const confidence = ['high', 'medium', 'low'].includes(String(item?.confidence || '').toLowerCase())
-      ? String(item.confidence).toLowerCase() : '';
-    return {
-      url: thumbnailHost === 'imgs.search.brave.com' ? thumbnailUrl : '',
-      sourceUrl,
-      originalUrl,
-      title: text(item?.title || item?.source || 'Brave image result').slice(0, 240),
-      description: text(`Indexed by Brave Images from ${sourceHost}.`).slice(0, 600),
-      searchQuery: normalizeBraveImageQuery(query),
-      provider: 'brave-images',
-      confidence,
-      mightBeOffensive,
-      width: boundedInteger(item?.properties?.width, 0, 0, 100_000),
-      height: boundedInteger(item?.properties?.height, 0, 0, 100_000),
-      thumbnailWidth: boundedInteger(item?.thumbnail?.width, 0, 0, 100_000),
-      thumbnailHeight: boundedInteger(item?.thumbnail?.height, 0, 0, 100_000),
-      rightsStatus: 'unverified',
-      rightsNote: BRAVE_RIGHTS_NOTE,
-      license: ''
-    };
-  }).filter(item => item.url && item.sourceUrl && item.confidence !== 'low');
-}
-
-export async function braveImages(query, { count } = {}) {
-  const key = String(process.env.PPT_AGENT_BRAVE_IMAGES_KEY || process.env.BRAVE_SEARCH_API_KEY || '').trim();
-  const normalizedQuery = normalizeBraveImageQuery(query);
-  if (!key || !normalizedQuery) return [];
-  const endpoint = safeEndpoint(BRAVE_IMAGES_ENDPOINT);
-  endpoint.searchParams.set('q', normalizedQuery);
-  endpoint.searchParams.set('country', 'ALL');
-  endpoint.searchParams.set('search_lang', /[\u3400-\u9fff]/u.test(normalizedQuery) ? 'zh-hans' : 'en');
-  endpoint.searchParams.set('count', String(boundedInteger(
-    count ?? process.env.PPT_AGENT_BRAVE_IMAGES_COUNT,
-    20,
-    1,
-    50
-  )));
-  endpoint.searchParams.set('safesearch', 'strict');
-  const response = await fetchJson(endpoint, {
-    headers: { 'X-Subscription-Token': key }
-  });
-  return parseBraveImageResults(response, normalizedQuery);
 }
 
 function contextualPhotoQuery(query) {
@@ -891,16 +826,13 @@ async function searchImages(query) {
   // Commons and Openverse are complementary, not mutually exclusive. Stopping
   // after the first two Commons hits left image-rich decks with one or two
   // usable assets and encouraged repetition across every content page.
-  const [brave, rawCommons, rawOpenverse] = await Promise.all([
-    braveImages(query).catch(() => []),
+  const [rawCommons, rawOpenverse] = await Promise.all([
     wikimediaImages(query).catch(() => []),
     openverseImages(query).catch(() => [])
   ]);
   const commons = rawCommons
     .filter(asset => matchesSpecificWorkQuery(query, asset) && isUsefulSpecificWorkAsset(asset));
   const openverse = rawOpenverse
-    .filter(asset => matchesSpecificWorkQuery(query, asset) && isUsefulSpecificWorkAsset(asset));
-  const relevantBrave = brave
     .filter(asset => matchesSpecificWorkQuery(query, asset) && isUsefulSpecificWorkAsset(asset));
   let contextual = [];
   const contextualQuery = contextualPhotoQuery(query);
@@ -916,7 +848,7 @@ async function searchImages(query) {
       searchQuery: String(query || '').trim()
     }));
   }
-  const assets = roundRobin([commons, openverse, tavilyResult.assets || [], relevantBrave, contextual])
+  const assets = roundRobin([commons, openverse, tavilyResult.assets || [], contextual])
     .filter((item, index, all) => item?.url && all.findIndex(other => other.url === item.url) === index)
     .slice(0, 8);
   // Unsplash's unauthenticated search rendition can carry visible provider
@@ -928,7 +860,7 @@ export async function searchVisualAssets(queries, { maxQueries = 3, maxAssets = 
   const buckets = [];
   const failures = [];
   const queryLimit = boundedInteger(
-    Math.min(Number(maxQueries) || 1, boundedInteger(process.env.PPT_AGENT_BRAVE_IMAGES_MAX_QUERIES, 3, 1, 3)),
+    Math.min(Number(maxQueries) || 1, 3),
     1,
     1,
     3
@@ -1013,8 +945,7 @@ export async function researchPresentation(queries, { includeWeb = true, maxSour
     sources: dedupe(results, maxSources),
     assets,
     searchCount: tasks.length,
-    degraded: includeWeb && !process.env.PPT_AGENT_TAVILY_KEY
-      && !process.env.PPT_AGENT_BRAVE_IMAGES_KEY && !process.env.BRAVE_SEARCH_API_KEY,
+    degraded: includeWeb && !process.env.PPT_AGENT_TAVILY_KEY,
     failures: settled.filter(item => item.status === 'rejected').map(item => String(item.reason?.message || item.reason)).slice(0, 8)
   };
 }

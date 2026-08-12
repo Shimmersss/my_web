@@ -10,5 +10,6 @@
   {"key":"html-editorial-ink","name":"Editorial Ink","design":"editorial-ink","palette":["D9482B","F5F1E8","A16207","DED6C8","171717"],"description":"纸刊留白、衬线标题与编辑部式红色批注，适合洞察和品牌故事"},
   {"key":"html-neon-grid","name":"Neon Grid","design":"neon-grid","palette":["2DD4BF","070A13","8B5CF6","172033","ECFEFF"],"description":"深色网格与青色霓虹界面，适合 AI、数据产品和技术发布"},
   {"key":"html-terminal-green","name":"Terminal Green","design":"terminal-green","palette":["4ADE80","07120D","FACC15","10261A","D1FAE5"],"description":"终端式等宽字体与命令行节奏，适合开发者、架构和开源项目"},
-  {"key":"html-gallery-cream","name":"Gallery Cream","design":"gallery-cream","palette":["9F1239","F4EFE5","C08457","E7DAC9","3B2524"],"description":"画廊米白、酒红强调与高雅衬线排版，适合文化、设计和高端品牌"}
+  {"key":"html-gallery-cream","name":"Gallery Cream","design":"gallery-cream","palette":["9F1239","F4EFE5","C08457","E7DAC9","3B2524"],"description":"画廊米白、酒红强调与高雅衬线排版，适合文化、设计和高端品牌"},
+  {"key":"html-roman-forum","name":"Roman Forum","design":"roman-forum","palette":["A4432F","F2EAD8","B99352","D8C6A6","2F2923"],"description":"古罗马石刻、赤陶红与柱式秩序，适合历史、文化、制度和经典叙事"}
 ]

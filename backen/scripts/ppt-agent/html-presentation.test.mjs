@@ -184,6 +184,37 @@ test('HTML runtime preserves Reveal blackout and exposes reduced-motion, print a
   }
 });
 
+test('Roman Forum is a distinct classical theme with visible inscription motion', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'ppt-agent-html-roman-'));
+  const outputFile = path.join(directory, 'output.html');
+  try {
+    await createHtmlPresentation({
+      outputFile,
+      plan: {
+        title: '罗马制度与城市',
+        slides: [
+          { type: 'cover', layout: 'cover', section: 'ROMA', title: '从共和到帝国', headline: '制度、空间与公共生活' },
+          { type: 'content', layout: 'process', section: 'CIVITAS', title: '公共秩序', bullets: ['元老院', '公民大会', '行政官'] },
+          { type: 'closing', layout: 'closing', title: '感谢观看' }
+        ]
+      },
+      sourceImages: [],
+      templateKey: 'html-roman-forum',
+      themeFile: path.resolve('../.agents/skills/create-html-presentation/assets/themes.json'),
+      motionMode: 'expressive'
+    });
+    const html = await fs.readFile(outputFile, 'utf8');
+    assert.match(html, /body class="theme-roman"/);
+    assert.match(html, /layout-cover \.cover-copy::after\{content:"SPQR"/);
+    assert.match(html, /repeating-linear-gradient\(90deg,var\(--accent\)/);
+    assert.match(html, /@keyframes deck-inscription/);
+    assert.match(html, /@keyframes deck-draw/);
+    assert.match(html, /class="fragment fade-up" data-fragment-index="0"/);
+  } finally {
+    await fs.rm(directory, { recursive: true, force: true });
+  }
+});
+
 test('theme layout allowlist safely falls back when a requested semantic layout is unavailable', async () => {
   const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'ppt-agent-html-theme-guard-'));
   const outputFile = path.join(directory, 'output.html');

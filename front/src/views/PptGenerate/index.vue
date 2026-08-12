@@ -170,7 +170,7 @@
                       : selectedTemplate?.category === 'github'
                       ? '这里展示的是来自 GitHub 成品 PPTX 的真实 5 页样稿；生成时会保留该模板的构图语言并用可编辑内容替换示例文字。'
                       : outputFormat === 'html'
-                        ? '这里展示的是由 reveal.js HTML 内核真实渲染出的 5 页样稿；生成后支持键盘翻页、全屏和网页二次编辑。'
+                        ? '卡片展示的是 reveal.js 在动效结束后的 5 页真实截图；生成完成后，结果页顶部会提供可点击、可翻页的动态交互演示。'
                       : '这里展示的是所选源模板真实渲染出的 5 页样稿；Agent 会逐页选择源版式并在原位编辑。' }}
                   </p>
                   <p v-if="selectedTemplate?.usageNote" class="template-showcase__license-note">授权提示：{{ selectedTemplate.usageNote }}</p>
@@ -370,6 +370,10 @@
               class="preview-alert"
             >已保留可下载的成品和真实预览。建议查看缩略图后，按下方“继续修改”修复文字截断、版式或素材问题。</n-alert>
             <n-alert v-if="previewError" type="warning" :title="previewError" class="preview-alert" />
+            <div v-if="htmlPreviewUrl" class="html-preview-stage">
+              <iframe :src="htmlPreviewUrl" title="reveal.js HTML 演示预览" class="html-preview-frame" loading="lazy" referrerpolicy="no-referrer" sandbox="allow-scripts allow-presentation"></iframe>
+              <div class="html-preview-stage__caption"><strong>动态交互预览（优先）</strong><span>点击画面后按 ← / → 或空格翻页，查看入场、分步呈现与转场；按 L 可切换低功耗静态模式。</span></div>
+            </div>
             <div v-if="previewLoading && !previewSlides.length" class="preview-empty">正在生成网页预览…</div>
             <div v-else-if="previewSlides.length" class="preview-workbench">
               <div class="preview-rail" aria-label="幻灯片缩略图">
@@ -399,11 +403,6 @@
               </div>
             </div>
             <div v-else class="preview-empty">此任务暂未生成可用的网页预览，但仍可下载 {{ outputFormatLabel(activeTask) }}。</div>
-
-            <div v-if="htmlPreviewUrl" class="html-preview-stage">
-              <iframe :src="htmlPreviewUrl" title="reveal.js HTML 演示预览" class="html-preview-frame" loading="lazy" referrerpolicy="no-referrer" sandbox="allow-scripts allow-presentation"></iframe>
-              <div class="html-preview-stage__caption"><strong>隔离交互预览</strong><span>沙箱中支持翻页与全屏，不共享站点会话。</span></div>
-            </div>
 
             <section v-if="activeTask?.editorAvailable" class="revision-box">
               <div class="revision-box__heading"><div><h3>PPTD 项目编辑</h3><p>在画布中直接改文字和版式；点击编辑器内的保存会创建新版本，不调用 Codex、不扣 LLM credits。</p></div><n-tag size="small" type="success">v{{ activeTask.version || 1 }}</n-tag></div>
@@ -1247,7 +1246,8 @@ function defaultTemplates() {
     { key: 'html-editorial-ink', name: 'Editorial Ink', description: '纸刊留白、衬线标题与编辑部式红色批注，适合洞察和品牌故事', palette: ['D9482B', 'F5F1E8', 'A16207', 'DED6C8', '171717'], source: 'Agent HTML theme asset', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'editorial-ink', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
     { key: 'html-neon-grid', name: 'Neon Grid', description: '深色网格与青色霓虹界面，适合 AI、数据产品和技术发布', palette: ['2DD4BF', '070A13', '8B5CF6', '172033', 'ECFEFF'], source: 'Agent HTML theme asset', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'neon-grid', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
     { key: 'html-terminal-green', name: 'Terminal Green', description: '终端式等宽字体与命令行节奏，适合开发者、架构和开源项目', palette: ['4ADE80', '07120D', 'FACC15', '10261A', 'D1FAE5'], source: 'Agent HTML theme asset', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'terminal-green', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
-    { key: 'html-gallery-cream', name: 'Gallery Cream', description: '画廊米白、酒红强调与高雅衬线排版，适合文化、设计和高端品牌', palette: ['9F1239', 'F4EFE5', 'C08457', 'E7DAC9', '3B2524'], source: 'Agent HTML theme asset', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'gallery-cream', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] }
+    { key: 'html-gallery-cream', name: 'Gallery Cream', description: '画廊米白、酒红强调与高雅衬线排版，适合文化、设计和高端品牌', palette: ['9F1239', 'F4EFE5', 'C08457', 'E7DAC9', '3B2524'], source: 'Agent HTML theme asset', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'gallery-cream', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', formats: ['html'] },
+    { key: 'html-roman-forum', name: 'Roman Forum', description: '古罗马石刻、赤陶红与柱式秩序，适合历史、文化、制度和经典叙事', palette: ['A4432F', 'F2EAD8', 'B99352', 'D8C6A6', '2F2923'], source: 'Agent HTML theme asset', license: 'MIT', sourceUrl: 'https://github.com/hakimel/reveal.js', design: 'roman-forum', category: 'html', categoryLabel: 'HTML 交互主题', complexity: 'rich', recommendedFor: ['历史叙事', '文化研究', '制度与经典'], motionModes: ['auto', 'subtle', 'expressive', 'off'], formats: ['html'] }
   ].filter(template => template.category === 'pptd' || template.category === 'html')
     .map(template => ({ formats: template.category === 'html' ? ['html'] : ['pptx'], ...template }))
 }

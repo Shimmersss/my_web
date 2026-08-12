@@ -1,9 +1,9 @@
 {
   "engine": "agent-reveal.js",
   "slideCount": 5,
-  "generatedAt": "2026-08-12T09:14:45.233Z",
-  "themeSha256": "1ba02c770df8f7762c274504555bf76e62d0d217f3cf395d4da970c7a18ef574",
-  "rendererSha256": "8921f8501027ad4b18b9390a82bcd44e9e95eaa0069210ab7143ab3aa0678174",
+  "generatedAt": "2026-08-12T12:28:42.484Z",
+  "themeSha256": "cdae2f02f5d75205a060a753a7ec62f7dd5d01808c5f197335c7693f28e8d3d7",
+  "rendererSha256": "069ed167d9859064e755d371be83e31114222a176fdeb7e9a1711ffc0a6d81ec",
   "revealVersion": "6.0.1",
   "templates": {
     "html-reveal-black": [
@@ -89,6 +89,13 @@
       "/html-template-previews/html-gallery-cream/slide-3.png",
       "/html-template-previews/html-gallery-cream/slide-4.png",
       "/html-template-previews/html-gallery-cream/slide-5.png"
+    ],
+    "html-roman-forum": [
+      "/html-template-previews/html-roman-forum/slide-1.png",
+      "/html-template-previews/html-roman-forum/slide-2.png",
+      "/html-template-previews/html-roman-forum/slide-3.png",
+      "/html-template-previews/html-roman-forum/slide-4.png",
+      "/html-template-previews/html-roman-forum/slide-5.png"
     ]
   }
 }

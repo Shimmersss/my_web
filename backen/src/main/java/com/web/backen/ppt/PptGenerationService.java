@@ -169,7 +169,9 @@ public class PptGenerationService {
                 htmlTemplate("html-terminal-green", "Terminal Green", "终端式等宽字体与命令行节奏，适合开发者、架构和开源项目",
                         List.of("4ADE80", "07120D", "FACC15", "10261A", "D1FAE5"), "terminal-green"),
                 htmlTemplate("html-gallery-cream", "Gallery Cream", "画廊米白、酒红强调与高雅衬线排版，适合文化、设计和高端品牌",
-                        List.of("9F1239", "F4EFE5", "C08457", "E7DAC9", "3B2524"), "gallery-cream")
+                        List.of("9F1239", "F4EFE5", "C08457", "E7DAC9", "3B2524"), "gallery-cream"),
+                htmlTemplate("html-roman-forum", "Roman Forum", "古罗马石刻、赤陶红与柱式秩序，适合历史、文化、制度和经典叙事",
+                        List.of("A4432F", "F2EAD8", "B99352", "D8C6A6", "2F2923"), "roman-forum")
         ));
         return List.copyOf(result);
     }

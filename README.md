@@ -34,7 +34,7 @@ The translation view follows a four-state flow: upload, configure, translate and
 
 ### Materials To PPT / 通用资料转 PPT
 
-PPT 生成页支持仅提示词、仅资料、提示词 + 资料，以及可选 PPTX 视觉参考；联网研究默认开启，也可关闭。PPTX 提供约 30 套 PPTD 设计系统，HTML 提供 12 套 reveal.js 主题和自动/克制/强调/关闭四档动效。Spring Boot 管理登录、额度、队列、恢复和 SSE，固定的服务端研究模块在模型沙箱外搜索并验证图片。结果页直接显示 LibreOffice/Chromium 的真实 PNG、来源与 QA；二次修改只需要自然语言要求，并保留版本链。
+PPT 生成页支持仅提示词、仅资料、提示词 + 资料，以及可选 PPTX 视觉参考；联网研究默认开启，也可关闭。PPTX 提供约 30 套 PPTD 设计系统，HTML 提供 13 套 reveal.js 主题（含独立的 Roman Forum 古典视觉系统）和自动/克制/强调/关闭四档动效。Spring Boot 管理登录、额度、队列、恢复和 SSE，固定的服务端研究模块在模型沙箱外搜索并验证图片。结果页优先展示可操作的动态 HTML 演示，再提供 Chromium 静态质检图；二次修改只需要自然语言要求，并保留版本链。
 
 The PPT generator accepts a prompt or common source materials plus an optional PPTX template. Extraction is automatic; jobs run in a single backend worker queue, expose a browser preview/editor after completion, and produce either editable `.pptx` or self-contained `.html` files. Revisions create a new task while preserving the original source, template, and output format.
 

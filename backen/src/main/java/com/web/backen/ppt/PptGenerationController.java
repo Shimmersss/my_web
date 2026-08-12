@@ -50,6 +50,7 @@ public class PptGenerationController {
                                         @RequestParam(value = "outputFormat", required = false, defaultValue = "pptx") String outputFormat,
                                         @RequestParam(value = "researchMode", required = false, defaultValue = "auto") String researchMode,
                                         @RequestParam(value = "visualMode", required = false, defaultValue = "best_effort") String visualMode,
+                                        @RequestParam(value = "motionMode", required = false, defaultValue = "auto") String motionMode,
                                         @RequestParam(value = "imageGenerationMode", required = false, defaultValue = "off") String imageGenerationMode,
                                         @RequestParam(value = "fontFamily", required = false, defaultValue = "Microsoft YaHei") String fontFamily,
                                         @RequestParam(value = "templateFile", required = false) MultipartFile templateFile,
@@ -68,7 +69,8 @@ public class PptGenerationController {
         try {
             MultipartFile materialFile = sourceFile != null && !sourceFile.isEmpty() ? sourceFile : legacyPaperFile;
             PptGenerationSession session = pptGenerationService.createTask(prompt, templateKey, 100,
-                    templateFile, materialFile, user, clientRequestId, outputFormat, researchMode, visualMode, fontFamily, imageGenerationMode);
+                    templateFile, materialFile, user, clientRequestId, outputFormat, researchMode, visualMode,
+                    fontFamily, imageGenerationMode, motionMode);
             Map<String, Object> data = toSummary(session);
             data.put("accessToken", session.getAccessToken());
             data.put("credits", quotaService.balance(user.id()));
@@ -400,6 +402,7 @@ public class PptGenerationController {
         data.put("outputFormat", session.getOutputFormat());
         data.put("researchMode", session.getResearchMode());
         data.put("visualMode", session.getVisualMode());
+        data.put("motionMode", session.getMotionMode());
         data.put("imageGenerationMode", session.getImageGenerationMode());
         data.put("fontFamily", session.getFontFamily());
         data.put("templateFileName", session.getTemplateFileName() == null ? "" : session.getTemplateFileName());

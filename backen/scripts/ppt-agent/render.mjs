@@ -187,18 +187,65 @@ export async function renderHtml(outputFile, previewDir) {
     const page = await browser.newPage({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 });
     await page.goto(`file://${outputFile}`, { waitUntil: 'load' });
     await page.waitForFunction(() => window.Reveal?.isReady?.());
-    await page.evaluate(() => window.Reveal.configure({ transition: 'none', backgroundTransition: 'none' }));
+    await page.evaluate(async () => {
+      window.Reveal.configure({ transition: 'none', backgroundTransition: 'none', autoAnimate: false });
+      document.body.classList.add('qa-final-state', 'reduce-motion');
+      await document.fonts?.ready;
+      await Promise.all([...document.images].map(image => {
+        if (image.complete) return Promise.resolve();
+        return new Promise(resolve => {
+          image.addEventListener('load', resolve, { once: true });
+          image.addEventListener('error', resolve, { once: true });
+        });
+      }));
+    });
     const count = await page.locator('.slides > section').count();
     const overflow = [];
+    const issues = [];
     for (let index = 0; index < count; index += 1) {
       await page.evaluate(i => window.Reveal.slide(i), index);
       await page.waitForTimeout(120);
       const item = page.locator('.slides > section').nth(index);
-      const hasOverflow = await item.evaluate(node => node.scrollWidth > node.clientWidth + 2 || node.scrollHeight > node.clientHeight + 2);
-      if (hasOverflow) overflow.push(index + 1);
+      const slideIssues = await item.evaluate(node => {
+        const problems = [];
+        const nodeRect = node.getBoundingClientRect();
+        if (node.scrollWidth > node.clientWidth + 2 || node.scrollHeight > node.clientHeight + 2) {
+          problems.push('section-overflow');
+        }
+        const images = [...node.querySelectorAll('img')];
+        if (images.some(image => !image.complete || image.naturalWidth <= 0 || image.naturalHeight <= 0)) {
+          problems.push('image-load');
+        }
+        const selectors = [
+          'h1', 'h2', '.kicker', '.headline', '.bullet-list', '.metric-grid',
+          '.process-track', '.timeline-track', '.comparison-grid', 'blockquote',
+          '.closing-points', '.gallery-copy', '.split-visual', '.evidence-visual'
+        ].join(',');
+        const content = [...node.querySelectorAll(selectors)].filter(element => {
+          const style = getComputedStyle(element);
+          return style.display !== 'none' && style.visibility !== 'hidden'
+            && Number(style.opacity || 1) > 0 && element.closest('section') === node;
+        });
+        for (const element of content) {
+          const rect = element.getBoundingClientRect();
+          if (rect.left < nodeRect.left - 3 || rect.right > nodeRect.right + 3
+            || rect.top < nodeRect.top - 3 || rect.bottom > nodeRect.bottom + 3) {
+            problems.push('child-bounds');
+            break;
+          }
+        }
+        const safeContent = content.filter(element => !element.matches('.split-visual,.evidence-visual'));
+        const bottom = safeContent.reduce((maximum, element) => Math.max(maximum, element.getBoundingClientRect().bottom), nodeRect.top);
+        if (bottom > nodeRect.bottom - 34) problems.push('navigation-safe');
+        return [...new Set(problems)];
+      });
+      if (slideIssues.length) {
+        overflow.push(index + 1);
+        issues.push({ slide: index + 1, reasons: slideIssues });
+      }
       await captureScreenshot(page, path.join(previewDir, `slide-${index + 1}.png`));
     }
-    return { count, overflow };
+    return { count, overflow, issues };
   } finally {
     await browser.close();
   }

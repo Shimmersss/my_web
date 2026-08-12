@@ -2,6 +2,7 @@
 
 /** Build-time static screenshots for the HTML-only reveal.js theme picker. */
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -37,12 +38,16 @@ function fixture(template) {
     palette: template.palette,
     slides: [
       { type: 'cover', title: `${template.design.toUpperCase()} THEME`, headline: 'A browser-native reveal.js presentation with its own visual language', section: 'HTML PREVIEW', theme: 'INTERACTIVE WEB DECK', layout: 'cover' },
-      { type: 'section', title: 'SECTION TITLE', headline: 'Use keyboard navigation, overview mode and responsive layout', section: 'CHAPTER 01', layout: 'statement' },
-      { type: 'content', title: 'ONE CLEAR MESSAGE', headline: 'Web-native typography and motion adapt to the browser viewport', layout: 'split', bullets: ['Responsive by default', 'Keyboard-friendly navigation', 'Standalone HTML output'] },
-      { type: 'content', title: 'EVIDENCE IN CONTEXT', headline: 'A different theme system from the editable PPTX output', layout: 'comparison', bullets: ['Browser-native slides', 'Independent theme family', 'Share with one HTML file', 'No PowerPoint canvas'] },
-      { type: 'content', title: 'READY TO PRESENT', headline: 'The final deck keeps reveal.js controls and responsive behavior', layout: 'closing', bullets: ['Open', 'Navigate', 'Present', 'Share'] }
+      { type: 'content', title: 'MEASURABLE AT A GLANCE', headline: 'Purpose-built metric composition, not a repeated bullet card', section: 'SIGNALS', layout: 'stats', bullets: ['92%:VIEWPORT FIT', '13:SEMANTIC LAYOUTS', '4:MOTION MODES', '1:OFFLINE FILE'] },
+      { type: 'content', title: 'FROM IDEA TO STAGE', headline: 'Ordered relationships receive an ordered visual grammar', section: 'FLOW', layout: 'process', bullets: ['Define the takeaway', 'Select a semantic layout', 'Render in a real browser', 'Verify every boundary'] },
+      { type: 'comparison', title: 'STRUCTURE AND EXPRESSION', headline: 'Balanced evidence keeps the contrast readable', section: 'DECISION', layout: 'comparison', leftLabel: 'STRUCTURE', rightLabel: 'EXPRESSION', bullets: ['Clear information hierarchy', 'Bounded content density', 'Theme-specific visual voice', 'Controlled motion rhythm'] },
+      { type: 'closing', title: 'READY TO PRESENT', headline: 'Open · Navigate · Present · Share', section: 'NEXT STEP', layout: 'closing', bullets: ['Standalone HTML', 'Keyboard and touch', 'Reduced-motion ready'] }
     ]
   };
+}
+
+function sha256(file) {
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
 function findChrome(requested) {
@@ -64,7 +69,17 @@ async function main() {
   const themeFile = path.resolve(SCRIPT_DIR, '../../.agents/skills/create-html-presentation/assets/themes.json');
   process.env.PPT_AGENT_CHROME = chrome;
   fs.mkdirSync(workDir, { recursive: true });
-  const manifest = { engine: 'agent-reveal.js', slideCount: 5, generatedAt: new Date().toISOString(), templates: {} };
+  const rendererFile = path.join(SCRIPT_DIR, 'ppt-agent/html-presentation.mjs');
+  const revealPackage = JSON.parse(fs.readFileSync(path.join(SCRIPT_DIR, '../node_modules/reveal.js/package.json'), 'utf8'));
+  const manifest = {
+    engine: 'agent-reveal.js',
+    slideCount: 5,
+    generatedAt: new Date().toISOString(),
+    themeSha256: sha256(themeFile),
+    rendererSha256: sha256(rendererFile),
+    revealVersion: String(revealPackage.version || ''),
+    templates: {}
+  };
   for (const template of catalog) {
     const keyDir = path.join(outputDir, template.key);
     const htmlFile = path.join(workDir, `${template.key}.html`);

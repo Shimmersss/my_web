@@ -204,8 +204,12 @@ public class PptGenerationService {
                 Map.entry("sourceUrl", sourceUrl), Map.entry("design", design),
                 Map.entry("category", formats.contains("html") ? "html" : "pptd"),
                 Map.entry("categoryLabel", categoryLabel), Map.entry("formats", formats),
-                Map.entry("complexity", "rich"), Map.entry("supports", List.of("text", "image", "metrics", "charts")),
+                Map.entry("complexity", "rich"), Map.entry("supports", formats.contains("html")
+                        ? List.of("semantic-layouts", "image-hero", "stats", "process", "comparison", "timeline", "fragments", "auto-animate", "reduced-motion")
+                        : List.of("text", "image", "metrics", "charts")),
                 Map.entry("recommendedFor", List.of("研究汇报", "商业演示", "课程展示")),
+                Map.entry("motionModes", formats.contains("html")
+                        ? List.of("auto", "subtle", "expressive", "off") : List.of()),
                 Map.entry("openSource", true), Map.entry("usageNote", usageNote));
     }
 
@@ -259,6 +263,15 @@ public class PptGenerationService {
                                            MultipartFile templateFile, MultipartFile sourceFile, AuthUser user,
                                            String clientRequestId, String outputFormat, String researchMode,
                                            String visualMode, String fontFamily, String imageGenerationMode) throws IOException {
+        return createTask(prompt, templateKey, extractionPercent, templateFile, sourceFile, user,
+                clientRequestId, outputFormat, researchMode, visualMode, fontFamily, imageGenerationMode, "auto");
+    }
+
+    public PptGenerationSession createTask(String prompt, String templateKey, int extractionPercent,
+                                           MultipartFile templateFile, MultipartFile sourceFile, AuthUser user,
+                                           String clientRequestId, String outputFormat, String researchMode,
+                                           String visualMode, String fontFamily, String imageGenerationMode,
+                                           String motionMode) throws IOException {
         assertDeploymentNotLocked();
         String cleanPrompt = validatePrompt(prompt);
         String normalizedOutputFormat = normalizeOutputFormat(outputFormat);
@@ -286,10 +299,11 @@ public class PptGenerationService {
         session.setClientRequestId(requestId.isBlank() ? null : requestId);
         session.setAccessToken(newAccessToken());
         session.setOutputFormat(normalizedOutputFormat);
-        session.setEngine("html".equals(normalizedOutputFormat) ? "html-agent" : "codex-pptd");
+        session.setEngine("html".equals(normalizedOutputFormat) ? "codex-html" : "codex-pptd");
         session.setTemplateKey(normalizeTemplateKey(templateKey, normalizedOutputFormat));
         session.setResearchMode(normalizeResearchMode(researchMode));
         session.setVisualMode(normalizeVisualMode(visualMode));
+        session.setMotionMode(normalizeMotionMode(motionMode, normalizedOutputFormat));
         session.setImageGenerationMode(normalizeImageGenerationMode(imageGenerationMode, normalizedOutputFormat));
         session.setFontFamily(normalizeFontFamily(fontFamily));
         session.setQuotaRequired(user != null && quotaService != null && !user.isRoot());
@@ -354,6 +368,7 @@ public class PptGenerationService {
         session.setParentTaskId(original.getTaskId());
         session.setResearchMode(original.getResearchMode());
         session.setVisualMode(original.getVisualMode());
+        session.setMotionMode(original.getMotionMode());
         session.setImageGenerationMode(original.getImageGenerationMode());
         session.setFontFamily(original.getFontFamily());
         session.setTemplateFileName(original.getTemplateFileName());
@@ -371,6 +386,7 @@ public class PptGenerationService {
             copyOptional(original.getTemplatePath(), session.getTemplatePath());
             copyOptional(original.getPaperPath(), session.getPaperPath());
             copyDirectoryContents(original.getImagesDir(), session.getImagesDir());
+            copyDirectoryContents(original.getTaskDir().resolve("web-images"), taskDir.resolve("web-images"));
             copyOptional(original.getAgentPlanPath(), taskDir.resolve("previous-agent-plan.json"));
             copyOptional(original.getSourcesPath(), taskDir.resolve("previous-sources.json"));
             copyOptional(original.getOutputPath(), taskDir.resolve(
@@ -655,6 +671,7 @@ public class PptGenerationService {
         session.setProgressStage("creating");
         sessions.put(taskId, session);
         copyDirectoryContents(parent.getPptdProjectDir(), session.getPptdProjectDir());
+        copyDirectoryContents(parent.getTaskDir().resolve("web-images"), taskDir.resolve("web-images"));
         for (Map<String, Object> change : normalizedChanges) {
             String relative = String.valueOf(change.get("path"));
             byte[] encoded = String.valueOf(change.get("content")).getBytes(StandardCharsets.UTF_8);
@@ -871,12 +888,21 @@ public class PptGenerationService {
         return value;
     }
 
+    private String normalizeMotionMode(String motionMode, String outputFormat) {
+        String value = motionMode == null ? "auto" : motionMode.trim().toLowerCase(Locale.ROOT);
+        if (!Set.of("auto", "subtle", "expressive", "off").contains(value)) {
+            throw new IllegalArgumentException("HTML 动效模式只能是 auto、subtle、expressive 或 off");
+        }
+        return "html".equals(outputFormat) ? value : "off";
+    }
+
     private String normalizeImageGenerationMode(String imageGenerationMode, String outputFormat) {
         String value = imageGenerationMode == null ? "off" : imageGenerationMode.trim().toLowerCase(Locale.ROOT);
         if (!Set.of("off", "supplement", "prefer").contains(value)) {
             throw new IllegalArgumentException("AI 生图模式只能是 off、supplement 或 prefer");
         }
-        // The legacy HTML worker deliberately retains its existing licensed/web-image pipeline.
+        // HTML Codex plans use the controlled visual-search prefetcher; paid Images API
+        // generation remains a PPTX-only option until its HTML credit/UI contract exists.
         return "pptx".equals(outputFormat) ? value : "off";
     }
 

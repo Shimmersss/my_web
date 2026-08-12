@@ -17,6 +17,8 @@ public class PptGenerationSession {
     private String outputFormat = "pptx";
     private String researchMode = "auto";
     private String visualMode = "best_effort";
+    /** auto | subtle | expressive | off. Used by the offline HTML reveal.js renderer. */
+    private String motionMode = "auto";
     /** off | supplement | prefer. PPTX-only; HTML keeps its existing visual pipeline. */
     private String imageGenerationMode = "off";
     private String fontFamily = "Microsoft YaHei";
@@ -79,6 +81,13 @@ public class PptGenerationSession {
     public void setResearchMode(String researchMode) { this.researchMode = researchMode; touch(); }
     public String getVisualMode() { return "strict".equals(visualMode) ? "strict" : "best_effort"; }
     public void setVisualMode(String visualMode) { this.visualMode = visualMode; touch(); }
+    public String getMotionMode() {
+        return switch (motionMode == null ? "" : motionMode) {
+            case "subtle", "expressive", "off" -> motionMode;
+            default -> "auto";
+        };
+    }
+    public void setMotionMode(String motionMode) { this.motionMode = motionMode; touch(); }
     public String getImageGenerationMode() {
         return "prefer".equals(imageGenerationMode) || "supplement".equals(imageGenerationMode)
                 ? imageGenerationMode : "off";
@@ -140,7 +149,7 @@ public class PptGenerationSession {
     public void setCreationReady(boolean creationReady) { this.creationReady = creationReady; touch(); }
     public boolean isQuotaRequired() { return quotaRequired; }
     public void setQuotaRequired(boolean quotaRequired) { this.quotaRequired = quotaRequired; touch(); }
-    public String getEngine() { return engine == null || engine.isBlank() ? ("html".equalsIgnoreCase(outputFormat) ? "html-agent" : "legacy-pptx") : engine; }
+    public String getEngine() { return engine == null || engine.isBlank() ? ("html".equalsIgnoreCase(outputFormat) ? "codex-html" : "legacy-pptx") : engine; }
     public void setEngine(String engine) { this.engine = engine; touch(); }
     public int getVersion() { return Math.max(1, version); }
     public void setVersion(int version) { this.version = Math.max(1, version); touch(); }

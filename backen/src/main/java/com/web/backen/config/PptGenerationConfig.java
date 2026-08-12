@@ -23,15 +23,7 @@ public class PptGenerationConfig {
     private String visionModel = "mimo-v2.5";
     private int timeoutSeconds = 900;
     private String agentCommand = "node";
-    private String agentScript = "./scripts/ppt-agent/worker.mjs";
-    private String agentProjectRoot = "..";
-    private int agentTimeoutSeconds = 1800;
     private int agentNodeMaxOldSpaceMb = 384;
-    private int agentMaxSources = 12;
-    /** Native web_search is currently available through the pay-as-you-go API plugin. */
-    private String mimoSearchEndpoint = "https://api.xiaomimimo.com/v1/chat/completions";
-    private String mimoSearchKey = "";
-    private String mimoSearchModel = "mimo-v2.5";
     private String sofficeCommand = "soffice";
     private String pdftoppmCommand = "pdftoppm";
     private String chromeCommand = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
@@ -40,6 +32,12 @@ public class PptGenerationConfig {
     private String codexCommand = "./node_modules/.bin/codex";
     private String codexVendorRoot = "../vendor/open-kimi-ppt-skill";
     private String codexFinalizeScript = "./scripts/ppt-codex/finalize.mjs";
+    /** Repository-owned HTML authoring Skill copied into each disposable Codex workspace. */
+    private String codexHtmlSkillRoot = "../.agents/skills/create-html-presentation";
+    /** Fixed renderer/validator; Codex writes JSON only and never writes executable HTML. */
+    private String codexHtmlFinalizeScript = "./scripts/ppt-agent/finalize-html-plan.mjs";
+    /** Fixed server-side image search/downloader; credentials never enter the Codex workspace. */
+    private String visualPrefetchScript = "./scripts/ppt-agent/prefetch-visual-assets.mjs";
     private int codexTimeoutSeconds = 1800;
     private long codexMaxLogBytes = 2L * 1024 * 1024;
     private long codexMaxProjectBytes = 100L * 1024 * 1024;
@@ -83,22 +81,8 @@ public class PptGenerationConfig {
     public void setTimeoutSeconds(int timeoutSeconds) { this.timeoutSeconds = timeoutSeconds; }
     public String getAgentCommand() { return agentCommand; }
     public void setAgentCommand(String agentCommand) { this.agentCommand = agentCommand; }
-    public String getAgentScript() { return agentScript; }
-    public void setAgentScript(String agentScript) { this.agentScript = agentScript; }
-    public String getAgentProjectRoot() { return agentProjectRoot; }
-    public void setAgentProjectRoot(String agentProjectRoot) { this.agentProjectRoot = agentProjectRoot; }
-    public int getAgentTimeoutSeconds() { return agentTimeoutSeconds; }
-    public void setAgentTimeoutSeconds(int agentTimeoutSeconds) { this.agentTimeoutSeconds = agentTimeoutSeconds; }
     public int getAgentNodeMaxOldSpaceMb() { return agentNodeMaxOldSpaceMb; }
     public void setAgentNodeMaxOldSpaceMb(int agentNodeMaxOldSpaceMb) { this.agentNodeMaxOldSpaceMb = agentNodeMaxOldSpaceMb; }
-    public int getAgentMaxSources() { return agentMaxSources; }
-    public void setAgentMaxSources(int agentMaxSources) { this.agentMaxSources = agentMaxSources; }
-    public String getMimoSearchEndpoint() { return mimoSearchEndpoint; }
-    public void setMimoSearchEndpoint(String mimoSearchEndpoint) { this.mimoSearchEndpoint = mimoSearchEndpoint; }
-    public String getMimoSearchKey() { return mimoSearchKey; }
-    public void setMimoSearchKey(String mimoSearchKey) { this.mimoSearchKey = mimoSearchKey; }
-    public String getMimoSearchModel() { return mimoSearchModel; }
-    public void setMimoSearchModel(String mimoSearchModel) { this.mimoSearchModel = mimoSearchModel; }
     public String getSofficeCommand() { return sofficeCommand; }
     public void setSofficeCommand(String sofficeCommand) { this.sofficeCommand = sofficeCommand; }
     public String getPdftoppmCommand() { return pdftoppmCommand; }
@@ -115,6 +99,12 @@ public class PptGenerationConfig {
     public void setCodexVendorRoot(String codexVendorRoot) { this.codexVendorRoot = codexVendorRoot; }
     public String getCodexFinalizeScript() { return codexFinalizeScript; }
     public void setCodexFinalizeScript(String codexFinalizeScript) { this.codexFinalizeScript = codexFinalizeScript; }
+    public String getCodexHtmlSkillRoot() { return codexHtmlSkillRoot; }
+    public void setCodexHtmlSkillRoot(String codexHtmlSkillRoot) { this.codexHtmlSkillRoot = codexHtmlSkillRoot; }
+    public String getCodexHtmlFinalizeScript() { return codexHtmlFinalizeScript; }
+    public void setCodexHtmlFinalizeScript(String codexHtmlFinalizeScript) { this.codexHtmlFinalizeScript = codexHtmlFinalizeScript; }
+    public String getVisualPrefetchScript() { return visualPrefetchScript; }
+    public void setVisualPrefetchScript(String visualPrefetchScript) { this.visualPrefetchScript = visualPrefetchScript; }
     public int getCodexTimeoutSeconds() { return codexTimeoutSeconds; }
     public void setCodexTimeoutSeconds(int codexTimeoutSeconds) { this.codexTimeoutSeconds = codexTimeoutSeconds; }
     public long getCodexMaxLogBytes() { return codexMaxLogBytes; }

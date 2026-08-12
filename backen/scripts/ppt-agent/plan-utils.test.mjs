@@ -264,6 +264,40 @@ test('HTML viewport fitting converts image-heavy layouts and caps visible densit
   assert.ok(slide.bullets.every(item => item.length <= 56));
 });
 
+test('HTML viewport fitting preserves safe image-hero and gallery silhouettes', () => {
+  for (const layout of ['image-hero', 'gallery', 'evidence']) {
+    const slide = {
+      type: 'content', layout, imageId: 'WEB01', title: '一张图像的叙事',
+      headline: '使用固定语义布局', bullets: ['核心证据', '紧凑说明']
+    };
+    fitHtmlSlideToViewport(slide);
+    assert.equal(slide.layout, layout);
+    assert.equal(slide.bullets.length, 2);
+  }
+});
+
+test('HTML viewport fitting allows balanced comparison sides and four-step metrics', () => {
+  const comparison = { type: 'content', layout: 'comparison', title: '对比', bullets: Array.from({ length: 8 }, (_, index) => `观点 ${index + 1}`) };
+  fitHtmlSlideToViewport(comparison, { hasImage: false });
+  assert.equal(comparison.bullets.length, 6);
+  const stats = { type: 'content', layout: 'stats', title: '指标', bullets: Array.from({ length: 6 }, (_, index) => `${index + 1}:指标`) };
+  fitHtmlSlideToViewport(stats, { hasImage: false });
+  assert.equal(stats.bullets.length, 4);
+});
+
+test('HTML viewport fitting normalizes structured items when the model omits bullets', () => {
+  const slide = {
+    type: 'content', layout: 'stats', title: '关键指标', bullets: [],
+    items: [
+      { label: '覆盖率', value: '92%', detail: '完成核心场景验证' },
+      { label: '效率', value: '3.4倍', detail: '相对原流程提升' }
+    ]
+  };
+  fitHtmlSlideToViewport(slide, { hasImage: false });
+  assert.deepEqual(slide.bullets, ['覆盖率：92% — 完成核心场景验证', '效率：3.4倍 — 相对原流程提升']);
+  assert.equal('items' in slide, false);
+});
+
 test('SAO image diversification reranks VR, Aincrad and Alicization visuals by slide topic', () => {
   const plan = { slides: [
     { type: 'content', title: '作品概述与虚拟现实', imageId: 'WEB02', imageEdits: [{ imageId: 'WEB02' }] },

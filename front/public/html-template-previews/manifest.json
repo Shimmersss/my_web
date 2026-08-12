@@ -1,7 +1,10 @@
 {
   "engine": "agent-reveal.js",
   "slideCount": 5,
-  "generatedAt": "2026-07-31T09:00:26.145Z",
+  "generatedAt": "2026-08-12T09:14:45.233Z",
+  "themeSha256": "1ba02c770df8f7762c274504555bf76e62d0d217f3cf395d4da970c7a18ef574",
+  "rendererSha256": "8921f8501027ad4b18b9390a82bcd44e9e95eaa0069210ab7143ab3aa0678174",
+  "revealVersion": "6.0.1",
   "templates": {
     "html-reveal-black": [
       "/html-template-previews/html-reveal-black/slide-1.png",

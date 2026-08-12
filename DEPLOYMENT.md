@@ -78,16 +78,8 @@ PPT_GENERATION_MAX_ARCHIVE_UNCOMPRESSED_BYTES=125829120
 PPT_GENERATION_MAX_ARCHIVE_ENTRY_BYTES=33554432
 PPT_GENERATION_MAX_ARCHIVE_COMPRESSION_RATIO=120
 PPT_GENERATION_AGENT_COMMAND=node
-PPT_GENERATION_AGENT_SCRIPT=./scripts/ppt-agent/worker.mjs
-PPT_GENERATION_AGENT_PROJECT_ROOT=..
-PPT_GENERATION_AGENT_TIMEOUT_SECONDS=1800
 PPT_GENERATION_AGENT_NODE_MAX_OLD_SPACE_MB=384
-PPT_GENERATION_AGENT_MAX_SOURCES=12
-PPT_GENERATION_VISION_MODEL=mimo-v2.5
-# 可选：Mimo 原生联网搜索。需开通联网服务插件的按量开放平台 sk- Key；Token Plan 的 tp- Key 不支持此工具。
-PPT_GENERATION_MIMO_SEARCH_ENDPOINT=https://api.xiaomimimo.com/v1/chat/completions
-# PPT_GENERATION_MIMO_SEARCH_KEY=
-PPT_GENERATION_MIMO_SEARCH_MODEL=mimo-v2.5
+PPT_GENERATION_VISUAL_PREFETCH_SCRIPT=./scripts/ppt-agent/prefetch-visual-assets.mjs
 PPT_GENERATION_SOFFICE_COMMAND=soffice
 PPT_GENERATION_PDFTOPPM_COMMAND=pdftoppm
 PPT_GENERATION_CHROME_COMMAND=/usr/bin/chromium
@@ -101,6 +93,8 @@ PPT_GENERATION_CODEX_API_KEY=...
 PPT_GENERATION_CODEX_COMMAND=./node_modules/.bin/codex
 PPT_GENERATION_CODEX_VENDOR_ROOT=../vendor/open-kimi-ppt-skill
 PPT_GENERATION_CODEX_FINALIZE_SCRIPT=./scripts/ppt-codex/finalize.mjs
+PPT_GENERATION_CODEX_HTML_SKILL_ROOT=../.agents/skills/create-html-presentation
+PPT_GENERATION_CODEX_HTML_FINALIZE_SCRIPT=./scripts/ppt-agent/finalize-html-plan.mjs
 PPT_GENERATION_CODEX_TIMEOUT_SECONDS=1800
 # Optional, for the PPTX “AI 生图” option. Availability follows the runtime
 # `Contact / PPT 生成` visibility policy; use an OpenAI-compatible
@@ -113,14 +107,17 @@ PPT_GENERATION_IMAGE_GENERATION_MAX_IMAGES=3
 TAVILY_API_URL=https://api.tavily.com/search
 TAVILY_API_KEY=
 TAVILY_MAX_SEARCHES=6
+BRAVE_SEARCH_API_KEY=
+BRAVE_IMAGES_COUNT=20
+BRAVE_IMAGES_MAX_QUERIES=3
 SEMANTIC_SCHOLAR_API_KEY=
-# 搜图优先级：Tavily（配置 Key 时）→ Wikimedia Commons → Openverse → Unsplash。
-# 最后一层仅用于版权角色素材缺失时的主题关联实景视觉。
+# Brave 使用固定官方 Images endpoint 与 strict SafeSearch；结果不含许可证，
+# 只作为 rightsStatus=unverified 候选。Commons/Openverse 的明确许可信息会保留。
 ```
 
 `project.sh` sources `.env.local` automatically for local development and turns locally discovered `soffice`/`pdftoppm` binaries into absolute paths when those variables are not explicitly set. For production systemd, put equivalent values in an environment file or in the service unit; set `PPT_GENERATION_SOFFICE_COMMAND` and `PPT_GENERATION_PDFTOPPM_COMMAND` to absolute paths so the service does not depend on an interactive shell PATH. PPTX/HTML generation requires Node.js 20+, stable LibreOffice, Poppler, Chromium, fontconfig and Noto CJK. The deploy installer treats these as hard preconditions and runs `npm ci --omit=dev` under the backend directory. On Linux it also creates and verifies the PATH-local `codex-linux-sandbox` multi-call alias beside the pinned CLI; without it Codex can authenticate but cannot execute the Skill's file reads or write a PPTD project.
 
-The PPT generator accepts `outputFormat=pptx|html` and `researchMode=auto|off`. HTML keeps the existing reveal.js Agent worker. PPTX tasks run the locked `@openai/codex@0.147.0` CLI in a disposable owner-only workspace with a temporary `CODEX_HOME` and `workspace-write` sandbox; access follows the runtime `Contact / PPT 生成` policy (`USER` permits logged-in users, `ROOT` restricts to root, and `PUBLIC` exposes the page/templates but still requires a logged-in task owner). Codex writes only a self-contained PPTD v2 project; the server then invokes the fixed vendored exporter, validates closed page/media paths, exports PPTX, renders it with stable LibreOffice/Poppler, and packages the complete PPTD project. A saved Key is sent to `codex login --with-api-key` over stdin and must not appear in commands, logs or task metadata. A CCSwitch Base URL is written only to the temporary home as a fixed `OpenAI / responses` Provider; standard OpenAI Key mode uses `--ignore-user-config`. When no Key is saved, local development may automatically reuse a logged-in local Codex CLI: only `auth.json` and the active CCSwitch-compatible model-provider block (`base_url`, `wire_api`, model catalog) are copied to the owner-only temporary home; MCP servers, rules and plugins are excluded. Production should use an explicit service Key unless the service account has an intentionally managed Codex home. The optional GPT Image 2 setting generates at most four server-side PNG assets before Codex authoring; configure a separate OpenAI-compatible `POST /v1/images/generations` service Key. It accepts only `data[0].b64_json`, never forwards local Codex auth, and a configured option failure aborts/refunds the task rather than silently switching credentials or source provenance.
+The PPT generator accepts `outputFormat=pptx|html`, `researchMode=auto|off`, and—for HTML—`motionMode=auto|subtle|expressive|off`. Both authoring paths run the locked `@openai/codex@0.147.0` CLI in a disposable owner-only workspace with a temporary `CODEX_HOME` and `workspace-write` sandbox. PPTX Codex writes a PPTD v2 project; HTML Codex may only write a bounded `agent-plan.json`, which the server-owned reveal.js renderer validates and turns into a self-contained deck with real-browser boundary QA. Neither format uses the legacy MiMo presentation Worker. Access follows the runtime `Contact / PPT 生成` policy (`USER` permits logged-in users, `ROOT` restricts to root, and `PUBLIC` exposes the page/templates but still requires a logged-in task owner). Before Codex starts, the fixed visual prefetcher may query Brave Images, Wikimedia Commons, Openverse and Tavily outside the sandbox; only validated local images and provenance metadata enter Codex. Brave credentials never enter its HOME, prompt or task metadata. A saved Key is sent to `codex login --with-api-key` over stdin and must not appear in commands, logs or task metadata. A CCSwitch Base URL is written only to the temporary home as a fixed `OpenAI / responses` Provider; standard OpenAI Key mode uses `--ignore-user-config`. When no Key is saved, local development may automatically reuse a logged-in local Codex CLI: only `auth.json` and the active CCSwitch-compatible model-provider block (`base_url`, `wire_api`, model catalog) are copied to the owner-only temporary home; MCP servers, rules and plugins are excluded. Production should use an explicit service Key unless the service account has an intentionally managed Codex home. The optional GPT Image 2 setting generates at most four server-side PNG assets before Codex authoring; configure a separate OpenAI-compatible `POST /v1/images/generations` service Key. It accepts only `data[0].b64_json`, never forwards local Codex auth, and a configured option failure aborts/refunds the task rather than silently switching credentials or source provenance.
 
 The vendored runtime is fixed under `vendor/open-kimi-ppt-skill/`; source commit and file hashes are recorded there. `front` build runs `prepare:pptd-editor` and copies the upstream editor plus the website overlay into `/pptd-editor/`. The initial production migration creates a readable `ppt-generation-tasks-pre-codex-<timestamp>.tar.gz` before clearing incompatible legacy PPT task files. Do not open Codex PPTX to ordinary users until per-task container isolation, read-only Skill mounts, restricted network egress, and CPU/memory/PID limits have passed a separate review.
 
@@ -214,12 +211,13 @@ HTML template previews remain generated from reveal theme assets. PPTX design sy
 
 ```bash
 cd backen
-node scripts/generate_html_template_previews.mjs --output-dir ../front/public/html-template-previews
+npm run prepare:html-previews
+npm run check:html-previews
 cd ../front
 npm run build
 ```
 
-This build-time HTML preview step needs Chrome/Chromium. PPTX and HTML intentionally use different template families; the frontend filters `/api/ppt-generate/templates` by each template's `formats` field. The frontend build also copies the vendored editor plus its site overlay to `/pptd-editor/`.
+This build-time HTML preview step needs Chrome/Chromium. The committed preview manifest pins the current theme SHA-256, renderer SHA-256 and reveal.js version; the frontend build fails when any preview is stale or missing. PPTX and HTML intentionally use different template families; the frontend filters `/api/ppt-generate/templates` by each template's `formats` field. The frontend build also copies the vendored editor plus its site overlay to `/pptd-editor/`.
 
 ## Production Layout
 
@@ -282,8 +280,8 @@ TasksMax=256
 WantedBy=multi-user.target
 ```
 
-`PPT_GENERATION_AGENT_PROJECT_ROOT=..` is resolved from the `backen/` working directory and points
-to the deployed `.agents/skills/`. A different working directory will break Skill discovery.
+The service working directory remains `/opt/web-homepage/backen`; the explicit
+`PPT_GENERATION_CODEX_HTML_SKILL_ROOT` and vendor paths are resolved from there.
 
 Install and restart:
 
@@ -296,7 +294,7 @@ sudo systemctl status web-backen
 
 ## Outbound Proxy
 
-If the server needs a local Clash Verge / Mihomo proxy for Zotero, S3, GitHub API, raw README, BabelDOC, or LLM calls, configure the Java process explicitly. Shell `HTTP_PROXY` / `HTTPS_PROXY` is not enough for all Java clients. The presentation Agent also runs Node: `PptAgentRunner` converts the JVM `https.proxyHost/https.proxyPort` settings to `PPT_AGENT_PROXY_URL`, and its pinned `undici` `ProxyAgent` applies that proxy to LLM and research requests.
+If the server needs a local Clash Verge / Mihomo proxy for Zotero, S3, GitHub API, raw README, BabelDOC, Codex or visual-search calls, configure the Java process explicitly. Shell `HTTP_PROXY` / `HTTPS_PROXY` is not enough for all Java clients. The fixed visual prefetcher also receives only the controlled loopback proxy URL derived by the backend.
 
 Example systemd drop-in:
 

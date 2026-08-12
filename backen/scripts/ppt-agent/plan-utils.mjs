@@ -465,20 +465,33 @@ export function fitHtmlSlideToViewport(slide, { hasImage = Boolean(slide?.imageI
   const staticType = ['cover', 'closing', 'references', 'agenda', 'section'].includes(type);
   if (type === 'cover') slide.layout = 'cover';
   else if (type === 'closing') slide.layout = 'closing';
-  else if (hasImage) slide.layout = 'split';
+  else if (type === 'section') slide.layout = 'section';
+  else if (hasImage && !['image-hero', 'gallery', 'evidence', 'split'].includes(String(slide.layout || '').toLowerCase())) slide.layout = 'split';
 
   const timeline = slide.layout === 'timeline';
   const comparison = slide.layout === 'comparison';
+  const stats = ['stats', 'kpi', 'metrics'].includes(String(slide.layout || '').toLowerCase());
+  const process = ['process', 'steps'].includes(String(slide.layout || '').toLowerCase());
   const titleLimit = staticType ? 38 : hasImage ? 34 : 44;
   const headlineLimit = staticType ? 72 : hasImage ? 76 : 104;
-  const bulletLimit = staticType ? 3 : hasImage ? 3 : (timeline || comparison) ? 4 : 4;
-  const bulletChars = staticType ? 48 : hasImage ? 56 : timeline ? 44 : 72;
+  const bulletLimit = staticType ? 3 : hasImage ? 3 : (timeline || stats || process) ? 4 : comparison ? 6 : 4;
+  const bulletChars = staticType ? 48 : hasImage ? 56 : (timeline || stats || process) ? 44 : comparison ? 56 : 72;
   slide.title = fitText(slide.title, titleLimit);
   slide.headline = fitText(slide.headline, headlineLimit);
-  slide.bullets = (Array.isArray(slide.bullets) ? slide.bullets : [])
+  const structuredItems = (Array.isArray(slide.items) ? slide.items : []).map(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return cleanText(item);
+    const label = cleanText(item.label);
+    const value = cleanText(item.value);
+    const detail = cleanText(item.detail);
+    return [label, value].filter(Boolean).join('：') + (detail ? ` — ${detail}` : '');
+  }).filter(Boolean);
+  const authoredBullets = Array.isArray(slide.bullets) && slide.bullets.length
+    ? slide.bullets : structuredItems;
+  slide.bullets = authoredBullets
     .map(item => fitText(item, bulletChars))
     .filter(Boolean)
     .slice(0, bulletLimit);
+  delete slide.items;
   return slide;
 }
 

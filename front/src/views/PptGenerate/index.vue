@@ -248,6 +248,24 @@
                       </button>
                     </div>
                   </div>
+                  <div v-if="outputFormat === 'html'">
+                    <div class="field-label">演示动效</div>
+                    <div class="output-format-picker motion-mode-picker" role="radiogroup" aria-label="HTML 演示动效">
+                      <button type="button" role="radio" :class="['output-format-card', { active: motionMode === 'auto' }]" :aria-checked="motionMode === 'auto'" @click="motionMode = 'auto'">
+                        <strong>自动编排</strong><span>按叙事和主题选择克制动效</span>
+                      </button>
+                      <button type="button" role="radio" :class="['output-format-card', { active: motionMode === 'subtle' }]" :aria-checked="motionMode === 'subtle'" @click="motionMode = 'subtle'">
+                        <strong>克制</strong><span>短淡入与少量分步呈现</span>
+                      </button>
+                      <button type="button" role="radio" :class="['output-format-card', { active: motionMode === 'expressive' }]" :aria-checked="motionMode === 'expressive'" @click="motionMode = 'expressive'">
+                        <strong>强调</strong><span>更鲜明的节奏与元素编排</span>
+                      </button>
+                      <button type="button" role="radio" :class="['output-format-card', { active: motionMode === 'off' }]" :aria-checked="motionMode === 'off'" @click="motionMode = 'off'">
+                        <strong>关闭</strong><span>全部内容直接呈现</span>
+                      </button>
+                    </div>
+                    <p class="field-hint">系统“减少动态效果”设置始终优先；下载文件也支持按 L 切换低功耗静态模式。</p>
+                  </div>
                   <div v-if="outputFormat === 'pptx'">
                     <div class="field-label">AI 生图（GPT Image 2）</div>
                     <div class="output-format-picker" role="radiogroup" aria-label="AI 生图">
@@ -488,6 +506,7 @@ const templateKey = ref('pptd-navy-cyan-technology')
 const outputFormat = ref('pptx')
 const researchMode = ref('auto')
 const visualMode = ref('best_effort')
+const motionMode = ref('auto')
 const imageGenerationMode = ref('off')
 const fontFamily = ref('Microsoft YaHei')
 const templateFile = ref(null)
@@ -551,7 +570,17 @@ const previewSlides = computed(() => previewData.value?.slides || [])
 const formatTemplates = computed(() => templates.value.filter(item => !Array.isArray(item.formats) || item.formats.includes(outputFormat.value)))
 const selectedTemplate = computed(() => formatTemplates.value.find(item => item.key === templateKey.value) || formatTemplates.value[0] || null)
 const selectedPreviewSlide = computed(() => previewSlides.value[previewSelectedIndex.value] || null)
-const preferenceSummary = computed(() => `${fontOptions.find(item => item.value === fontFamily.value)?.label || fontFamily.value} · ${researchMode.value === 'auto' ? '自动研究' : '仅本地资料'} · ${visualMode.value === 'strict' ? '严格配图' : '尽力配图'} · ${imageGenerationMode.value === 'prefer' ? '优先 AI 生图' : imageGenerationMode.value === 'supplement' ? '补充 AI 生图' : '不开启 AI 生图'}`)
+const motionModeLabels = { auto: '自动动效', subtle: '克制动效', expressive: '强调动效', off: '无动效' }
+const preferenceSummary = computed(() => {
+  const parts = [
+    fontOptions.find(item => item.value === fontFamily.value)?.label || fontFamily.value,
+    researchMode.value === 'auto' ? '自动研究' : '仅本地资料',
+    visualMode.value === 'strict' ? '严格配图' : '尽力配图'
+  ]
+  if (outputFormat.value === 'html') parts.push(motionModeLabels[motionMode.value] || motionModeLabels.auto)
+  else parts.push(imageGenerationMode.value === 'prefer' ? '优先 AI 生图' : imageGenerationMode.value === 'supplement' ? '补充 AI 生图' : '不开启 AI 生图')
+  return parts.join(' · ')
+})
 // Vite dev server only serves the vendored editor reliably through its explicit static file.
 // A trailing directory route falls back to the app SPA and used to show the site home page.
 const editorUrl = computed(() => taskId.value ? `/pptd-editor/upstream/index.html?taskId=${encodeURIComponent(taskId.value)}` : '')
@@ -674,6 +703,7 @@ async function submitTask() {
       outputFormat: outputFormat.value,
       researchMode: researchMode.value,
       visualMode: visualMode.value,
+      motionMode: motionMode.value,
       imageGenerationMode: imageGenerationMode.value,
       fontFamily: fontFamily.value,
       templateFile: templateFile.value,
@@ -1011,6 +1041,7 @@ function setActiveTask(data) {
   templateKey.value = data.templateKey || templateKey.value
   outputFormat.value = normalizeOutputFormat(data.outputFormat || outputFormat.value)
   visualMode.value = data.visualMode === 'strict' ? 'strict' : 'best_effort'
+  motionMode.value = ['subtle', 'expressive', 'off'].includes(data.motionMode) ? data.motionMode : 'auto'
   imageGenerationMode.value = ['supplement', 'prefer'].includes(data.imageGenerationMode) ? data.imageGenerationMode : 'off'
   fontFamily.value = data.fontFamily || fontFamily.value
   progress.value = Number(data.progress || 0)
@@ -1068,6 +1099,7 @@ function resetForm() {
   prompt.value = ''
   researchMode.value = 'auto'
   visualMode.value = 'best_effort'
+  motionMode.value = 'auto'
   imageGenerationMode.value = 'off'
   fontFamily.value = 'Microsoft YaHei'
   templateFile.value = null

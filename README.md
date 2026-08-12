@@ -11,7 +11,7 @@ A full-stack personal workbench that brings together a Zotero library browser, P
 - **文献库展示 / Zotero library**：后端从 Zotero Web API 拉取私有文献库，启动预热并缓存；前端按 collection、关键词和附件状态浏览。
 - **附件代理 / Attachment proxy**：PDF、Markdown 和网页快照附件统一由后端代理，支持 Zotero S3 跳转、ZIP 附件解包、流式传输和真实下载进度。
 - **PDF/图片翻译 / PDF and image translation**：上传 PDF 后选择页码范围、字体族和速度模式，由后端排队调用 BabelDOC 生成保留版式的纯中文 / 双语 PDF；PNG/JPG 等常见图片使用视觉模型生成中文译图和双语译图。
-- **PPT 生成 / Materials to PPT**：provider-neutral Agent 读取仓库级 Skills，自主完成研究、事实核验、叙事规划、PPTX/HTML 创作、真实逐页渲染、视觉审查和最多两轮返修。PPTX 复用 6 套 GitHub 源 deck 的真实页面与文字框几何，HTML 使用 12 套独立 reveal.js theme assets；没有相似配色重绘或旧 renderer 回退。BJTU 来源仓库虽标注 Apache-2.0，但 README 另有学习/非商业声明。
+- **PPT 生成 / Materials to PPT**：PPTX 与 HTML 的作者层统一使用隔离 Codex CLI；PPTX 输出 PPTD 后由固定导出器交付，HTML 只允许 Codex 输出受限 JSON 计划，再由固定 reveal.js 渲染器按 13 类语义布局、主题节奏和四档安全动效交付。两条链路均可复用受控的 Brave Images、Wikimedia Commons、Openverse 与 Tavily 搜图，并保留视觉来源与复用权利状态；真实逐页渲染与确定性质量门仍会阻断破损产物。
 - **GitHub 项目展示 / GitHub showcase**：前端只访问站内接口，后端代理 GitHub API 和 README raw 内容，避免浏览器直连外部接口。
 
 ## 截图 / Screenshots
@@ -34,7 +34,7 @@ The translation view follows a four-state flow: upload, configure, translate and
 
 ### Materials To PPT / 通用资料转 PPT
 
-PPT 生成页支持仅提示词、仅资料、提示词 + 资料，以及可选 PPTX 模板；联网研究默认开启，也可关闭。内置模板按输出格式分为 6 个 GitHub 源成品 PPTX 与 12 个 HTML reveal.js 主题。Spring Boot 管理登录、额度、队列、恢复和 SSE，Node Agent 负责研究与生成。结果页直接显示 LibreOffice/Chromium 的真实 PNG、来源与 QA；二次修改只需要自然语言要求，并保留版本链。
+PPT 生成页支持仅提示词、仅资料、提示词 + 资料，以及可选 PPTX 视觉参考；联网研究默认开启，也可关闭。PPTX 提供约 30 套 PPTD 设计系统，HTML 提供 12 套 reveal.js 主题和自动/克制/强调/关闭四档动效。Spring Boot 管理登录、额度、队列、恢复和 SSE，固定的服务端研究模块在模型沙箱外搜索并验证图片。结果页直接显示 LibreOffice/Chromium 的真实 PNG、来源与 QA；二次修改只需要自然语言要求，并保留版本链。
 
 The PPT generator accepts a prompt or common source materials plus an optional PPTX template. Extraction is automatic; jobs run in a single backend worker queue, expose a browser preview/editor after completion, and produce either editable `.pptx` or self-contained `.html` files. Revisions create a new task while preserving the original source, template, and output format.
 
@@ -123,6 +123,7 @@ Important groups / 主要配置组：
 - `LLM_*`
 - `BABELDOC_*`
 - `PPT_GENERATION_*`
+- `BRAVE_SEARCH_API_KEY`, `BRAVE_IMAGES_COUNT`, `BRAVE_IMAGES_MAX_QUERIES`（可选，也可在 root 后台设置）
 - `ROOT_USERNAME`, `ROOT_PASSWORD`
 - `DB_URL`, `DB_DRIVER`, `DB_USERNAME`, `DB_PASSWORD` for production MySQL
 

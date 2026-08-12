@@ -123,6 +123,7 @@ function validatePlan(plan, format, manifest, sourceImages = [], sources = [], o
     slide.textEdits = Array.isArray(slide.textEdits) ? slide.textEdits : [];
     slide.imageEdits = Array.isArray(slide.imageEdits) ? slide.imageEdits : [];
     slide.bullets = Array.isArray(slide.bullets) ? slide.bullets : [];
+    const rawItems = Array.isArray(slide.items) ? slide.items.slice(0, 6) : [];
     slide.sourceIds = Array.isArray(slide.sourceIds) ? slide.sourceIds : [];
     if (!['cover', 'agenda', 'section', 'closing', 'content', 'evidence', 'comparison', 'timeline', 'quote', 'references']
       .includes(String(slide.type || '').toLowerCase())) slide.type = 'content';
@@ -137,7 +138,16 @@ function validatePlan(plan, format, manifest, sourceImages = [], sources = [], o
     if (/^key\s+chara(?:cter)?s?$/i.test(slide.title)) slide.title = '核心角色';
     if (/^sword\s+art\s+online$/i.test(slide.title)) slide.title = '核心剧情篇章';
     slide.headline = plain(slide.headline).slice(0, 180);
-    slide.bullets = slide.bullets.map(plain).map(value => value.slice(0, 120)).slice(0, 6);
+    const itemBullets = rawItems.map(item => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return plain(item).slice(0, 120);
+      const label = plain(item.label).slice(0, 48);
+      const value = plain(item.value).slice(0, 48);
+      const detail = plain(item.detail).slice(0, 80);
+      return [label, value].filter(Boolean).join('：') + (detail ? ` — ${detail}` : '');
+    }).filter(Boolean);
+    slide.bullets = slide.bullets.map(plain).map(value => value.slice(0, 120)).filter(Boolean).slice(0, 6);
+    if (!slide.bullets.length && itemBullets.length) slide.bullets = itemBullets;
+    delete slide.items;
     ensureSaoNarrativeBullets(plan, slide, index, options.visualTopic);
     slide.bullets = slide.bullets.map(value => plain(value)
       .replace(/2002年起连载的轻小说/g, '2002年起网络连载、2009年正式出版的轻小说'));
@@ -655,7 +665,8 @@ async function main() {
 
   const researchSkill = await readText(path.join(root, '.agents/skills/research-presentation/SKILL.md'));
   const formatSkill = await readText(path.join(root, `.agents/skills/${job.outputFormat === 'html' ? 'create-html-presentation' : 'create-template-pptx'}/SKILL.md`));
-  const skillSystem = `${researchSkill}\n\n${formatSkill}\n\nYou are the presentation Agent. Return the exact JSON action requested. Do not expose internal reasoning.`;
+  const imageSearchSkill = await readText(path.join(root, '.agents/skills/images-search/SKILL.md'));
+  const skillSystem = `${researchSkill}\n\n${formatSkill}\n\n${imageSearchSkill}\n\nThe service executes image search itself; never emit curl commands, API keys, or remote download instructions. Brave results are indexed candidates with unverified reuse rights unless a separate license is recorded. You are the presentation Agent. Return the exact JSON action requested. Do not expose internal reasoning.`;
   const sourceText = job.sourceTextFile ? (await readText(job.sourceTextFile)).slice(0, 40_000) : '';
 
   emit('researching', { progress: 10, message: '正在理解主题并自主调用检索工具' });
@@ -813,8 +824,11 @@ Preserve proper nouns for anime, books, people, products, and places. Do not ret
   });
   sourceImages = [...uploadedSourceImages.slice(0, 4), ...downloadedResearch.images]
     .slice(0, 8);
-  research.imageAssets = downloadedResearch.images.map(({ id, fileName, title, description, searchQuery, sourceUrl, license, origin }) => ({
-    id, fileName, title, description, searchQuery, sourceUrl, license, origin
+  research.imageAssets = downloadedResearch.images.map(({ id, fileName, title, description, searchQuery,
+    sourceUrl, originalUrl, license, provider, confidence, rightsStatus, rightsNote,
+    width, height, originalWidth, originalHeight, accessedAt, origin }) => ({
+    id, fileName, title, description, searchQuery, sourceUrl, originalUrl, license, provider,
+    confidence, rightsStatus, rightsNote, width, height, originalWidth, originalHeight, accessedAt, origin
   }));
   research.imageFailures = downloadedResearch.failures;
   await fs.writeFile(path.join(taskDir, 'sources.json'), JSON.stringify(research, null, 2));
@@ -854,8 +868,8 @@ Available visual assets (uploaded + web image search; the authoring step will au
 Template manifest (compact authoring map; full manifest remains on disk for validation): ${planningManifest ? JSON.stringify(planningManifest) : 'HTML theme; sourceSlide is not used'}
 Previous plan for revision: ${previousPlan}
 Honor an explicitly requested slide count exactly. Otherwise choose the slide count that best serves the topic and source material; do not pad to a fixed number or create one output slide for every template page or research source.
-Return {"action":"final","args":{"changedSlideNumbers":[2],"presentation":{"title":"...","audience":"...","takeaway":"...","slides":[{"type":"cover|content|evidence|closing","layout":"cover|split|statement|evidence|comparison|timeline|quote|closing","sourceSlide":1,"section":"...","title":"...","headline":"...","bullets":["..."],"textEdits":[{"slotId":"s1-t1","text":"exact visible text"}],"imageEdits":[{"slotId":"s1-i1","imageId":"I01"}],"imageId":"I01","sourceIds":["S01"],"notes":"..."}]}}}.
-For PPTX, choose sourceSlide from the manifest whose visual role matches the slide type (cover with cover, section with section, content/evidence/comparison with a content-like page). Map every visible title, headline, bullet, card label, and timeline label verbatim to exact textEdits slots within capacityChars; never rely on high-level fields being assigned automatically. Populate every meaningful label required by inherited diagrams, numbered lists, matrices, and timelines, or choose a simpler source page—do not leave blank-looking structures. Template sample copy is forbidden: never output “作品概述”, “Overview”, “第一部分”, “添加标题”, “Click here to add title text”, or a template’s instructional paragraph as a slide title, section, headline, bullet, or text edit. Use imageEdits only for template image slots explicitly marked fillable=true. When visual preference is STRICT, use a relevant web image on an image-capable content/evidence/comparison page; when it is PREFERRED, use relevant assets whenever a clearly related match exists. Never use a web image whose title/description/search query does not match the slide topic. Do not create visible references or bibliography pages: sourceIds are retained in task metadata and speaker notes instead. When this is a revision, changedSlideNumbers must contain every page you changed; otherwise it may be omitted. For HTML, imageId may select an uploaded or web-searched local image; strict visual preference requires a relevant web image on a content page, while preferred visual preference should use a clearly related image when one is available. Every sourced claim needs sourceIds.`,
+Return {"action":"final","args":{"changedSlideNumbers":[2],"presentation":{"title":"...","audience":"...","takeaway":"...","slides":[{"type":"cover|agenda|section|content|evidence|comparison|timeline|quote|closing","layout":"cover|section|statement|split|image-hero|kpi|stats|process|comparison|timeline|quote|gallery|closing","sourceSlide":1,"section":"...","title":"...","headline":"...","bullets":["..."],"items":[{"label":"...","value":"...","detail":"..."}],"imageRole":"hero|evidence|portrait|diagram|gallery","textEdits":[{"slotId":"s1-t1","text":"exact visible text"}],"imageEdits":[{"slotId":"s1-i1","imageId":"I01"}],"imageId":"I01","sourceIds":["S01"],"notes":"..."}]}}}.
+For PPTX, choose sourceSlide from the manifest whose visual role matches the slide type (cover with cover, section with section, content/evidence/comparison with a content-like page). Map every visible title, headline, bullet, card label, and timeline label verbatim to exact textEdits slots within capacityChars; never rely on high-level fields being assigned automatically. Populate every meaningful label required by inherited diagrams, numbered lists, matrices, and timelines, or choose a simpler source page—do not leave blank-looking structures. Template sample copy is forbidden: never output “作品概述”, “Overview”, “第一部分”, “添加标题”, “Click here to add title text”, or a template’s instructional paragraph as a slide title, section, headline, bullet, or text edit. Use imageEdits only for template image slots explicitly marked fillable=true. When visual preference is STRICT, use a relevant web image on an image-capable content/evidence/comparison page; when it is PREFERRED, use relevant assets whenever a clearly related match exists. Never use a web image whose title/description/search query does not match the slide topic. Do not create visible references or bibliography pages: sourceIds are retained in task metadata and speaker notes instead. When this is a revision, changedSlideNumbers must contain every page you changed; otherwise it may be omitted. For HTML, select a semantically distinct layout for each page purpose; use kpi/stats only for real numbers, process/timeline only for ordered relationships, comparison for two genuine sides, image-hero only with a topical image, and gallery only with one strong topical image plus a compact curatorial caption. Avoid repeating the same silhouette three pages in a row. imageId may select an uploaded or server-searched local image; strict visual preference requires a relevant web image on a content page, while preferred visual preference should use a clearly related image when one is available. Every sourced claim needs sourceIds.`,
     maxTokens: 9000,
     requestTimeoutMs: 300_000,
     maxAttempts: 2,
@@ -923,6 +937,7 @@ Return {"action":"final","args":{"presentation":<complete presentation>}}.`,
         sources: research.sources,
         sourceImages,
         fontFamily: job.fontFamily,
+        motionMode: job.motionMode || 'auto',
         templateKey: job.templateKey,
         themeFile: path.join(root, '.agents/skills/create-html-presentation/assets/themes.json')
       });

@@ -1,6 +1,7 @@
 package com.web.backen.ppt;
 
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.RuntimeConfigService;
 import com.web.backen.config.PptGenerationConfig;
@@ -22,6 +23,7 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.EnumSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -56,9 +58,27 @@ public class PptCodexRunner {
         Path skill = vendor.resolve("skills/open-kimi-ppt");
         Path codex = resolve(config.getCodexCommand());
         Path finalizeScript = resolve(config.getCodexFinalizeScript());
+        Path visualPrefetchScript = resolve(config.getVisualPrefetchScript());
         if (!Files.isRegularFile(codex) || !Files.isExecutable(codex)) throw new IllegalStateException("锁定的 Codex CLI 不可用: " + codex);
         if (!Files.isRegularFile(skill.resolve("SKILL.md"))) throw new IllegalStateException("open-kimi-ppt Skill 不完整");
         if (!Files.isRegularFile(finalizeScript)) throw new IllegalStateException("PPTD 固定导出桥不存在");
+
+        int searchedVisuals = 0;
+        if (!"off".equalsIgnoreCase(session.getResearchMode())) {
+            try {
+                searchedVisuals = prefetchVisualAssets(session, visualPrefetchScript, events);
+            } catch (Exception error) {
+                log.warn("Controlled PPT visual prefetch failed: taskId={}, reason={}",
+                        session.getTaskId(), sanitizeDiagnostic(error.getMessage()));
+                if ("strict".equals(session.getVisualMode())) {
+                    throw new IllegalStateException("网络图片搜索未完成，严格配图任务已停止，请检查搜索配置后重试");
+                }
+                events.accept("researching", Map.of("progress", 8, "message", "网络图片暂不可用，将使用资料与清晰版式继续"));
+            }
+            if ("strict".equals(session.getVisualMode()) && searchedVisuals == 0) {
+                throw new IllegalStateException("没有找到可安全使用的相关网络图片，严格配图任务已停止");
+            }
+        }
 
         Path workspace = Files.createTempDirectory("web-ppt-codex-").toAbsolutePath().normalize();
         setOwnerOnly(workspace);
@@ -76,6 +96,11 @@ public class PptCodexRunner {
             copyIfPresent(session.getTemplatePath(), input.resolve("template.pptx"));
             if (Files.isDirectory(session.getImagesDir())) {
                 copyTree(session.getImagesDir(), input.resolve("images"),
+                        config.getCodexMaxProjectFiles(), config.getCodexMaxProjectBytes());
+            }
+            Path webImages = session.getTaskDir().resolve("web-images");
+            if (Files.isDirectory(webImages)) {
+                copyTree(webImages, input.resolve("web-images"),
                         config.getCodexMaxProjectFiles(), config.getCodexMaxProjectBytes());
             }
             Path previousProject = session.getTaskDir().resolve("previous-pptd-project");
@@ -134,11 +159,315 @@ public class PptCodexRunner {
         }
     }
 
+    /**
+     * HTML authoring uses the same isolated Codex profile as PPTD, but the agent
+     * may only write a bounded JSON deck plan. A repository-owned renderer then
+     * validates that plan, builds the self-contained reveal.js file and performs
+     * real-browser QA. No LLM credential or arbitrary agent HTML reaches delivery.
+     */
+    public void runHtml(PptGenerationSession session, BiConsumer<String, Map<String, Object>> events)
+            throws IOException, InterruptedException {
+        String apiKey = runtime.codexPptKey();
+        Path codex = resolve(config.getCodexCommand());
+        Path skill = resolve(config.getCodexHtmlSkillRoot());
+        Path finalizeScript = resolve(config.getCodexHtmlFinalizeScript());
+        Path visualPrefetchScript = resolve(config.getVisualPrefetchScript());
+        if (!Files.isRegularFile(codex) || !Files.isExecutable(codex)) {
+            throw new IllegalStateException("锁定的 Codex CLI 不可用: " + codex);
+        }
+        if (!Files.isRegularFile(skill.resolve("SKILL.md"))) throw new IllegalStateException("HTML 演示 Skill 不完整");
+        if (!Files.isRegularFile(finalizeScript)) throw new IllegalStateException("HTML 固定渲染桥不存在");
+
+        int searchedVisuals = 0;
+        if (!"off".equalsIgnoreCase(session.getResearchMode())) {
+            try {
+                searchedVisuals = prefetchVisualAssets(session, visualPrefetchScript, events);
+            } catch (Exception error) {
+                log.warn("Controlled HTML visual prefetch failed: taskId={}, reason={}",
+                        session.getTaskId(), sanitizeDiagnostic(error.getMessage()));
+                if ("strict".equals(session.getVisualMode())) {
+                    throw new IllegalStateException("网络图片搜索未完成，严格配图任务已停止，请检查搜索配置后重试");
+                }
+                events.accept("researching", Map.of("progress", 8, "message", "网络图片暂不可用，将使用资料与清晰版式继续"));
+            }
+            if ("strict".equals(session.getVisualMode()) && searchedVisuals == 0) {
+                throw new IllegalStateException("没有找到可安全使用的相关网络图片，严格配图任务已停止");
+            }
+        }
+
+        Path workspace = Files.createTempDirectory("web-html-codex-").toAbsolutePath().normalize();
+        setOwnerOnly(workspace);
+        Path codexHome = workspace.resolve(".codex-home");
+        Path input = workspace.resolve("input");
+        Path output = workspace.resolve("output");
+        Files.createDirectories(codexHome);
+        Files.createDirectories(input);
+        Files.createDirectories(output);
+        setOwnerOnly(codexHome);
+        try {
+            copyTree(skill, workspace.resolve("skill"), config.getCodexMaxProjectFiles(), config.getCodexMaxProjectBytes());
+            copyIfPresent(session.getTaskDir().resolve("source.txt"), input.resolve("source.txt"));
+            if (Files.isDirectory(session.getImagesDir())) {
+                copyTree(session.getImagesDir(), input.resolve("images"),
+                        config.getCodexMaxProjectFiles(), config.getCodexMaxProjectBytes());
+            }
+            Path webImages = session.getTaskDir().resolve("web-images");
+            if (Files.isDirectory(webImages)) {
+                copyTree(webImages, input.resolve("web-images"),
+                        config.getCodexMaxProjectFiles(), config.getCodexMaxProjectBytes());
+            }
+            copyIfPresent(session.getTaskDir().resolve("previous-agent-plan.json"), input.resolve("previous-agent-plan.json"));
+            Files.writeString(input.resolve("request.txt"), session.getPrompt(), StandardCharsets.UTF_8);
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(input.resolve("assets.json").toFile(), htmlAssets(session));
+
+            String providerBaseUrl = runtime.codexPptProviderBaseUrl();
+            AuthSource auth = prepareAuth(codex, codexHome, apiKey);
+            boolean customProvider = !providerBaseUrl.isBlank() && !auth.localCli();
+            if (customProvider) writeCcswitchProviderConfig(codexHome, providerBaseUrl,
+                    runtime.codexPptModel(), runtime.codexPptReasoningEffort());
+            events.accept("planning", Map.of("progress", 12, "message",
+                    auth.localCli() ? "正在复用本机 Codex CLI 编排 HTML 演示" : "正在启动隔离的 Codex HTML Agent"));
+            List<String> command = execCommand(codex, workspace, runtime.codexPptModel(),
+                    runtime.codexPptReasoningEffort(), "workspace-write", auth.localCli(), customProvider);
+            String codexLog;
+            try {
+                codexLog = run(command, workspace, codexHome, htmlPrompt(session),
+                        Duration.ofSeconds(config.getCodexTimeoutSeconds()), events, true);
+            } catch (CodexProcessException failure) {
+                StringBuilder diagnostic = new StringBuilder(failure.processLog());
+                logCodexDiagnostic(session, "html-process-exit-" + failure.exitCode(), diagnostic);
+                throw new IllegalStateException("Codex HTML 生成未完成，请稍后重试");
+            }
+            Path plan = output.resolve("agent-plan.json");
+            if (!Files.isRegularFile(plan) || Files.isSymbolicLink(plan)
+                    || Files.size(plan) < 2 || Files.size(plan) > 1024L * 1024) {
+                logCodexDiagnostic(session, "missing-html-plan", new StringBuilder(codexLog));
+                throw new IllegalStateException("Codex 未生成完整 HTML 演示计划，请重试");
+            }
+            Path retainedPlan = session.getTaskDir().resolve("codex-html-plan.json");
+            Files.copy(plan, retainedPlan, StandardCopyOption.REPLACE_EXISTING);
+            events.accept("authoring", Map.of("progress", 64, "message", "正在用固定 reveal.js 渲染器生成演示"));
+            Path result = session.getTaskDir().resolve("html-finalize-result.json");
+            Files.deleteIfExists(result);
+            List<String> finalizeCommand = List.of(config.getAgentCommand(),
+                    "--max-old-space-size=" + config.getAgentNodeMaxOldSpaceMb(), finalizeScript.toString(),
+                    session.getTaskDir().toAbsolutePath().normalize().toString(), retainedPlan.toString(),
+                    session.getTemplateKey(), session.getFontFamily(), session.getMotionMode(),
+                    session.getVisualMode(), result.toString());
+            Map<String, String> env = new LinkedHashMap<>();
+            putIfConfigured(env, "PPT_AGENT_CHROME", config.getChromeCommand());
+            run(finalizeCommand, finalizeScript.getParent(), null, "", Duration.ofSeconds(600), events, false, env);
+            JsonNode finalized = objectMapper.readTree(result.toFile());
+            int sourceCount = finalized.path("sourceCount").asInt(0);
+            boolean qaValid = finalized.path("qa").path("valid").asBoolean(false);
+            events.accept("done", Map.of("progress", 100, "message", "Codex HTML 演示已完成固定渲染与浏览器质检",
+                    "sourceCount", sourceCount, "qa", Map.of("valid", qaValid)));
+            Files.writeString(session.getTaskDir().resolve("agent.log"),
+                    tail(codexLog, (int) Math.min(64 * 1024L, config.getCodexMaxLogBytes())), StandardCharsets.UTF_8);
+        } finally {
+            deleteTree(workspace);
+        }
+    }
+
+    private Map<String, Object> htmlAssets(PptGenerationSession session) throws IOException {
+        List<Map<String, Object>> assets = new ArrayList<>();
+        if (Files.isDirectory(session.getImagesDir())) {
+            try (Stream<Path> stream = Files.list(session.getImagesDir())) {
+                List<Path> uploaded = stream.filter(Files::isRegularFile)
+                        .filter(path -> path.getFileName().toString().matches("(?i).+\\.(png|jpe?g|gif)$"))
+                        .filter(path -> !path.getFileName().toString().toLowerCase(java.util.Locale.ROOT).startsWith("paper-page-"))
+                        .sorted().limit(8).toList();
+                int index = 1;
+                for (Path file : uploaded) {
+                    if (Files.size(file) > 4L * 1024 * 1024 || !hasAcceptedImageSignature(file)) continue;
+                    assets.add(Map.of("id", "U" + String.format("%02d", index++), "fileName", file.getFileName().toString(),
+                            "origin", "upload", "rightsStatus", "user-provided"));
+                }
+            }
+        }
+        Path manifest = session.getTaskDir().resolve("web-images/image-assets.json");
+        if (Files.isRegularFile(manifest) && Files.size(manifest) <= 512L * 1024) {
+            JsonNode root = objectMapper.readTree(manifest.toFile());
+            JsonNode images = root.isArray() ? root : root.path("images");
+            if (images.isArray()) {
+                for (JsonNode image : images) {
+                    String id = image.path("id").asText("");
+                    String fileName = image.path("fileName").asText(image.path("localPath").asText(""));
+                    if (!id.matches("(?i)WEB\\d{2}") || !fileName.matches("(?i)WEB\\d{2}\\.(png|jpe?g|gif)")) continue;
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("id", id.toUpperCase(java.util.Locale.ROOT));
+                    item.put("fileName", fileName);
+                    item.put("title", image.path("title").asText(""));
+                    item.put("description", image.path("description").asText(""));
+                    item.put("sourceUrl", image.path("sourceUrl").asText(""));
+                    item.put("rightsStatus", image.path("rightsStatus").asText("unverified"));
+                    assets.add(item);
+                    if (assets.size() >= 12) break;
+                }
+            }
+        }
+        return Map.of("assets", assets);
+    }
+
+    private String htmlPrompt(PptGenerationSession session) {
+        return """
+                You are the isolated authoring agent for a safe offline HTML presentation service.
+                Read ./skill/SKILL.md, ./skill/references/design-and-motion.md and ./skill/references/quality-contract.md completely.
+                Read ./input/request.txt, optional ./input/source.txt, ./input/assets.json, and optional
+                ./input/previous-agent-plan.json. Create ONLY ./output/agent-plan.json. Do not create HTML,
+                CSS, JavaScript, scripts, binaries, packages, or any other output. Do not use network tools,
+                browsers, curl, wget, package managers, or execute generated code. The server will validate
+                your JSON and render it with its fixed reveal.js implementation.
+
+                Theme: %s. Requested font: %s. Motion mode: %s. Visual mode: %s. Research mode: %s.
+                %s
+                Assets in ./input/assets.json are the only allowed imageId values. Uxx items are user uploads.
+                WEBxx items are server-validated search thumbnails; their rightsStatus may be unverified, so
+                never call them licensed. Use an image only when its title/description is clearly topical.
+                In strict visual mode, at least one non-cover/non-closing page must use a WEBxx image.
+
+                Write a single JSON object with this shape:
+                {"title":"...","audience":"...","takeaway":"...","slides":[
+                  {"type":"cover|section|content|evidence|comparison|timeline|quote|closing",
+                   "layout":"cover|section|statement|image-hero|split|evidence|stats|process|comparison|timeline|quote|gallery|closing",
+                   "tone":"base|light|deep","section":"...","title":"...","headline":"...",
+                   "bullets":["..."],"items":[{"label":"...","value":"...","detail":"..."}],
+                   "imageId":"U01|WEB01|","sourceIds":["WEB01"],"notes":"..."}
+                ]}
+                Produce 3-30 pages. First page must be cover and last page closing. Use stats only for real
+                numbers, process/timeline only for ordered relations, comparison only for genuine sides,
+                and image-hero/gallery only for a strong topical image. Vary page silhouettes and deep/light
+                rhythm; never repeat one layout three times in a row. Keep each page concise enough for a
+                1280x720 viewport: at most 4 bullets normally, 6 only for comparison, with compact complete
+                sentences. No visible references page, markdown/LaTeX syntax, placeholders, fabricated facts,
+                template sample copy, or raw PDF-page images. Put provenance IDs in sourceIds/notes only.
+                If revising, return the complete revised deck, preserving unaffected good pages.
+                Finish only after valid JSON exists at exactly ./output/agent-plan.json.
+                """.formatted(session.getTemplateKey(), session.getFontFamily(), session.getMotionMode(),
+                session.getVisualMode(), session.getResearchMode(), requestedPageCountInstruction(session.getPrompt()));
+    }
+
     public void finalizeExisting(PptGenerationSession session, BiConsumer<String, Map<String, Object>> events)
             throws IOException, InterruptedException {
         Path vendor = resolve(config.getCodexVendorRoot());
         Path finalizeScript = resolve(config.getCodexFinalizeScript());
         runFinalize(finalizeScript, session.getTaskDir(), vendor, session.getFontFamily(), events);
+    }
+
+    /**
+     * Runs the locked search/downloader outside the Codex sandbox. Only validated local
+     * images and a provenance manifest cross into the disposable workspace.
+     */
+    int prefetchVisualAssets(PptGenerationSession session, Path script,
+                             BiConsumer<String, Map<String, Object>> events)
+            throws IOException, InterruptedException {
+        if (!Files.isRegularFile(script)) throw new IllegalStateException("PPT 网络配图预取器不存在");
+        Path taskDir = session.getTaskDir().toAbsolutePath().normalize();
+        Path retained = taskDir.resolve("web-images");
+        int existing = retainedVisualCount(retained);
+        if (existing > 0) {
+            events.accept("researching", Map.of("progress", 8, "message", "正在复用已校验的网络视觉素材",
+                    "sourceCount", existing));
+            return existing;
+        }
+
+        Path request = taskDir.resolve("visual-prefetch-request.json");
+        Path staging = Files.createTempDirectory(taskDir, "web-images-prefetch-").toAbsolutePath().normalize();
+        try {
+            Map<String, Object> payload = Map.of(
+                    "prompt", trimForVisualSearch(session.getPrompt()),
+                    "maxImages", 6,
+                    "maxQueries", runtime.braveImagesMaxQueries());
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(request.toFile(), payload);
+            events.accept("researching", Map.of("progress", 7, "message", "正在通过受控搜索查找相关图片"));
+
+            List<String> command = List.of(config.getAgentCommand(),
+                    "--max-old-space-size=" + config.getAgentNodeMaxOldSpaceMb(),
+                    script.toString(), request.toString(), staging.toString());
+            Map<String, String> env = new LinkedHashMap<>();
+            putIfConfigured(env, "PPT_AGENT_BRAVE_IMAGES_ENDPOINT", runtime.braveImagesEndpoint());
+            putIfConfigured(env, "PPT_AGENT_BRAVE_IMAGES_KEY", runtime.braveImagesKey());
+            env.put("PPT_AGENT_BRAVE_IMAGES_COUNT", Integer.toString(runtime.braveImagesCount()));
+            env.put("PPT_AGENT_BRAVE_IMAGES_MAX_QUERIES", Integer.toString(runtime.braveImagesMaxQueries()));
+            putIfConfigured(env, "PPT_AGENT_TAVILY_ENDPOINT", runtime.tavilyUrl());
+            putIfConfigured(env, "PPT_AGENT_TAVILY_KEY", runtime.tavilyKey());
+            putIfConfigured(env, "PPT_AGENT_PROXY_URL", outboundProxyUrl());
+            run(command, script.getParent().getParent().getParent(), null, "", Duration.ofSeconds(90),
+                    (ignored, data) -> { }, false, env);
+
+            int count = retainedVisualCount(staging);
+            if (Files.exists(retained)) deleteTree(retained);
+            Files.move(staging, retained, StandardCopyOption.REPLACE_EXISTING);
+            events.accept("researching", Map.of("progress", 9,
+                    "message", count > 0 ? "已准备 " + count + " 张可追溯网络视觉素材" : "未找到合适网络图片，将继续使用资料与版式",
+                    "sourceCount", count));
+            return count;
+        } finally {
+            Files.deleteIfExists(request);
+            if (Files.exists(staging)) deleteTree(staging);
+        }
+    }
+
+    private int retainedVisualCount(Path directory) {
+        Path manifest = directory.resolve("image-assets.json");
+        if (!Files.isRegularFile(manifest)) return 0;
+        try {
+            Path normalizedDirectory = directory.toAbsolutePath().normalize();
+            if (Files.isSymbolicLink(directory) || Files.size(manifest) > 512L * 1024) return 0;
+            JsonNode root = objectMapper.readTree(manifest.toFile());
+            JsonNode images = root.isArray() ? root : root.path("images");
+            if (!images.isArray()) return 0;
+            Set<Path> accepted = new java.util.HashSet<>();
+            for (JsonNode image : images) {
+                String fileName = image.path("fileName").asText(image.path("localPath").asText(""));
+                if (fileName.matches("WEB\\d{2}\\.(?i:png|jpe?g|gif)")) {
+                    Path file = normalizedDirectory.resolve(fileName).normalize();
+                    if (file.startsWith(normalizedDirectory) && Files.isRegularFile(file)
+                            && !Files.isSymbolicLink(file) && Files.size(file) <= 4L * 1024 * 1024
+                            && hasAcceptedImageSignature(file)) accepted.add(file);
+                }
+            }
+            return accepted.size();
+        } catch (Exception ignored) {
+            return 0;
+        }
+    }
+
+    private boolean hasAcceptedImageSignature(Path file) throws IOException {
+        byte[] header = new byte[12];
+        int size;
+        try (var input = Files.newInputStream(file)) {
+            size = input.read(header);
+        }
+        boolean png = size >= 8 && header[0] == (byte) 0x89 && header[1] == 0x50
+                && header[2] == 0x4e && header[3] == 0x47 && header[4] == 0x0d
+                && header[5] == 0x0a && header[6] == 0x1a && header[7] == 0x0a;
+        boolean jpeg = size >= 3 && header[0] == (byte) 0xff && header[1] == (byte) 0xd8
+                && header[2] == (byte) 0xff;
+        boolean gif = size >= 6 && header[0] == 0x47 && header[1] == 0x49 && header[2] == 0x46
+                && header[3] == 0x38 && (header[4] == 0x37 || header[4] == 0x39) && header[5] == 0x61;
+        return png || jpeg || gif;
+    }
+
+    private String trimForVisualSearch(String value) {
+        String normalized = value == null ? "" : value.replaceAll("[\\r\\n\\t]+", " ")
+                .replaceAll("\\s+", " ").trim();
+        return normalized.length() <= 4000 ? normalized : normalized.substring(0, 4000);
+    }
+
+    private void putIfConfigured(Map<String, String> environment, String key, String value) {
+        if (value != null && !value.isBlank()) environment.put(key, value.trim());
+    }
+
+    private String outboundProxyUrl() {
+        for (String name : List.of("HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy")) {
+            String value = System.getenv(name);
+            if (value != null && !value.isBlank()) return value.trim();
+        }
+        String host = System.getProperty("https.proxyHost", System.getProperty("http.proxyHost", ""));
+        String port = System.getProperty("https.proxyPort", System.getProperty("http.proxyPort", ""));
+        if (host == null || host.isBlank()) return "";
+        return "http://" + host.trim() + (port == null || port.isBlank() ? "" : ":" + port.trim());
     }
 
     public Map<String, Object> testConnection(String apiKey, String model, String effort, String providerBaseUrl)
@@ -445,7 +774,7 @@ public class PptCodexRunner {
             }
             if (process.isAlive()) {
                 terminate(process);
-                throw new IllegalStateException("Codex PPT 任务超时");
+                throw new IllegalStateException("Codex 演示任务超时");
             }
             String line;
             while ((line = reader.readLine()) != null) appendLine(line, outputLog, events, parseJson);
@@ -497,7 +826,7 @@ public class PptCodexRunner {
             Map<String, Object> event = objectMapper.readValue(line, new TypeReference<>() {});
             String type = String.valueOf(event.getOrDefault("type", event.getOrDefault("event", "")));
             if (type.contains("error")) events.accept("reviewing", Map.of("progress", 70, "message", "Codex 正在检查并修复生成结果"));
-            else if (type.contains("item")) events.accept("authoring", Map.of("progress", 45, "message", "Codex 正在生成 PPTD 页面"));
+            else if (type.contains("item")) events.accept("authoring", Map.of("progress", 45, "message", "Codex 正在编排演示内容"));
         } catch (Exception ignored) {}
     }
 
@@ -577,6 +906,10 @@ public class PptCodexRunner {
                 Images API. In supplement mode, use them only for fitting missing visual slots after stronger uploaded or
                 source-grounded material. In prefer mode, use them as the first visual option where semantically suitable.
                 They are not factual sources: never display a source URL/citation for them and never add text to them.
+                If ./input/web-images/ exists, it contains server-downloaded, validation-passed search candidates plus
+                image-assets.json. Prefer topical uploaded/extracted figures and explicitly licensed assets. Brave-indexed
+                candidates have rightsStatus=unverified: use them only when clearly relevant, retain their source metadata
+                in page notes, and never describe them as licensed. Do not display a bibliography page.
                 Work only inside this disposable workspace. Create the final self-contained project at ./deck with exactly
                 one ./deck/deck.pptd, ./deck/pages/*.page, and ./deck/media/ as needed. Produce 3-30 pages. %s
                 Do not run export_pptx.py, browser tools, package managers, network downloaders, or create scripts/binaries.

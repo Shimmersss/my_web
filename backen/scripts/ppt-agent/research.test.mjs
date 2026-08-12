@@ -1,6 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { dedupe, discoverPageImages, fallbackImageQuery, fetchText, isSyntheticDnsAddress, knownFirstPartyMediaSources, readBoundedBody, relevantPageImageSources, roundRobin, safeEndpoint, searchVisualAssets, setResearchTransportForTest } from './research.mjs';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { braveImages, dedupe, discoverPageImages, downloadResearchAssets, fallbackImageQuery, fetchText, inspectImageBytes, isSyntheticDnsAddress, knownFirstPartyMediaSources, normalizeBraveImageQuery, parseBraveImageResults, readBoundedBody, relevantPageImageSources, roundRobin, safeEndpoint, searchVisualAssets, setResearchTransportForTest } from './research.mjs';
+import { prefetchVisualAssets, visualQueriesFromPrompt } from './prefetch-visual-assets.mjs';
+
+const ONE_PIXEL_PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 
 test('fallback image search keeps the presentation topic', () => {
   assert.equal(fallbackImageQuery([' Sword Art Online 角色关系 ']), 'Sword Art Online 角色关系');
@@ -31,6 +37,210 @@ test('safeEndpoint blocks SSRF targets and credentials', () => {
     'https://search.attacker.example/search'
   ]) assert.throws(() => safeEndpoint(url), /公网 HTTPS/);
   assert.equal(safeEndpoint('https://api.tavily.com/search').hostname, 'api.tavily.com');
+  assert.equal(safeEndpoint('https://api.search.brave.com/res/v1/images/search').hostname, 'api.search.brave.com');
+});
+
+test('Brave queries are bounded to 400 characters and 50 words', () => {
+  const words = Array.from({ length: 80 }, (_, index) => `word${index}`).join(' ');
+  assert.equal(normalizeBraveImageQuery(words).split(' ').length, 50);
+  assert.equal([...normalizeBraveImageQuery('图'.repeat(800))].length, 400);
+  assert.deepEqual(visualQueriesFromPrompt('主标题。第一部分；第二部分', 9), ['主标题。第一部分；第二部分', '第一部分', '第二部分']);
+});
+
+test('Brave image metadata uses trusted thumbnails and never invents a license', () => {
+  const result = parseBraveImageResults({
+    extra: { might_be_offensive: false },
+    results: [
+      {
+        title: 'Verified topic match',
+        url: 'https://example.com/article',
+        source: 'example.com',
+        thumbnail: { src: 'https://imgs.search.brave.com/token/image.jpg', width: 500, height: 281 },
+        properties: { url: 'https://cdn.example.com/original.jpg', width: 1920, height: 1080 },
+        confidence: 'high'
+      },
+      {
+        title: 'Untrusted thumbnail',
+        url: 'https://example.com/article-2',
+        thumbnail: { src: 'https://cdn.example.com/thumb.jpg' },
+        confidence: 'medium'
+      },
+      {
+        title: 'Low confidence',
+        url: 'https://example.com/article-3',
+        thumbnail: { src: 'https://imgs.search.brave.com/token/low.jpg' },
+        confidence: 'low'
+      }
+    ]
+  }, 'presentation image');
+  assert.equal(result.length, 1);
+  assert.equal(result[0].provider, 'brave-images');
+  assert.equal(result[0].license, '');
+  assert.equal(result[0].rightsStatus, 'unverified');
+  assert.match(result[0].rightsNote, /reuse rights require verification/);
+  assert.equal(result[0].originalUrl, 'https://cdn.example.com/original.jpg');
+  assert.deepEqual(parseBraveImageResults({ extra: { might_be_offensive: true }, results: [{}] }, 'query'), []);
+});
+
+test('Brave image search fixes its endpoint, strict SafeSearch and secret header', { concurrency: false }, async () => {
+  const previousProxy = process.env.PPT_AGENT_PROXY_URL;
+  const previousKey = process.env.PPT_AGENT_BRAVE_IMAGES_KEY;
+  process.env.PPT_AGENT_PROXY_URL = 'http://127.0.0.1:7890';
+  process.env.PPT_AGENT_BRAVE_IMAGES_KEY = 'test-secret';
+  let received;
+  setResearchTransportForTest({
+    resolve: async value => ({ endpoint: new URL(value), address: '93.184.216.34', family: 4 }),
+    fetch: async (url, options) => {
+      received = { url: new URL(url), options };
+      return new Response(JSON.stringify({ results: [] }), { status: 200 });
+    }
+  });
+  try {
+    assert.deepEqual(await braveImages('safe image', { count: 999 }), []);
+    assert.equal(received.url.origin, 'https://api.search.brave.com');
+    assert.equal(received.url.pathname, '/res/v1/images/search');
+    assert.equal(received.url.searchParams.get('safesearch'), 'strict');
+    assert.equal(received.url.searchParams.get('count'), '50');
+    assert.equal(received.options.headers['X-Subscription-Token'], 'test-secret');
+    assert.doesNotMatch(received.url.toString(), /test-secret/);
+  } finally {
+    if (previousProxy === undefined) delete process.env.PPT_AGENT_PROXY_URL;
+    else process.env.PPT_AGENT_PROXY_URL = previousProxy;
+    if (previousKey === undefined) delete process.env.PPT_AGENT_BRAVE_IMAGES_KEY;
+    else process.env.PPT_AGENT_BRAVE_IMAGES_KEY = previousKey;
+    setResearchTransportForTest();
+  }
+});
+
+test('image downloads validate file signature and retain unverified rights provenance', { concurrency: false }, async () => {
+  const dimensions = inspectImageBytes(ONE_PIXEL_PNG, 'image/png');
+  assert.deepEqual(dimensions, { contentType: 'image/png', width: 1, height: 1 });
+  assert.throws(() => inspectImageBytes(ONE_PIXEL_PNG, 'image/jpeg'), /签名不一致/);
+  assert.throws(() => inspectImageBytes(Buffer.from('not an image'), 'image/png'), /签名无效/);
+  const outputDir = await fs.mkdtemp(path.join(os.tmpdir(), 'brave-image-download-'));
+  setResearchTransportForTest({
+    assetResolve: async value => ({ endpoint: new URL(value), address: '93.184.216.34', family: 4 }),
+    assetFetch: async () => new Response(ONE_PIXEL_PNG, {
+      status: 200,
+      headers: { 'content-type': 'image/png', 'content-length': String(ONE_PIXEL_PNG.length) }
+    })
+  });
+  try {
+    const result = await downloadResearchAssets([{
+      url: 'https://imgs.search.brave.com/token/image.png',
+      sourceUrl: 'https://example.com/article',
+      originalUrl: 'https://cdn.example.com/original.png',
+      title: 'Indexed image',
+      provider: 'brave-images',
+      rightsStatus: 'unverified',
+      rightsNote: 'Brave indexed image; reuse rights require verification'
+    }], outputDir, { maxCount: 1 });
+    assert.equal(result.images.length, 1);
+    assert.equal(result.images[0].license, '');
+    assert.equal(result.images[0].rightsStatus, 'unverified');
+    assert.equal(result.images[0].originalUrl, 'https://cdn.example.com/original.png');
+    assert.equal(result.images[0].mightBeOffensive, false);
+    assert.equal(result.images[0].width, 1);
+    assert.equal(result.images[0].height, 1);
+  } finally {
+    setResearchTransportForTest();
+    await fs.rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('PPTX prefetch succeeds without a Brave key by using licensed shared fallbacks', { concurrency: false }, async () => {
+  const previousProxy = process.env.PPT_AGENT_PROXY_URL;
+  const previousBrave = process.env.PPT_AGENT_BRAVE_IMAGES_KEY;
+  const previousBraveFallback = process.env.BRAVE_SEARCH_API_KEY;
+  const previousTavily = process.env.PPT_AGENT_TAVILY_KEY;
+  process.env.PPT_AGENT_PROXY_URL = 'http://127.0.0.1:7890';
+  delete process.env.PPT_AGENT_BRAVE_IMAGES_KEY;
+  delete process.env.BRAVE_SEARCH_API_KEY;
+  delete process.env.PPT_AGENT_TAVILY_KEY;
+  const outputDir = await fs.mkdtemp(path.join(os.tmpdir(), 'visual-prefetch-'));
+  setResearchTransportForTest({
+    resolve: async value => ({ endpoint: new URL(value), address: '93.184.216.34', family: 4 }),
+    fetch: async url => {
+      const endpoint = new URL(url);
+      if (endpoint.hostname === 'commons.wikimedia.org') {
+        return new Response(JSON.stringify({ query: { pages: { 1: {
+          title: 'File:Quantum processor.jpg',
+          imageinfo: [{
+            mime: 'image/jpeg',
+            thumburl: 'https://upload.wikimedia.org/quantum.png',
+            url: 'https://upload.wikimedia.org/quantum.png',
+            extmetadata: { LicenseShortName: { value: 'CC BY 4.0' } }
+          }]
+        } } } }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      if (endpoint.hostname === 'api.openverse.org') {
+        return new Response(JSON.stringify({ results: [] }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }
+      throw new Error(`unexpected host ${endpoint.hostname}`);
+    },
+    assetResolve: async value => ({ endpoint: new URL(value), address: '93.184.216.34', family: 4 }),
+    assetFetch: async () => new Response(ONE_PIXEL_PNG, { status: 200, headers: { 'content-type': 'image/png' } })
+  });
+  try {
+    const manifest = await prefetchVisualAssets({ prompt: 'quantum processor architecture', maxImages: 1, maxQueries: 1 }, outputDir);
+    assert.equal(manifest.provider, 'server-image-search');
+    assert.equal(manifest.images.length, 1);
+    assert.equal(manifest.images[0].provider, 'wikimedia-commons');
+    assert.equal(manifest.images[0].rightsStatus, 'recorded');
+    assert.equal(manifest.images[0].license, 'CC BY 4.0');
+    assert.equal(manifest.images[0].localPath, 'WEB01.png');
+    assert.deepEqual(JSON.parse(await fs.readFile(path.join(outputDir, 'image-assets.json'), 'utf8')).images, manifest.images);
+  } finally {
+    setResearchTransportForTest();
+    if (previousProxy === undefined) delete process.env.PPT_AGENT_PROXY_URL;
+    else process.env.PPT_AGENT_PROXY_URL = previousProxy;
+    if (previousBrave === undefined) delete process.env.PPT_AGENT_BRAVE_IMAGES_KEY;
+    else process.env.PPT_AGENT_BRAVE_IMAGES_KEY = previousBrave;
+    if (previousBraveFallback === undefined) delete process.env.BRAVE_SEARCH_API_KEY;
+    else process.env.BRAVE_SEARCH_API_KEY = previousBraveFallback;
+    if (previousTavily === undefined) delete process.env.PPT_AGENT_TAVILY_KEY;
+    else process.env.PPT_AGENT_TAVILY_KEY = previousTavily;
+    await fs.rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test('Tavily string images survive with truthful unverified provenance', { concurrency: false }, async () => {
+  const previousProxy = process.env.PPT_AGENT_PROXY_URL;
+  const previousKey = process.env.PPT_AGENT_TAVILY_KEY;
+  process.env.PPT_AGENT_PROXY_URL = 'http://127.0.0.1:7890';
+  process.env.PPT_AGENT_TAVILY_KEY = 'test-tavily';
+  setResearchTransportForTest({
+    resolve: async value => ({ endpoint: new URL(value), address: '93.184.216.34', family: 4 }),
+    fetch: async url => {
+      const endpoint = new URL(url);
+      if (endpoint.hostname === 'api.tavily.com') {
+        return new Response(JSON.stringify({ images: ['https://images.example.com/topic.jpg'], results: [] }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' }
+        });
+      }
+      if (endpoint.hostname === 'commons.wikimedia.org') {
+        return new Response(JSON.stringify({ query: { pages: {} } }), { status: 200 });
+      }
+      if (endpoint.hostname === 'api.openverse.org') {
+        return new Response(JSON.stringify({ results: [] }), { status: 200 });
+      }
+      throw new Error(`unexpected host ${endpoint.hostname}`);
+    }
+  });
+  try {
+    const result = await searchVisualAssets(['specific topic'], { maxQueries: 1, maxAssets: 2 });
+    assert.equal(result.assets.length, 1);
+    assert.equal(result.assets[0].provider, 'tavily-images');
+    assert.equal(result.assets[0].rightsStatus, 'unverified');
+    assert.equal(result.assets[0].license, '');
+  } finally {
+    setResearchTransportForTest();
+    if (previousProxy === undefined) delete process.env.PPT_AGENT_PROXY_URL;
+    else process.env.PPT_AGENT_PROXY_URL = previousProxy;
+    if (previousKey === undefined) delete process.env.PPT_AGENT_TAVILY_KEY;
+    else process.env.PPT_AGENT_TAVILY_KEY = previousKey;
+  }
 });
 
 test('synthetic public DNS answers are recognized separately from private targets', () => {
@@ -269,6 +479,26 @@ test('Mimo source pages expose only explicit preview image metadata', { concurre
   }
 });
 
+test('source-page image extraction supports link rel=image_src href metadata', { concurrency: false }, async () => {
+  const previous = process.env.PPT_AGENT_PROXY_URL;
+  process.env.PPT_AGENT_PROXY_URL = 'http://127.0.0.1:7890';
+  setResearchTransportForTest({
+    resolve: async value => ({ endpoint: new URL(value), address: '93.184.216.34', family: 4 }),
+    fetch: async () => new Response('<html><head><link href="/preview.jpg" media="screen" rel="alternate image_src"></head></html>', {
+      status: 200,
+      headers: { 'content-type': 'text/html; charset=utf-8' }
+    })
+  });
+  try {
+    const result = await discoverPageImages([{ title: 'Topic page', url: 'https://example.com/topic' }]);
+    assert.equal(result.assets[0].url, 'https://example.com/preview.jpg');
+  } finally {
+    if (previous === undefined) delete process.env.PPT_AGENT_PROXY_URL;
+    else process.env.PPT_AGENT_PROXY_URL = previous;
+    setResearchTransportForTest();
+  }
+});
+
 test('HTTP errors and declared oversized bodies are cancelled promptly', { concurrency: false }, async () => {
   for (const status of [500, 200]) {
     let cancelled = false;
@@ -291,7 +521,8 @@ test('rejected redirects cancel streaming bodies and protect every authenticatio
   const cases = [
     { headers: {}, location: null, expected: /缺少 Location/ },
     { headers: {}, location: 'https://attacker.example/path', expected: /blocked next hop/ },
-    { headers: { 'x-api-key': 'secret' }, location: 'https://api.tavily.com/path', expected: /携带密钥跨域/ }
+    { headers: { 'x-api-key': 'secret' }, location: 'https://api.tavily.com/path', expected: /携带密钥跨域/ },
+    { headers: { 'X-Subscription-Token': 'secret' }, location: 'https://api.tavily.com/path', expected: /携带密钥跨域/ }
   ];
   for (const item of cases) {
     let cancelled = false;

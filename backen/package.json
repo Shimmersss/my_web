@@ -9,6 +9,8 @@
   "scripts": {
     "test": "node --test scripts/ppt-agent/*.test.mjs scripts/ppt-codex/*.test.mjs",
     "prepare:ppt-templates": "node scripts/ppt-agent/prepare-templates.mjs",
+    "prepare:html-previews": "node scripts/generate_html_template_previews.mjs",
+    "check:html-previews": "node scripts/check_html_template_previews.mjs",
     "preflight:ppt-fonts": "node scripts/ppt-agent/font-preflight.mjs",
     "prepare:codex-linux-sandbox": "node scripts/ppt-codex/ensure-codex-linux-sandbox.mjs",
     "verify:codex-linux-sandbox": "node scripts/ppt-codex/ensure-codex-linux-sandbox.mjs --check",

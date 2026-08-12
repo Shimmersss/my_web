@@ -32,7 +32,7 @@ class PptGenerationServiceTest {
     Path tempDir;
 
     @Test
-    void htmlAgentTaskPersistsRealPreviewResearchModeAndAccessControl() throws Exception {
+    void codexHtmlTaskPersistsRealPreviewResearchModeEngineAndAccessControl() throws Exception {
         PptGenerationService service = service(successfulRunner(), null);
         AuthUser owner = new AuthUser(7, "owner", "USER", 100, true);
         try {
@@ -43,6 +43,7 @@ class PptGenerationServiceTest {
 
             PptGenerationSession completed = service.getSession(task.getTaskId());
             assertEquals("off", completed.getResearchMode());
+            assertEquals("codex-html", completed.getEngine());
             assertTrue(completed.isQaValid());
             assertTrue(service.canAccess(completed, owner));
             assertFalse(service.canAccess(completed, new AuthUser(8, "other", "USER", 100, true)));
@@ -85,12 +86,13 @@ class PptGenerationServiceTest {
         try {
             PptGenerationSession first = service.createTask(
                     "First", "html-reveal-white", 100, null, null,
-                    root, "same-request", "html", "auto", "strict", "Microsoft YaHei");
+                    root, "same-request", "html", "auto", "strict", "Microsoft YaHei", "off", "expressive");
             PptGenerationSession duplicate = service.createTask(
                     "First", "html-reveal-white", 100, null, null,
-                    root, "same-request", "html", "auto", "strict", "Microsoft YaHei");
+                    root, "same-request", "html", "auto", "strict", "Microsoft YaHei", "off", "expressive");
             assertEquals(first.getTaskId(), duplicate.getTaskId());
             assertEquals("strict", first.getVisualMode());
+            assertEquals("expressive", first.getMotionMode());
             awaitStatus(service, first.getTaskId(), "completed");
 
             assertThrows(IllegalArgumentException.class,
@@ -101,6 +103,7 @@ class PptGenerationServiceTest {
             assertEquals(first.getTaskId(), revision.getRevisionOfTaskId());
             assertEquals("把结论页改成三项行动计划", revision.getRevisionPrompt());
             assertEquals("strict", revision.getVisualMode());
+            assertEquals("expressive", revision.getMotionMode());
             assertTrue(Files.isRegularFile(revision.getTaskDir().resolve("previous-agent-plan.json")));
             assertTrue(Files.isRegularFile(revision.getTaskDir().resolve("previous-sources.json")));
         } finally {

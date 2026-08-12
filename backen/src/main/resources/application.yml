@@ -120,19 +120,17 @@ ppt-generation:
   max-archive-entry-bytes: ${PPT_GENERATION_MAX_ARCHIVE_ENTRY_BYTES:33554432}
   max-archive-compression-ratio: ${PPT_GENERATION_MAX_ARCHIVE_COMPRESSION_RATIO:120}
   agent-command: ${PPT_GENERATION_AGENT_COMMAND:node}
-  agent-script: ${PPT_GENERATION_AGENT_SCRIPT:./scripts/ppt-agent/worker.mjs}
-  agent-project-root: ${PPT_GENERATION_AGENT_PROJECT_ROOT:..}
-  agent-timeout-seconds: ${PPT_GENERATION_AGENT_TIMEOUT_SECONDS:1800}
   agent-node-max-old-space-mb: ${PPT_GENERATION_AGENT_NODE_MAX_OLD_SPACE_MB:384}
-  agent-max-sources: ${PPT_GENERATION_AGENT_MAX_SOURCES:12}
   vision-model: ${PPT_GENERATION_VISION_MODEL:mimo-v2.5}
-  # 可选的 Mimo 原生联网搜索；需开通联网插件的按量开放平台 sk- Key，不能使用 Token Plan tp- Key
-  mimo-search-endpoint: ${PPT_GENERATION_MIMO_SEARCH_ENDPOINT:https://api.xiaomimimo.com/v1/chat/completions}
-  mimo-search-key: ${PPT_GENERATION_MIMO_SEARCH_KEY:}
-  mimo-search-model: ${PPT_GENERATION_MIMO_SEARCH_MODEL:mimo-v2.5}
   soffice-command: ${PPT_GENERATION_SOFFICE_COMMAND:soffice}
   pdftoppm-command: ${PPT_GENERATION_PDFTOPPM_COMMAND:pdftoppm}
-  # 本机未配置时由 Node worker 按平台选择 Chrome；生产部署显式设置 /usr/bin/chromium
+  # 本机未配置时由固定 Node 渲染器按平台选择 Chrome；生产部署显式设置 /usr/bin/chromium
   chrome-command: ${PPT_GENERATION_CHROME_COMMAND:}
   paper-parser-command: ${PPT_GENERATION_PAPER_PARSER_COMMAND:uv run --with docling --with markitdown python}
   paper-parser-script: ${PPT_GENERATION_PAPER_PARSER_SCRIPT:./scripts/ppt_document_parser.py}
+  codex-command: ${PPT_GENERATION_CODEX_COMMAND:./node_modules/.bin/codex}
+  codex-vendor-root: ${PPT_GENERATION_CODEX_VENDOR_ROOT:../vendor/open-kimi-ppt-skill}
+  codex-finalize-script: ${PPT_GENERATION_CODEX_FINALIZE_SCRIPT:./scripts/ppt-codex/finalize.mjs}
+  codex-html-skill-root: ${PPT_GENERATION_CODEX_HTML_SKILL_ROOT:../.agents/skills/create-html-presentation}
+  codex-html-finalize-script: ${PPT_GENERATION_CODEX_HTML_FINALIZE_SCRIPT:./scripts/ppt-agent/finalize-html-plan.mjs}
+  visual-prefetch-script: ${PPT_GENERATION_VISUAL_PREFETCH_SCRIPT:./scripts/ppt-agent/prefetch-visual-assets.mjs}

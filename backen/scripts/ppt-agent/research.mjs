@@ -2,14 +2,19 @@ import dns from 'node:dns/promises';
 import fs from 'node:fs/promises';
 import net from 'node:net';
 import path from 'node:path';
+import { imageSize } from 'image-size';
 import { Agent } from 'undici';
 import { agentFetch, hasConfiguredProxy } from './net.mjs';
 import { recordToolCall } from './model.mjs';
 
 const MAX_RESPONSE_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
+const MAX_IMAGE_PIXELS = 16_000_000;
 const MAX_REDIRECTS = 3;
+const BRAVE_IMAGES_ENDPOINT = 'https://api.search.brave.com/res/v1/images/search';
+const BRAVE_RIGHTS_NOTE = 'Brave indexed image; reuse rights require verification';
 const ALLOWED_SEARCH_HOSTS = new Set([
+  'api.search.brave.com',
   'api.tavily.com',
   'api.openalex.org',
   'api.crossref.org',
@@ -20,6 +25,7 @@ const ALLOWED_SEARCH_HOSTS = new Set([
   'unsplash.com'
 ]);
 const TRUSTED_SYNTHETIC_ASSET_HOSTS = new Set([
+  'imgs.search.brave.com',
   'api.openverse.org',
   'commons.wikimedia.org',
   'upload.wikimedia.org',
@@ -89,6 +95,14 @@ function safeAssetUrl(value) {
   return url;
 }
 
+function safeProvenanceUrl(value) {
+  try {
+    return safeAssetUrl(value).toString();
+  } catch {
+    return '';
+  }
+}
+
 async function assertPublicAssetResolution(value) {
   const endpoint = safeAssetUrl(value);
   if (hasConfiguredProxy()) return { endpoint, address: '127.0.0.1', family: 4 };
@@ -105,10 +119,14 @@ async function assertPublicAssetResolution(value) {
 
 let researchFetch = agentFetch;
 let resolveResearchEndpoint = assertPublicResolution;
+let researchAssetFetch = agentFetch;
+let resolveResearchAsset = assertPublicAssetResolution;
 
-export function setResearchTransportForTest({ fetch, resolve } = {}) {
+export function setResearchTransportForTest({ fetch, resolve, assetFetch, assetResolve } = {}) {
   researchFetch = fetch || agentFetch;
   resolveResearchEndpoint = resolve || assertPublicResolution;
+  researchAssetFetch = assetFetch || agentFetch;
+  resolveResearchAsset = assetResolve || assertPublicAssetResolution;
 }
 
 function pinnedDispatcher(resolution) {
@@ -176,17 +194,42 @@ async function readBoundedBinary(response, maxBytes = MAX_IMAGE_BYTES) {
   return Buffer.concat(chunks, total);
 }
 
+/** Validate the actual bitmap signature and decoded dimensions, not HTTP metadata alone. */
+export function inspectImageBytes(bytes, declaredContentType = '') {
+  let dimensions;
+  try {
+    dimensions = imageSize(bytes);
+  } catch {
+    throw new Error('图片素材文件签名无效');
+  }
+  const type = String(dimensions?.type || '').toLowerCase().replace('jpeg', 'jpg');
+  const contentTypes = { png: 'image/png', jpg: 'image/jpeg', gif: 'image/gif' };
+  const contentType = contentTypes[type];
+  if (!contentType) throw new Error('搜索结果不是支持的 PNG/JPEG/GIF 图片');
+  const declared = String(declaredContentType || '').split(';')[0].trim().toLowerCase();
+  if (declared && declared !== contentType) throw new Error('图片素材类型与文件签名不一致');
+  const width = Number(dimensions?.width || 0);
+  const height = Number(dimensions?.height || 0);
+  if (!Number.isInteger(width) || !Number.isInteger(height) || width < 1 || height < 1
+      || width * height > MAX_IMAGE_PIXELS) {
+    throw new Error('图片素材像素尺寸超限');
+  }
+  return { contentType, width, height };
+}
+
 async function fetchImage(url) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 20_000);
   let dispatcher;
-  let resolution = await assertPublicAssetResolution(url);
+  let resolution = await resolveResearchAsset(url);
   let current = resolution.endpoint;
+  const lockedAssetHost = current.hostname.toLowerCase() === 'imgs.search.brave.com'
+    ? current.hostname.toLowerCase() : '';
   try {
     for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
       recordToolCall('image-fetch');
       dispatcher = hasConfiguredProxy() ? undefined : pinnedDispatcher(resolution);
-      const response = await agentFetch(current, {
+      const response = await researchAssetFetch(current, {
         dispatcher,
         redirect: 'manual',
         signal: controller.signal,
@@ -202,7 +245,11 @@ async function fetchImage(url) {
         if (!location) throw new Error('图片素材重定向缺少 Location');
         await dispatcher?.close().catch(() => {});
         dispatcher = undefined;
-        resolution = await assertPublicAssetResolution(new URL(location, current));
+        const next = await resolveResearchAsset(new URL(location, current));
+        if (lockedAssetHost && next.endpoint.hostname.toLowerCase() !== lockedAssetHost) {
+          throw new Error('Brave 图片代理不允许跨域重定向');
+        }
+        resolution = next;
         current = resolution.endpoint;
         continue;
       }
@@ -211,7 +258,7 @@ async function fetchImage(url) {
         throw new Error(`图片素材 HTTP ${response.status}`);
       }
       const contentType = String(response.headers.get('content-type') || '').split(';')[0].toLowerCase();
-      if (!['image/png', 'image/jpeg', 'image/gif'].includes(contentType)) {
+      if (!['image/png', 'image/jpeg', 'image/gif', 'application/octet-stream'].includes(contentType)) {
         await response.body?.cancel('not an image').catch(() => {});
         throw new Error('搜索结果不是支持的 PNG/JPEG/GIF 图片');
       }
@@ -220,7 +267,8 @@ async function fetchImage(url) {
         await response.body?.cancel('declared image too large').catch(() => {});
         throw new Error('图片素材超过 4MB');
       }
-      return { bytes: await readBoundedBinary(response), contentType };
+      const bytes = await readBoundedBinary(response);
+      return { bytes, ...inspectImageBytes(bytes, contentType === 'application/octet-stream' ? '' : contentType) };
     }
     throw new Error('图片素材下载失败');
   } finally {
@@ -259,7 +307,7 @@ export async function fetchText(url, options = {}) {
       if (!location) throw new Error('搜索 API 重定向缺少 Location');
       const next = await resolveResearchEndpoint(new URL(location, current));
       const hasAuthentication = Object.keys(options.headers || {})
-        .some(name => ['authorization', 'x-api-key', 'api-key'].includes(name.toLowerCase()));
+        .some(name => ['authorization', 'x-api-key', 'api-key', 'x-subscription-token'].includes(name.toLowerCase()));
       if (next.endpoint.origin !== current.origin && hasAuthentication) {
         throw new Error('搜索 API 不允许携带密钥跨域重定向');
       }
@@ -336,6 +384,19 @@ function htmlAttribute(html, attribute, value) {
   return match?.[1] || match?.[2] || '';
 }
 
+function htmlLinkHref(html, rel) {
+  const expected = String(rel || '').toLowerCase();
+  for (const match of String(html || '').matchAll(/<link\b([^>]*)>/gi)) {
+    const attributes = {};
+    for (const attribute of match[1].matchAll(/([:\w-]+)\s*=\s*(["'])(.*?)\2/gs)) {
+      attributes[attribute[1].toLowerCase()] = attribute[3];
+    }
+    const relTokens = String(attributes.rel || '').toLowerCase().split(/\s+/).filter(Boolean);
+    if (relTokens.includes(expected) && attributes.href) return attributes.href;
+  }
+  return '';
+}
+
 function htmlDecode(value) {
   return text(String(value || '').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#x27;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>'));
 }
@@ -351,7 +412,7 @@ export async function discoverPageImages(sources, { maxPages = 4, maxAssets = 8 
       const html = await fetchPublicHtml(sourceUrl);
       const raw = htmlAttribute(html, 'property', 'og:image')
         || htmlAttribute(html, 'name', 'twitter:image')
-        || htmlAttribute(html, 'rel', 'image_src');
+        || htmlLinkHref(html, 'image_src');
       if (!raw) continue;
       const sourceAddress = new URL(sourceUrl);
       const imageAddress = new URL(htmlDecode(raw), sourceUrl);
@@ -615,7 +676,10 @@ async function wikimediaImages(query) {
       title,
       description: text(metadata.ImageDescription?.value || title),
       searchQuery: String(query || '').trim(),
+      provider: 'wikimedia-commons',
       license: license || 'Wikimedia Commons license metadata',
+      rightsStatus: 'recorded',
+      rightsNote: '',
       mime
     };
   }).filter(item => item?.url && item.sourceUrl && item.license);
@@ -635,8 +699,79 @@ async function openverseImages(query) {
     title: text(item.title),
     description: text(item.attribution || item.creator || item.title),
     searchQuery: String(query || '').trim(),
-    license: text(item.license || item.license_version || 'Openverse licensed image')
+    provider: 'openverse',
+    license: text(item.license || item.license_version || 'Openverse licensed image'),
+    rightsStatus: 'recorded',
+    rightsNote: ''
   })).filter(item => item.url && item.sourceUrl && item.license);
+}
+
+export function normalizeBraveImageQuery(value) {
+  const compact = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!compact) return '';
+  const words = compact.split(' ').slice(0, 50).join(' ');
+  return [...words].slice(0, 400).join('').trim();
+}
+
+function boundedInteger(value, fallback, min, max) {
+  const parsed = Number.parseInt(String(value ?? ''), 10);
+  return Number.isFinite(parsed) ? Math.max(min, Math.min(max, parsed)) : fallback;
+}
+
+/** Map Brave's index metadata without implying that the result has a reuse license. */
+export function parseBraveImageResults(payload, query) {
+  const mightBeOffensive = payload?.extra?.might_be_offensive === true;
+  if (mightBeOffensive) return [];
+  return (Array.isArray(payload?.results) ? payload.results : []).map(item => {
+    const thumbnailUrl = safeProvenanceUrl(item?.thumbnail?.src);
+    let thumbnailHost = '';
+    try { thumbnailHost = new URL(thumbnailUrl).hostname.toLowerCase(); } catch { /* filtered below */ }
+    const sourceUrl = safeProvenanceUrl(item?.url);
+    const originalUrl = safeProvenanceUrl(item?.properties?.url);
+    let sourceHost = text(item?.source);
+    try { sourceHost ||= new URL(sourceUrl).hostname; } catch { /* filtered below */ }
+    const confidence = ['high', 'medium', 'low'].includes(String(item?.confidence || '').toLowerCase())
+      ? String(item.confidence).toLowerCase() : '';
+    return {
+      url: thumbnailHost === 'imgs.search.brave.com' ? thumbnailUrl : '',
+      sourceUrl,
+      originalUrl,
+      title: text(item?.title || item?.source || 'Brave image result').slice(0, 240),
+      description: text(`Indexed by Brave Images from ${sourceHost}.`).slice(0, 600),
+      searchQuery: normalizeBraveImageQuery(query),
+      provider: 'brave-images',
+      confidence,
+      mightBeOffensive,
+      width: boundedInteger(item?.properties?.width, 0, 0, 100_000),
+      height: boundedInteger(item?.properties?.height, 0, 0, 100_000),
+      thumbnailWidth: boundedInteger(item?.thumbnail?.width, 0, 0, 100_000),
+      thumbnailHeight: boundedInteger(item?.thumbnail?.height, 0, 0, 100_000),
+      rightsStatus: 'unverified',
+      rightsNote: BRAVE_RIGHTS_NOTE,
+      license: ''
+    };
+  }).filter(item => item.url && item.sourceUrl && item.confidence !== 'low');
+}
+
+export async function braveImages(query, { count } = {}) {
+  const key = String(process.env.PPT_AGENT_BRAVE_IMAGES_KEY || process.env.BRAVE_SEARCH_API_KEY || '').trim();
+  const normalizedQuery = normalizeBraveImageQuery(query);
+  if (!key || !normalizedQuery) return [];
+  const endpoint = safeEndpoint(BRAVE_IMAGES_ENDPOINT);
+  endpoint.searchParams.set('q', normalizedQuery);
+  endpoint.searchParams.set('country', 'ALL');
+  endpoint.searchParams.set('search_lang', /[\u3400-\u9fff]/u.test(normalizedQuery) ? 'zh-hans' : 'en');
+  endpoint.searchParams.set('count', String(boundedInteger(
+    count ?? process.env.PPT_AGENT_BRAVE_IMAGES_COUNT,
+    20,
+    1,
+    50
+  )));
+  endpoint.searchParams.set('safesearch', 'strict');
+  const response = await fetchJson(endpoint, {
+    headers: { 'X-Subscription-Token': key }
+  });
+  return parseBraveImageResults(response, normalizedQuery);
 }
 
 function contextualPhotoQuery(query) {
@@ -708,13 +843,22 @@ async function tavily(query) {
     abstract: item.raw_content || item.content,
     type: 'web'
   }));
-  const assets = (response.images || []).slice(0, 8).map(item => ({
-    url: typeof item === 'string' ? item : item.url,
-    description: typeof item === 'string' ? '' : (item.description || ''),
-    sourceUrl: typeof item === 'string' ? '' : (item.source_url || ''),
-    searchQuery: String(query || '').trim(),
-    license: typeof item === 'string' ? '' : (item.license || '')
-  })).filter(item => item.url && item.sourceUrl && item.license);
+  const assets = (response.images || []).slice(0, 8).map(item => {
+    const rawUrl = typeof item === 'string' ? item : item?.url;
+    const url = safeProvenanceUrl(rawUrl);
+    const sourceUrl = safeProvenanceUrl(typeof item === 'string' ? rawUrl : (item?.source_url || rawUrl));
+    const license = text(typeof item === 'string' ? '' : item?.license);
+    return {
+      url,
+      description: text(typeof item === 'string' ? '' : item?.description).slice(0, 600),
+      sourceUrl,
+      searchQuery: String(query || '').trim(),
+      provider: 'tavily-images',
+      license,
+      rightsStatus: license ? 'recorded' : 'unverified',
+      rightsNote: license ? '' : 'Tavily indexed image; reuse rights require verification'
+    };
+  }).filter(item => item.url && item.sourceUrl && (item.license || item.rightsNote));
   return { sources, assets };
 }
 
@@ -747,9 +891,16 @@ async function searchImages(query) {
   // Commons and Openverse are complementary, not mutually exclusive. Stopping
   // after the first two Commons hits left image-rich decks with one or two
   // usable assets and encouraged repetition across every content page.
-  const commons = (await wikimediaImages(query).catch(() => []))
+  const [brave, rawCommons, rawOpenverse] = await Promise.all([
+    braveImages(query).catch(() => []),
+    wikimediaImages(query).catch(() => []),
+    openverseImages(query).catch(() => [])
+  ]);
+  const commons = rawCommons
     .filter(asset => matchesSpecificWorkQuery(query, asset) && isUsefulSpecificWorkAsset(asset));
-  const openverse = (await openverseImages(query).catch(() => []))
+  const openverse = rawOpenverse
+    .filter(asset => matchesSpecificWorkQuery(query, asset) && isUsefulSpecificWorkAsset(asset));
+  const relevantBrave = brave
     .filter(asset => matchesSpecificWorkQuery(query, asset) && isUsefulSpecificWorkAsset(asset));
   let contextual = [];
   const contextualQuery = contextualPhotoQuery(query);
@@ -765,7 +916,7 @@ async function searchImages(query) {
       searchQuery: String(query || '').trim()
     }));
   }
-  const assets = [...(tavilyResult.assets || []), ...commons, ...openverse, ...contextual]
+  const assets = roundRobin([commons, openverse, tavilyResult.assets || [], relevantBrave, contextual])
     .filter((item, index, all) => item?.url && all.findIndex(other => other.url === item.url) === index)
     .slice(0, 8);
   // Unsplash's unauthenticated search rendition can carry visible provider
@@ -776,7 +927,14 @@ async function searchImages(query) {
 export async function searchVisualAssets(queries, { maxQueries = 3, maxAssets = 8 } = {}) {
   const buckets = [];
   const failures = [];
-  for (const query of (Array.isArray(queries) ? queries : []).slice(0, maxQueries)) {
+  const queryLimit = boundedInteger(
+    Math.min(Number(maxQueries) || 1, boundedInteger(process.env.PPT_AGENT_BRAVE_IMAGES_MAX_QUERIES, 3, 1, 3)),
+    1,
+    1,
+    3
+  );
+  const assetLimit = boundedInteger(maxAssets, 8, 1, 12);
+  for (const query of (Array.isArray(queries) ? queries : []).slice(0, queryLimit)) {
     const value = String(query || '').replace(/\s+/g, ' ').trim();
     if (!value) continue;
     try {
@@ -795,7 +953,7 @@ export async function searchVisualAssets(queries, { maxQueries = 3, maxAssets = 
     if (!asset?.url || seen.has(asset.url)) continue;
     seen.add(asset.url);
     output.push(asset);
-    if (output.length >= maxAssets) break;
+    if (output.length >= assetLimit) break;
   }
   return { assets: output, failures: failures.slice(0, 8) };
 }
@@ -855,7 +1013,8 @@ export async function researchPresentation(queries, { includeWeb = true, maxSour
     sources: dedupe(results, maxSources),
     assets,
     searchCount: tasks.length,
-    degraded: includeWeb && !process.env.PPT_AGENT_TAVILY_KEY,
+    degraded: includeWeb && !process.env.PPT_AGENT_TAVILY_KEY
+      && !process.env.PPT_AGENT_BRAVE_IMAGES_KEY && !process.env.BRAVE_SEARCH_API_KEY,
     failures: settled.filter(item => item.status === 'rejected').map(item => String(item.reason?.message || item.reason)).slice(0, 8)
   };
 }
@@ -871,7 +1030,7 @@ function imageExtension(contentType, sourceUrl) {
     ? extension.replace('.jpeg', '.jpg') : '.png';
 }
 
-/** Download only image results with an explicit origin and reuse/license field. */
+/** Download only image results with an explicit origin and truthful reuse-status field. */
 export async function downloadResearchAssets(assets, directory, { maxCount = 6 } = {}) {
   await fs.mkdir(directory, { recursive: true });
   const output = [];
@@ -882,7 +1041,9 @@ export async function downloadResearchAssets(assets, directory, { maxCount = 6 }
     const url = String(asset?.url || '').trim();
     const sourceUrl = String(asset?.sourceUrl || '').trim();
     const license = text(asset?.license);
-    if (!url || !sourceUrl || !license || seen.has(url)) continue;
+    const rightsStatus = text(asset?.rightsStatus || (license ? 'recorded' : '')).toLowerCase();
+    const rightsNote = text(asset?.rightsNote);
+    if (!url || !sourceUrl || (!license && !rightsNote) || seen.has(url)) continue;
     seen.add(url);
     try {
       let downloaded;
@@ -911,7 +1072,18 @@ export async function downloadResearchAssets(assets, directory, { maxCount = 6 }
         description: text(asset.description).slice(0, 600),
         searchQuery: text(asset.searchQuery || asset.query).slice(0, 300),
         sourceUrl,
+        originalUrl: safeProvenanceUrl(asset.originalUrl),
         license,
+        provider: text(asset.provider).slice(0, 80),
+        confidence: text(asset.confidence).slice(0, 20),
+        mightBeOffensive: asset.mightBeOffensive === true,
+        rightsStatus: rightsStatus || 'unverified',
+        rightsNote,
+        originalWidth: Number(asset.width || 0),
+        originalHeight: Number(asset.height || 0),
+        width: downloaded.width,
+        height: downloaded.height,
+        accessedAt: new Date().toISOString(),
         origin: 'web-search'
       });
     } catch (error) {

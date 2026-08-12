@@ -159,10 +159,8 @@ public class AdminAccountController {
                 case "research" -> runtimeConfigService.testTavilyConnection(
                         text(config, "baseUrl", runtimeConfigService.tavilyUrl()),
                         secret(config.get("apiKey"), runtimeConfigService.tavilyKey()));
-                case "mimosearch" -> runtimeConfigService.testMimoSearchConnection(
-                        text(config, "baseUrl", runtimeConfigService.mimoSearchEndpoint()),
-                        secret(config.get("apiKey"), runtimeConfigService.mimoSearchKey()),
-                        text(config, "model", runtimeConfigService.mimoSearchModel()));
+                case "braveimages" -> runtimeConfigService.testBraveImagesConnection(
+                        secret(config.get("apiKey"), runtimeConfigService.braveImagesKey()));
                 case "codexppt" -> pptCodexRunner.testConnection(
                         secret(config.get("apiKey"), runtimeConfigService.codexPptKey()),
                         text(config, "model", runtimeConfigService.codexPptModel()),

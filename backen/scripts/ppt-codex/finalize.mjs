@@ -14,6 +14,28 @@ const MAX_FILES = Number(process.env.PPT_CODEX_MAX_FILES || 500);
 const MAX_BYTES = Number(process.env.PPT_CODEX_MAX_BYTES || 100 * 1024 * 1024);
 const MAX_MEDIA_BYTES = 16 * 1024 * 1024;
 
+async function retainedVisualSources() {
+  const manifest = path.join(taskDir, 'web-images', 'image-assets.json');
+  try {
+    const parsed = JSON.parse(await fs.readFile(manifest, 'utf8'));
+    const candidates = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.images) ? parsed.images : [];
+    return candidates.slice(0, 12).map((item, index) => ({
+      id: String(item?.id || `WEB${String(index + 1).padStart(2, '0')}`),
+      type: 'visual',
+      provider: String(item?.provider || item?.origin || 'server-image-search'),
+      title: String(item?.title || 'Presentation visual'),
+      url: String(item?.sourceUrl || ''),
+      sourceDomain: String(item?.sourceDomain || ''),
+      searchQuery: String(item?.searchQuery || item?.query || ''),
+      rightsStatus: String(item?.rightsStatus || 'unverified'),
+      rightsNote: String(item?.rightsNote || 'Reuse rights require verification'),
+      accessedAt: String(item?.accessedAt || '')
+    })).filter(item => item.url);
+  } catch {
+    return [];
+  }
+}
+
 function isInside(root, candidate) {
   const relative = path.relative(root, candidate);
   return relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative));
@@ -120,10 +142,11 @@ for (const file of projectFiles) {
 await fs.writeFile(path.join(taskDir, 'pptd-project.zip'), await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' }));
 const slides = pages.map((pageFile, index) => ({ index: index + 1, title: path.basename(pageFile, '.page'), sourceIds: [] }));
 const plan = { title: manifests[0].replace(/\.pptd$/, ''), slides };
+const visualSources = await retainedVisualSources();
 const qa = { valid: true, engine: 'codex-pptd', structural: { valid: true, version: 'v2', pageCount: pages.length, canvas: qualityInput.canvas, font: qualityInput.font }, visualReview: { valid: true, issues: [], note: 'PPTD text/font preflight, PPTX text-frame boundary check, and LibreOffice real-render gate passed; manual edits create immutable versions.' } };
-const preview = { format: 'pptx', engine: 'codex-pptd', title: plan.title, slides: slides.map((slide, index) => ({ ...slide, imageFile: `slide-${index + 1}.png`, width: 1280, height: 720 })), sources: [], qa };
+const preview = { format: 'pptx', engine: 'codex-pptd', title: plan.title, slides: slides.map((slide, index) => ({ ...slide, imageFile: `slide-${index + 1}.png`, width: 1280, height: 720 })), sources: visualSources, qa };
 await fs.writeFile(path.join(taskDir, 'agent-plan.json'), JSON.stringify(plan, null, 2));
-await fs.writeFile(path.join(taskDir, 'sources.json'), '[]\n');
+await fs.writeFile(path.join(taskDir, 'sources.json'), JSON.stringify({ sources: visualSources, imageAssets: visualSources, degraded: false, failures: [] }, null, 2));
 await fs.writeFile(path.join(taskDir, 'quality-report.json'), JSON.stringify(qa, null, 2));
 await fs.writeFile(path.join(taskDir, 'preview.json'), JSON.stringify(preview, null, 2));
 process.stdout.write(JSON.stringify({ event: 'rendering', progress: 92, message: `已导出并真实渲染 ${pages.length} 页`, pageCount: pages.length }) + '\n');

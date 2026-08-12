@@ -11,7 +11,7 @@ A full-stack personal workbench that brings together a Zotero library browser, P
 - **文献库展示 / Zotero library**：后端从 Zotero Web API 拉取私有文献库，启动预热并缓存；前端按 collection、关键词和附件状态浏览。
 - **附件代理 / Attachment proxy**：PDF、Markdown 和网页快照附件统一由后端代理，支持 Zotero S3 跳转、ZIP 附件解包、流式传输和真实下载进度。
 - **PDF/图片翻译 / PDF and image translation**：上传 PDF 后选择页码范围、字体族和速度模式，由后端排队调用 BabelDOC 生成保留版式的纯中文 / 双语 PDF；PNG/JPG 等常见图片使用视觉模型生成中文译图和双语译图。
-- **PPT 生成 / Materials to PPT**：PPTX 与 HTML 的作者层统一使用隔离 Codex CLI；PPTX 输出 PPTD 后由固定导出器交付，HTML 只允许 Codex 输出受限 JSON 计划，再由固定 reveal.js 渲染器按 13 类语义布局、主题节奏和四档安全动效交付。两条链路均可复用受控的 Tavily、Wikimedia Commons 与 Openverse 搜图，并保留视觉来源与复用权利状态；真实逐页渲染与确定性质量门仍会阻断破损产物。
+- **PPT 生成 / Materials to PPT**：PPTX 与 HTML 的作者层统一使用隔离 Codex CLI；PPTX 输出 PPTD 后由固定导出器交付，HTML 只允许 Codex 输出受限 JSON 计划，再由固定 reveal.js 渲染器按 13 类语义布局、主题节奏和四档安全动效交付。可选智能推荐或精确指定 3–30 页（包含封面与结束页）；PPTX 的 GPT Image 2 可在后台上限内选择数量，预扣、生成和失败退款始终使用同一个数量。模板与样式预览会持续展开，方便比较。两条链路均可复用受控的 Tavily、Wikimedia Commons 与 Openverse 搜图，并保留视觉来源与复用权利状态；真实逐页渲染与确定性质量门仍会阻断破损产物。
 - **GitHub 项目展示 / GitHub showcase**：前端只访问站内接口，后端代理 GitHub API 和 README raw 内容，避免浏览器直连外部接口。
 
 ## 截图 / Screenshots
@@ -34,7 +34,7 @@ The translation view follows a four-state flow: upload, configure, translate and
 
 ### Materials To PPT / 通用资料转 PPT
 
-PPT 生成页支持仅提示词、仅资料、提示词 + 资料，以及可选 PPTX 视觉参考；联网研究默认开启，也可关闭。PPTX 提供约 30 套 PPTD 设计系统，HTML 提供 13 套 reveal.js 主题（含独立的 Roman Forum 古典视觉系统）和自动/克制/强调/关闭四档动效。Spring Boot 管理登录、额度、队列、恢复和 SSE，固定的服务端研究模块在模型沙箱外搜索并验证图片。结果页优先展示可操作的动态 HTML 演示，再提供 Chromium 静态质检图；二次修改只需要自然语言要求，并保留版本链。
+PPT 生成页支持仅提示词、仅资料、提示词 + 资料，以及可选 PPTX 视觉参考；联网研究默认开启，也可关闭。可让 Codex 智能推荐篇幅，也可以精确指定 3–30 页；PPTX 的 GPT Image 2 可选择生成数量，额度会随数量透明预估。PPTX 提供约 30 套 PPTD 设计系统，HTML 提供 13 套 reveal.js 主题（含独立的 Roman Forum 古典视觉系统）和自动/克制/强调/关闭四档动效。模板与样式区持续显示真实的 5 页样稿。Spring Boot 管理登录、额度、队列、恢复和 SSE，固定的服务端研究模块在模型沙箱外搜索并验证图片。结果页优先展示可操作的动态 HTML 演示，再提供 Chromium 静态质检图；二次修改只需要自然语言要求，并保留版本链。
 
 The PPT generator accepts a prompt or common source materials plus an optional PPTX template. Extraction is automatic; jobs run in a single backend worker queue, expose a browser preview/editor after completion, and produce either editable `.pptx` or self-contained `.html` files. Revisions create a new task while preserving the original source, template, and output format.
 
@@ -74,7 +74,6 @@ backen/                  Spring Boot backend (package: com.web.backen)
 front/                   Vue 3 frontend
 project.sh               local start / stop / status helper
 README.md                bilingual public project overview
-GIT_UNTRACK_GUIDE.md     detailed Git untracking guide
 ```
 
 > 后端目录名故意保留为 `backen`，Java 包名是 `com.web.backen`。不要改成 `backend`。
@@ -152,9 +151,9 @@ For server deployment, build the frontend with npm, package the Spring Boot back
 
 ## Git 管理 / Git Hygiene
 
-公开仓库只保留根 `README.md` 和 `GIT_UNTRACK_GUIDE.md` 这类对外说明。内部维护记录、本地发布目录、运行态数据、前后端本地文档、前后端 env 文件、截图归档和密钥都被忽略。
+公开仓库只保留根 `README.md` 等对外说明。内部维护记录、本地发布目录、运行态数据、前后端本地文档、前后端 env 文件、截图归档和密钥都被忽略。
 
-The public repository only keeps root-level docs such as `README.md` and `GIT_UNTRACK_GUIDE.md`. Internal maintenance notes, local release folders, runtime state, frontend/backend local docs, frontend/backend env files, screenshot archives and secrets are ignored.
+The public repository only keeps root-level public docs such as `README.md`. Internal maintenance notes, local release folders, runtime state, frontend/backend local docs, frontend/backend env files, screenshot archives and secrets are ignored.
 
 Ignored local/generated paths include / 已忽略的本地或生成路径包括：
 
@@ -174,4 +173,6 @@ Ignored local/generated paths include / 已忽略的本地或生成路径包括�
 
 Removing these files from Git tracking does not affect the current application build: the active frontend and backend code do not import `front/README.md`, `backen/README.md`, `front/CHECKLIST.md`, `front/DEVELOPMENT.md`, `front/PROJECT_SUMMARY.md`, `front/QUICKSTART.md`, `front/.env*`, or `front/部分页面截图/`.
 
-详细操作见 / For details, see [GIT_UNTRACK_GUIDE.md](GIT_UNTRACK_GUIDE.md).
+提交前可用 `git check-ignore -v <path>` 确认某个本地文件的忽略规则。
+
+Before committing, use `git check-ignore -v <path>` to confirm the ignore rule for a local file.

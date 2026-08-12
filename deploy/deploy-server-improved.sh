@@ -517,7 +517,9 @@ build_release() {
   write_remote_install_script
 
   info "Creating archive..."
-  (cd "$RELEASE_DIR" && tar -czf "$archive" web-homepage)
+  # macOS tar otherwise stores AppleDouble/xattr metadata. GNU tar on the
+  # Linux host treats those records as warnings and may return a failing status.
+  (cd "$RELEASE_DIR" && COPYFILE_DISABLE=1 COPY_EXTENDED_ATTRIBUTES_DISABLE=1 tar -czf "$archive" web-homepage)
 
   ARCHIVE="$archive"
   ARCHIVE_NAME="$(basename "$ARCHIVE")"
@@ -607,7 +609,7 @@ run_cmd "${SSH[@]}" \
   rm -rf '$REMOTE_STAGE'; \
   mkdir -p '$REMOTE_STAGE'; \
   if [ -d '$REMOTE_DIR' ]; then tar --exclude='$REMOTE_BASENAME/.run' -czf '$REMOTE_BACKUP' -C '$REMOTE_PARENT' '$REMOTE_BASENAME'; fi; \
-  tar -xzf '$REMOTE_ARCHIVE' -C '$REMOTE_STAGE'"
+  tar --warning=no-unknown-keyword -xzf '$REMOTE_ARCHIVE' -C '$REMOTE_STAGE'"
 
 info "Installing release. sudo may ask for the server password..."
 INSTALL_ATTEMPTED=1

@@ -191,6 +191,9 @@ class PptGenerationServiceTest {
             assertEquals(18, task.getCreditCost());
             verify(quota).spend(eq(owner.id()), eq(18), eq("PPT"), eq(task.getTaskId()),
                     contains("GPT Image 2 2 张，medium"));
+            // The mock deliberately does not produce a real PPTX artifact. Let the
+            // single worker finish before JUnit cleans its temporary task directory.
+            awaitStatus(service, task.getTaskId(), "error");
         } finally {
             service.shutdown();
         }

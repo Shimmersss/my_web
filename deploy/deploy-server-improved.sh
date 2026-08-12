@@ -32,6 +32,7 @@ FORCE_NGINX_CONFIG="${FORCE_NGINX_CONFIG:-0}"
 RUN_TESTS="${RUN_TESTS:-1}"
 REQUIRE_CLEAN="${REQUIRE_CLEAN:-0}"
 DRY_RUN="${DRY_RUN:-0}"
+BUILD_ONLY="${BUILD_ONLY:-0}"
 BACKEND_HEALTH_URL="${BACKEND_HEALTH_URL:-http://127.0.0.1:8080/api/health}"
 LOCAL_SITE_URL="${LOCAL_SITE_URL:-http://127.0.0.1/}"
 LOCAL_SITE_HOST="${LOCAL_SITE_HOST:-$DOMAIN}"
@@ -99,6 +100,7 @@ done
 [[ "$RUN_TESTS" == "0" || "$RUN_TESTS" == "1" ]] || die "RUN_TESTS must be 0 or 1"
 [[ "$REQUIRE_CLEAN" == "0" || "$REQUIRE_CLEAN" == "1" ]] || die "REQUIRE_CLEAN must be 0 or 1"
 [[ "$DRY_RUN" == "0" || "$DRY_RUN" == "1" ]] || die "DRY_RUN must be 0 or 1"
+[[ "$BUILD_ONLY" == "0" || "$BUILD_ONLY" == "1" ]] || die "BUILD_ONLY must be 0 or 1"
 [[ "$FORCE_NGINX_CONFIG" == "0" || "$FORCE_NGINX_CONFIG" == "1" ]] || die "FORCE_NGINX_CONFIG must be 0 or 1"
 [[ "$REQUIRE_MYSQL_CONFIG" == "0" || "$REQUIRE_MYSQL_CONFIG" == "1" ]] || die "REQUIRE_MYSQL_CONFIG must be 0 or 1"
 [[ "$VERIFY_TIMEOUT" =~ ^[0-9]+$ ]] || die "VERIFY_TIMEOUT must be a number"
@@ -540,6 +542,11 @@ if [[ -n "$(git -C "$ROOT" status --porcelain)" ]]; then
 fi
 
 build_release
+
+if [[ "$BUILD_ONLY" == "1" ]]; then
+  ok "Release package built locally only: $ARCHIVE"
+  exit 0
+fi
 
 REMOTE_ARCHIVE="$REMOTE_UPLOAD_DIR/$ARCHIVE_NAME"
 REMOTE_STAGE="$REMOTE_UPLOAD_DIR/stage-$VERSION"

@@ -121,13 +121,16 @@ class AuthQuotaServiceTest {
     @Test
     void settingsCanBeUpdated() {
         TestServices services = newServices();
-        services.quota().updateSettings(2, 15, false, 4);
+        services.quota().updateSettings(2, 15, false, 4, 4, 3, 6, 9);
 
         Map<String, Object> settings = services.quota().settings();
         assertEquals(2, settings.get("translationCreditPerPage"));
         assertEquals(15, settings.get("pptCreditPerTask"));
         assertEquals(false, settings.get("dailyCheckinEnabled"));
         assertEquals(4, settings.get("dailyCheckinCredits"));
+        assertEquals(3, settings.get("imageLowCredits"));
+        assertEquals(6, settings.get("imageMediumCredits"));
+        assertEquals(9, settings.get("imageHighCredits"));
     }
 
     @Test

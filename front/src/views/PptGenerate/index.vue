@@ -23,7 +23,7 @@
             <div class="field-block output-format-block">
               <div class="field-label">输出格式</div>
               <div class="output-format-picker" role="radiogroup" aria-label="输出格式">
-                <button type="button" role="radio" :disabled="!auth.isRoot" :class="['output-format-card', { active: outputFormat === 'pptx' }]" :aria-checked="outputFormat === 'pptx'" @click="outputFormat = 'pptx'">
+                <button type="button" role="radio" :class="['output-format-card', { active: outputFormat === 'pptx' }]" :aria-checked="outputFormat === 'pptx'" @click="outputFormat = 'pptx'">
                   <strong>PPTX</strong>
                   <span>可在 PowerPoint 中继续编辑</span>
                 </button>
@@ -32,12 +32,28 @@
                   <span>单文件网页演示，可直接分享</span>
                 </button>
               </div>
-              <n-alert v-if="!auth.isRoot" type="info" title="Codex PPTX 试运行仅 root 可用" class="preview-alert">普通用户仍可使用现有 HTML 演示生成。</n-alert>
             </div>
 
-            <div class="field-block">
-                <div class="field-label">{{ outputFormat === 'html' ? 'HTML 交互主题' : 'PPTX 通用模板' }}</div>
-              <div class="template-picker">
+            <div class="field-block template-field-block">
+              <details ref="templateSelector" class="template-selector">
+                <summary>
+                  <span class="template-selector__title">
+                    <small>{{ outputFormat === 'html' ? 'HTML 交互主题' : 'PPTX 通用模板' }}</small>
+                    <strong>{{ selectedTemplate?.name || '选择模板' }}</strong>
+                  </span>
+                  <span class="template-selector__selection">
+                    <span class="swatches" aria-label="当前模板配色">
+                      <i v-for="color in (selectedTemplate?.palette || []).slice(0, 5)" :key="color" :style="{ backgroundColor: `#${color}` }"></i>
+                    </span>
+                    <small>{{ formatTemplates.length }} 套可选 · 展开预览</small>
+                  </span>
+                </summary>
+                <div class="template-selector__body">
+                  <div class="template-selector__intro">
+                    <p>模板默认收起，展开后可浏览缩略图与 5 页样稿；选择后会自动收起，保持工作区紧凑。</p>
+                    <span>当前：{{ selectedTemplate?.categoryLabel || '通用风格' }}</span>
+                  </div>
+                  <div class="template-picker">
                 <div class="template-groups">
                   <section v-for="group in templateGroups" :key="group.key" class="template-group">
                     <div class="template-group__header">
@@ -160,9 +176,13 @@
                   <p v-if="selectedTemplate?.usageNote" class="template-showcase__license-note">授权提示：{{ selectedTemplate.usageNote }}</p>
                 </section>
               </div>
+                </div>
+              </details>
             </div>
 
-            <div class="upload-grid">
+            <div class="field-block resource-field-block">
+              <div class="field-label">资料与视觉参考 <span class="optional-label">（可选）</span></div>
+              <div class="upload-grid">
               <label v-if="outputFormat === 'pptx'" class="file-box">
                 <input type="file" accept=".pptx" aria-label="上传自定义 PPT 模板" @change="handleTemplateSelect" />
                 <n-icon size="34"><EaselOutline /></n-icon>
@@ -175,6 +195,7 @@
                 <strong>{{ sourceFile ? sourceFile.name : '上传资料文件' }}</strong>
                 <span>可选；支持 PDF、Word、PPT、Excel、TXT、Markdown、CSV、网页，最大 30MB</span>
               </label>
+              </div>
             </div>
 
             <div class="field-block">
@@ -227,7 +248,7 @@
                       </button>
                     </div>
                   </div>
-                  <div v-if="outputFormat === 'pptx' && auth.isRoot">
+                  <div v-if="outputFormat === 'pptx'">
                     <div class="field-label">AI 生图（GPT Image 2）</div>
                     <div class="output-format-picker" role="radiogroup" aria-label="AI 生图">
                       <button type="button" role="radio" :class="['output-format-card', { active: imageGenerationMode === 'off' }]" :aria-checked="imageGenerationMode === 'off'" @click="imageGenerationMode = 'off'">
@@ -240,7 +261,7 @@
                         <strong>优先 AI 生图</strong><span>优先采用生成图，但资料原图与可信来源仍可覆盖</span>
                       </button>
                     </div>
-                    <p class="field-hint">需要在 root 后台配置 GPT Image 2 的 OpenAI-compatible Images endpoint 与 Key；每张图会增加上游图像费用。</p>
+                    <p class="field-hint">与“Codex 生图”共用同一余额和 low / medium / high 单价；当前会预扣 {{ pptImageCredits }} credits（{{ pptImageCount }} 张 {{ imageGenerationQuality }}），任务失败会连同 PPT 基础额度一并退回。</p>
                   </div>
                 </div>
               </div>
@@ -367,9 +388,13 @@
             </div>
 
             <section v-if="activeTask?.editorAvailable" class="revision-box">
-              <div class="revision-box__heading"><div><h3>PPTD 项目编辑</h3><p>编辑器通过同源 API 加载工程；保存会创建不可变子版本，不调用 Codex、不扣 LLM credits。</p></div><n-tag size="small" type="success">v{{ activeTask.version || 1 }}</n-tag></div>
-              <div class="actions"><n-button @click="editorVisible = !editorVisible">{{ editorVisible ? '收起编辑器' : '打开 PPTD 编辑器' }}</n-button><n-button @click="downloadPptdProject">下载完整 PPTD 项目</n-button></div>
-              <iframe v-if="editorVisible" :src="editorUrl" title="PPTD 项目编辑器" class="pptd-editor-frame" sandbox="allow-scripts allow-same-origin" referrerpolicy="same-origin"></iframe>
+              <div class="revision-box__heading"><div><h3>PPTD 项目编辑</h3><p>在画布中直接改文字和版式；点击编辑器内的保存会创建新版本，不调用 Codex、不扣 LLM credits。</p></div><n-tag size="small" type="success">v{{ activeTask.version || 1 }}</n-tag></div>
+              <div class="pptd-editor-guide" aria-label="PPTD 编辑步骤">
+                <span><b>1</b> 选中页面或元素</span><span><b>2</b> 在画布和右侧面板调整</span><span><b>3</b> 保存为新版本</span>
+              </div>
+              <div class="actions"><n-button type="primary" @click="toggleEditor">{{ editorVisible ? '收起编辑器' : '在画布中编辑' }}</n-button><n-button v-if="editorVisible" @click="editorExpanded = !editorExpanded">{{ editorExpanded ? '退出专注模式' : '专注编辑' }}</n-button><n-button @click="downloadPptdProject">下载完整 PPTD 项目</n-button></div>
+              <p v-if="editorVisible" class="pptd-editor-state" aria-live="polite">{{ editorStatus }}</p>
+              <iframe v-if="editorVisible" :src="editorUrl" title="PPTD 项目编辑器" :class="['pptd-editor-frame', { 'pptd-editor-frame--expanded': editorExpanded }]" sandbox="allow-scripts allow-same-origin" referrerpolicy="same-origin"></iframe>
             </section>
 
             <section v-if="previewData?.sources?.length" class="revision-box">
@@ -482,7 +507,10 @@ const previewError = ref('')
 const revisionPrompt = ref('')
 const revisionSubmitting = ref(false)
 const editorVisible = ref(false)
+const editorExpanded = ref(false)
+const editorStatus = ref('正在加载项目编辑器…')
 const taskFailed = ref(false)
+const templateSelector = ref(null)
 const templatePreviewIndex = ref(0)
 const templatePreviewImageErrors = ref(new Set())
 const previewSelectedIndex = ref(0)
@@ -502,7 +530,16 @@ let pendingIdempotencyKey = ''
 const PPT_TASK_TOKENS_KEY = 'ppt-generation-task-tokens-v2'
 const PPT_ACTIVE_TASK_KEY = 'ppt-generation-active-task-v2'
 const pptCreditPerTask = ref(10)
-const pptEstimatedCredits = computed(() => pptCreditPerTask.value)
+const imageGenerationQuality = ref('medium')
+const imageGenerationMaxImages = ref(3)
+const imageCredits = ref({ low: 2, medium: 4, high: 8 })
+const pptImageCount = computed(() => {
+  if (outputFormat.value !== 'pptx') return 0
+  if (imageGenerationMode.value === 'prefer') return imageGenerationMaxImages.value
+  return imageGenerationMode.value === 'supplement' ? Math.min(2, imageGenerationMaxImages.value) : 0
+})
+const pptImageCredits = computed(() => pptImageCount.value * (imageCredits.value[imageGenerationQuality.value] || imageCredits.value.medium))
+const pptEstimatedCredits = computed(() => pptCreditPerTask.value + pptImageCredits.value)
 const fontOptions = [
   { value: 'Microsoft YaHei', label: '微软雅黑（默认）' },
   { value: 'Noto Sans CJK SC', label: 'Noto Sans CJK SC' },
@@ -515,7 +552,9 @@ const formatTemplates = computed(() => templates.value.filter(item => !Array.isA
 const selectedTemplate = computed(() => formatTemplates.value.find(item => item.key === templateKey.value) || formatTemplates.value[0] || null)
 const selectedPreviewSlide = computed(() => previewSlides.value[previewSelectedIndex.value] || null)
 const preferenceSummary = computed(() => `${fontOptions.find(item => item.value === fontFamily.value)?.label || fontFamily.value} · ${researchMode.value === 'auto' ? '自动研究' : '仅本地资料'} · ${visualMode.value === 'strict' ? '严格配图' : '尽力配图'} · ${imageGenerationMode.value === 'prefer' ? '优先 AI 生图' : imageGenerationMode.value === 'supplement' ? '补充 AI 生图' : '不开启 AI 生图'}`)
-const editorUrl = computed(() => taskId.value ? `/pptd-editor/upstream/?taskId=${encodeURIComponent(taskId.value)}` : '')
+// Vite dev server only serves the vendored editor reliably through its explicit static file.
+// A trailing directory route falls back to the app SPA and used to show the site home page.
+const editorUrl = computed(() => taskId.value ? `/pptd-editor/upstream/index.html?taskId=${encodeURIComponent(taskId.value)}` : '')
 const templatePreviewSlides = computed(() => buildTemplatePreviewSlides(selectedTemplate.value))
 const templateGroups = computed(() => {
   const groups = new Map()
@@ -546,7 +585,6 @@ onMounted(async () => {
   sessionStorage.removeItem('ppt-generation-task-tokens')
   sessionStorage.removeItem('ppt-generation-active-task')
   await auth.refresh().catch(() => {})
-  if (!auth.isRoot) outputFormat.value = 'html'
   await Promise.all([loadTemplates(), loadRecent(), loadQuotaSettings()])
   authWatchReady = true
   await restoreActiveTask()
@@ -609,10 +647,6 @@ async function submitTask() {
   }
   if (!auth.isLoggedIn) {
     errorMsg.value = '请先登录账号'
-    return
-  }
-  if (outputFormat.value === 'pptx' && !auth.isRoot) {
-    errorMsg.value = 'Codex PPTX 试运行仅 root 可用；请选择 HTML'
     return
   }
   if (!auth.isRoot && auth.credits < pptEstimatedCredits.value) {
@@ -771,6 +805,7 @@ function selectTemplate(template) {
   if (!template?.key) return
   templateKey.value = template.key
   templatePreviewIndex.value = 0
+  templateSelector.value?.removeAttribute('open')
 }
 
 function templatePreviewAssetKey(index, template = selectedTemplate.value) {
@@ -938,8 +973,18 @@ async function loadQuotaSettings() {
   try {
     const res = await getQuotaSettings()
     pptCreditPerTask.value = Number(res.data?.pptCreditPerTask || 10)
+    imageGenerationQuality.value = ['low', 'medium', 'high'].includes(res.data?.pptImageGenerationQuality) ? res.data.pptImageGenerationQuality : 'medium'
+    imageGenerationMaxImages.value = Math.min(4, Math.max(1, Number(res.data?.pptImageGenerationMaxImages || 3)))
+    imageCredits.value = {
+      low: Number(res.data?.imageLowCredits || 2),
+      medium: Number(res.data?.imageMediumCredits || 4),
+      high: Number(res.data?.imageHighCredits || 8)
+    }
   } catch {
     pptCreditPerTask.value = 10
+    imageGenerationQuality.value = 'medium'
+    imageGenerationMaxImages.value = 3
+    imageCredits.value = { low: 2, medium: 4, high: 8 }
   }
 }
 
@@ -990,16 +1035,33 @@ async function downloadPptdProject() {
 }
 
 function handleEditorMessage(event) {
-  if (event.origin !== window.location.origin || event.data?.type !== 'pptd-version-created') return
+  if (event.origin !== window.location.origin) return
+  if (event.data?.type === 'pptd-editor-ready') {
+    editorStatus.value = `项目已加载：v${event.data?.version || activeTask.value?.version || 1}。可直接在画布中编辑，保存会创建新版本。`
+    return
+  }
+  if (event.data?.type === 'pptd-editor-close') {
+    editorVisible.value = false
+    editorExpanded.value = false
+    return
+  }
+  if (event.data?.type !== 'pptd-version-created') return
   const task = event.data.task
   if (!task?.taskId) return
   rememberTaskToken(task.taskId, task.accessToken)
   editorVisible.value = false
+  editorExpanded.value = false
   clearPreview()
   setActiveTask(task)
   step.value = 'running'
   openStream(task.taskId)
   loadRecent()
+}
+
+function toggleEditor() {
+  editorVisible.value = !editorVisible.value
+  if (editorVisible.value) editorStatus.value = '正在加载项目编辑器…'
+  else editorExpanded.value = false
 }
 
 function resetForm() {
@@ -1136,7 +1198,7 @@ function clearActiveTask() {
 
 function defaultTemplates() {
   return [
-    { key: 'pptd-navy-cyan-technology', name: 'Navy Cyan Technology', description: 'PPTD 技术设计系统；Codex 在隔离工作区生成可编辑工程', palette: ['2563EB', 'EFF6FF', 'F59E0B', 'FFFFFF', '0F172A'], source: 'open-kimi-ppt-skill 1.3.0', license: 'MIT + separately authorized editor assets', sourceUrl: 'https://github.com/Binaryify/open-kimi-ppt-skill', design: 'navy-cyan-technology', category: 'pptd', categoryLabel: 'PPTD 设计系统', complexity: 'rich', recommendedFor: ['技术汇报', '产品方案', '研究展示'], usageNote: 'PPTX 试运行仅 root 可用；可上传自定义 PPTX 作为视觉参考', formats: ['pptx'] },
+    { key: 'pptd-navy-cyan-technology', name: 'Navy Cyan Technology', description: 'PPTD 技术设计系统；Codex 在隔离工作区生成可编辑工程', palette: ['2563EB', 'EFF6FF', 'F59E0B', 'FFFFFF', '0F172A'], source: 'open-kimi-ppt-skill 1.3.0', license: 'MIT + separately authorized editor assets', sourceUrl: 'https://github.com/Binaryify/open-kimi-ppt-skill', design: 'navy-cyan-technology', category: 'pptd', categoryLabel: 'PPTD 设计系统', complexity: 'rich', recommendedFor: ['技术汇报', '产品方案', '研究展示'], usageNote: 'PPTX 权限由后台“PPT 生成”节目范围控制；可上传自定义 PPTX 作为视觉参考', formats: ['pptx'] },
     { key: 'github-bjtu-green', name: 'BJTU 青绿影像', description: '北京交通大学开源成品模板，强调照片、圆形构图和校园叙事', palette: ['2A807D', '5D948F', 'D7B95D', 'F1F4F0', '173B3A'], source: 'Allenpandas/BJTU-Slides-Template', license: 'Apache-2.0', sourceUrl: 'https://github.com/Allenpandas/BJTU-Slides-Template', design: 'bjtu-green', category: 'github', categoryLabel: 'GitHub 成品模板', complexity: 'rich', recommendedFor: ['校园叙事', '品牌故事', '图片汇报'], usageNote: '来源仓库 LICENSE 标注 Apache-2.0，但 README 另有仅供学习、禁止商业使用声明；商用前需确认授权' },
     { key: 'github-bjtu-yellow', name: 'BJTU 金色分栏', description: '北京交通大学开源成品模板，左侧图片带与右侧正文分栏', palette: ['F5B400', 'E29A2E', '0F172A', 'FFFDF6', '111827'], source: 'Allenpandas/BJTU-Slides-Template', license: 'Apache-2.0', sourceUrl: 'https://github.com/Allenpandas/BJTU-Slides-Template', design: 'bjtu-yellow', category: 'github', categoryLabel: 'GitHub 成品模板', complexity: 'rich', recommendedFor: ['课程', '项目介绍', '图文报告'], usageNote: '来源仓库 LICENSE 标注 Apache-2.0，但 README 另有仅供学习、禁止商业使用声明；商用前需确认授权' },
     { key: 'github-bjtu-red-2024', name: 'BJTU 红色舞台', description: '北京交通大学开源成品模板，大面积红色舞台与强标题层级', palette: ['EF4444', '58151C', 'FFFFFF', 'FFF1F2', 'FFFFFF'], source: 'Allenpandas/BJTU-Slides-Template', license: 'Apache-2.0', sourceUrl: 'https://github.com/Allenpandas/BJTU-Slides-Template', design: 'bjtu-red', category: 'github', categoryLabel: 'GitHub 成品模板', complexity: 'rich', recommendedFor: ['发布会', '正式汇报', '主题演讲'], usageNote: '来源仓库 LICENSE 标注 Apache-2.0，但 README 另有仅供学习、禁止商业使用声明；商用前需确认授权' },
@@ -1336,6 +1398,13 @@ p {
   margin-top: 22px;
 }
 
+.resource-field-block {
+  padding: 18px;
+  border: 1px solid #ded6c7;
+  border-radius: 12px;
+  background: #f8f4ed;
+}
+
 .field-label {
   margin-bottom: 10px;
   font-weight: 700;
@@ -1480,6 +1549,108 @@ p {
   gap: 14px;
 }
 
+.template-field-block {
+  margin-top: 18px;
+}
+
+.template-selector {
+  border: 1px solid #d2cabc;
+  border-radius: 12px;
+  background: #f8f4ed;
+}
+
+.template-selector summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  min-height: 70px;
+  padding: 12px 16px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.template-selector summary::-webkit-details-marker {
+  display: none;
+}
+
+.template-selector summary::after {
+  content: '＋';
+  order: 3;
+  color: #8f2a22;
+  font-size: 20px;
+}
+
+.template-selector[open] summary {
+  border-bottom: 1px solid #ded6c7;
+}
+
+.template-selector[open] summary::after {
+  content: '−';
+}
+
+.template-selector__title {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.template-selector__title small,
+.template-selector__selection > small,
+.template-selector__intro p {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.template-selector__title strong {
+  overflow: hidden;
+  color: #0f172a;
+  font-size: 15px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-selector__selection {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.template-selector__selection > small {
+  white-space: nowrap;
+}
+
+.template-selector__selection .swatches {
+  flex: 0 0 auto;
+}
+
+.template-selector__body {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.template-selector__intro {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 0 2px;
+}
+
+.template-selector__intro p {
+  margin: 0;
+}
+
+.template-selector__intro > span {
+  flex: 0 0 auto;
+  color: #8f2a22;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .template-picker {
   display: grid;
   grid-template-columns: minmax(410px, 1.12fr) minmax(360px, .88fr);
@@ -1491,6 +1662,10 @@ p {
   display: grid;
   gap: 18px;
   min-width: 0;
+  max-height: min(68vh, 700px);
+  overflow-y: auto;
+  padding-right: 8px;
+  scrollbar-color: #bda88f transparent;
 }
 
 .template-group {
@@ -1531,6 +1706,8 @@ p {
   border-radius: 12px;
   background: linear-gradient(145deg, #f8f3eb, #f1eadf);
   box-shadow: 0 12px 28px rgba(95, 55, 31, .08);
+  position: sticky;
+  top: 16px;
 }
 
 .template-showcase__heading {
@@ -1889,6 +2066,10 @@ p {
   min-width: 0;
 }
 
+.template-card {
+  min-height: 182px;
+}
+
 .template-card.active {
   border-color: #b83126;
   background: #fffaf5;
@@ -2026,6 +2207,12 @@ p {
   flex-direction: column;
   justify-content: center;
   align-items: flex-start;
+}
+
+.template-selector summary:focus-visible,
+.file-box:focus-within {
+  outline: 3px solid rgba(37, 99, 235, .28);
+  outline-offset: 3px;
 }
 
 .file-box strong {
@@ -2489,6 +2676,46 @@ p {
   background: #090b10;
 }
 
+.pptd-editor-frame--expanded {
+  height: max(820px, calc(100vh - 92px));
+}
+
+.pptd-editor-guide {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 14px;
+}
+
+.pptd-editor-guide span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px 6px 7px;
+  border: 1px solid #e1e7ef;
+  border-radius: 999px;
+  color: #526174;
+  background: #f8fafc;
+  font-size: 12px;
+}
+
+.pptd-editor-guide b {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--preview-accent);
+  font-size: 11px;
+}
+
+.pptd-editor-state {
+  margin: 12px 0 -4px;
+  color: #64748b;
+  font-size: 13px;
+}
+
 .revision-box__heading {
   align-items: flex-start;
   margin-bottom: 12px;
@@ -2604,12 +2831,45 @@ p {
     grid-template-columns: 1fr;
   }
 
+  .resource-field-block {
+    padding: 14px;
+  }
+
+  .template-selector summary {
+    min-height: 64px;
+    padding: 10px 13px;
+    gap: 10px;
+  }
+
+  .template-selector__selection > small {
+    display: none;
+  }
+
+  .template-selector__body {
+    padding: 13px;
+  }
+
+  .template-selector__intro {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 5px;
+  }
+
+  .template-groups {
+    max-height: 420px;
+    padding-right: 5px;
+  }
+
   .generation-options summary > small {
     display: none;
   }
 
   .template-picker {
     grid-template-columns: 1fr;
+  }
+
+  .template-showcase {
+    position: static;
   }
 
   .preview-workbench {
@@ -2679,6 +2939,23 @@ p {
     flex-direction: column;
   }
 
+  .pptd-editor-guide {
+    gap: 6px;
+  }
+
+  .pptd-editor-guide span {
+    width: 100%;
+  }
+
+  .pptd-editor-frame {
+    height: min(760px, 78vh);
+    border-radius: 10px;
+  }
+
+  .pptd-editor-frame--expanded {
+    height: calc(100vh - 24px);
+  }
+
   .result-toolbar-actions {
     justify-content: flex-start;
   }
@@ -2694,6 +2971,12 @@ p {
 
   .template-showcase__thumbs {
     gap: 4px;
+  }
+
+  .template-card,
+  .file-box,
+  .output-format-card {
+    min-height: 44px;
   }
 }
 </style>

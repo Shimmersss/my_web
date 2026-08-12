@@ -163,6 +163,11 @@ const allMenuOptions = computed(() => [
     onClick: () => navigateTo('/contact')
   },
   {
+    label: 'Codex 生图',
+    key: 'ImageGenerate',
+    onClick: () => navigateTo('/image-generate')
+  },
+  {
     label: 'GitHub 项目',
     key: 'News',
     onClick: () => navigateTo('/news')

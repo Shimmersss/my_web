@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import jakarta.annotation.PostConstruct;
 
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.time.LocalDate;
 import java.time.ZoneId;
@@ -28,6 +29,9 @@ public class QuotaService {
         ensureSetting("daily_checkin.credits", "2");
         ensureSetting("daily_checkin.min_credits", String.valueOf(dailyCheckinCredits()));
         ensureSetting("daily_checkin.max_credits", String.valueOf(dailyCheckinCredits()));
+        ensureSetting("image.credit.low", "2");
+        ensureSetting("image.credit.medium", "4");
+        ensureSetting("image.credit.high", "8");
     }
 
     public int translationCreditPerPage() {
@@ -38,14 +42,26 @@ public class QuotaService {
         return intSetting("ppt.credit_per_task", 10);
     }
 
+    public int imageCredit(String quality) {
+        return switch (quality == null ? "medium" : quality.toLowerCase()) {
+            case "low" -> intSetting("image.credit.low", 2);
+            case "high" -> intSetting("image.credit.high", 8);
+            default -> intSetting("image.credit.medium", 4);
+        };
+    }
+
     public Map<String, Object> settings() {
-        return Map.of(
-                "translationCreditPerPage", translationCreditPerPage(),
-                "pptCreditPerTask", pptCreditPerTask(),
-                "dailyCheckinEnabled", dailyCheckinEnabled(),
-                "dailyCheckinCredits", dailyCheckinCredits(),
-                "dailyCheckinMinCredits", dailyCheckinMinCredits(),
-                "dailyCheckinMaxCredits", dailyCheckinMaxCredits());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("translationCreditPerPage", translationCreditPerPage());
+        result.put("pptCreditPerTask", pptCreditPerTask());
+        result.put("imageLowCredits", imageCredit("low"));
+        result.put("imageMediumCredits", imageCredit("medium"));
+        result.put("imageHighCredits", imageCredit("high"));
+        result.put("dailyCheckinEnabled", dailyCheckinEnabled());
+        result.put("dailyCheckinCredits", dailyCheckinCredits());
+        result.put("dailyCheckinMinCredits", dailyCheckinMinCredits());
+        result.put("dailyCheckinMaxCredits", dailyCheckinMaxCredits());
+        return result;
     }
 
     public boolean dailyCheckinEnabled() { return booleanSetting("daily_checkin.enabled", true); }
@@ -218,6 +234,14 @@ public class QuotaService {
     }
 
     public void updateSettings(int translationCreditPerPage, int pptCreditPerTask, boolean dailyCheckinEnabled, int dailyCheckinMinCredits, int dailyCheckinMaxCredits) {
+        updateSettings(translationCreditPerPage, pptCreditPerTask, dailyCheckinEnabled,
+                dailyCheckinMinCredits, dailyCheckinMaxCredits,
+                imageCredit("low"), imageCredit("medium"), imageCredit("high"));
+    }
+
+    public void updateSettings(int translationCreditPerPage, int pptCreditPerTask, boolean dailyCheckinEnabled,
+                               int dailyCheckinMinCredits, int dailyCheckinMaxCredits,
+                               int imageLowCredits, int imageMediumCredits, int imageHighCredits) {
         setSetting("translation.credit_per_page", String.valueOf(Math.max(1, translationCreditPerPage)));
         setSetting("ppt.credit_per_task", String.valueOf(Math.max(1, pptCreditPerTask)));
         setSetting("daily_checkin.enabled", String.valueOf(dailyCheckinEnabled));
@@ -226,6 +250,9 @@ public class QuotaService {
         setSetting("daily_checkin.credits", String.valueOf(min));
         setSetting("daily_checkin.min_credits", String.valueOf(min));
         setSetting("daily_checkin.max_credits", String.valueOf(max));
+        setSetting("image.credit.low", String.valueOf(Math.max(1, imageLowCredits)));
+        setSetting("image.credit.medium", String.valueOf(Math.max(1, imageMediumCredits)));
+        setSetting("image.credit.high", String.valueOf(Math.max(1, imageHighCredits)));
     }
 
     /** Compatibility for callers that still provide a fixed daily reward. */

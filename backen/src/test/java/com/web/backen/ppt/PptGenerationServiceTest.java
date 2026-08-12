@@ -3,6 +3,7 @@ package com.web.backen.ppt;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.QuotaService;
+import com.web.backen.auth.RuntimeConfigService;
 import com.web.backen.config.PptGenerationConfig;
 import com.web.backen.translate.LlmService;
 import org.junit.jupiter.api.Test;
@@ -123,6 +124,36 @@ class PptGenerationServiceTest {
             awaitStatus(service, task.getTaskId(), "error");
             assertTrue(service.getSession(task.getTaskId()).getErrorMessage().contains("visual QA failed"));
             verify(quota, timeout(1000)).refund(eq(42L), contains("失败"));
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
+    void pptxAiImagesUseTheSamePerImageQuotaAndAreRefundedWithTheTask() throws Exception {
+        PptAgentRunner runner = mock(PptAgentRunner.class);
+        doThrow(new IllegalStateException("generation failed")).when(runner).run(any(), any(), any());
+        QuotaService quota = mock(QuotaService.class);
+        RuntimeConfigService runtime = mock(RuntimeConfigService.class);
+        when(quota.pptCreditPerTask()).thenReturn(10);
+        when(quota.imageCredit("medium")).thenReturn(4);
+        when(runtime.imageGenerationQuality()).thenReturn("medium");
+        when(runtime.imageGenerationMaxImages()).thenReturn(3);
+        when(quota.spend(anyLong(), anyInt(), anyString(), anyString(), anyString())).thenReturn(91L);
+        PptGenerationService service = service(runner, quota, runtime);
+        try {
+            AuthUser owner = new AuthUser(9, "owner", "USER", 100, true);
+            PptGenerationSession task = service.createTask(
+                    "Deck with generated visuals", "pptd-navy-cyan-technology", 100, null, null,
+                    owner, "ppt-image-billing", "pptx", "off", "best_effort", "Microsoft YaHei", "prefer");
+
+            assertEquals(3, task.getImageGenerationCount());
+            assertEquals(12, task.getImageGenerationCreditCost());
+            assertEquals(22, task.getCreditCost());
+            verify(quota).spend(eq(owner.id()), eq(22), eq("PPT"), eq(task.getTaskId()),
+                    contains("GPT Image 2 3 张，medium"));
+            awaitStatus(service, task.getTaskId(), "error");
+            verify(quota, timeout(1000)).refund(eq(91L), contains("失败"));
         } finally {
             service.shutdown();
         }
@@ -292,15 +323,23 @@ class PptGenerationServiceTest {
     }
 
     private PptGenerationService service(PptAgentRunner runner, QuotaService quota) throws Exception {
+        return service(runner, quota, null);
+    }
+
+    private PptGenerationService service(PptAgentRunner runner, QuotaService quota, RuntimeConfigService runtime) throws Exception {
         PptGenerationConfig config = new PptGenerationConfig();
         config.setStorageDir(tempDir.toString());
         config.setQueueCapacity(1);
         config.setMaxHistory(5);
         config.setMaxGlobalHistory(20);
+        if (runtime != null) {
+            when(runtime.pptMaxHistory()).thenReturn(5);
+            when(runtime.pptMaxGlobalHistory()).thenReturn(20);
+        }
         PptInputExtractor extractor = mock(PptInputExtractor.class);
         when(extractor.extractPaperText(any(), any(), any(), anyInt(), anyInt(), anyInt())).thenReturn("");
         PptGenerationService service = new PptGenerationService(
-                config, extractor, mock(LlmService.class), new ObjectMapper(), quota, runner);
+                config, extractor, mock(LlmService.class), new ObjectMapper(), quota, runner, runtime);
         service.initialize();
         return service;
     }

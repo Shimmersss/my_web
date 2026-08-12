@@ -18,6 +18,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
@@ -48,28 +49,49 @@ public class ZoteroService {
     }
 
     public List<Map<String, Object>> listItems(int limit) {
+        int safeLimit = Math.max(1, Math.min(100, limit));
         return restClient.get()
-                .uri(baseUrl() + "/users/{userId}/items?limit={limit}&format=json", userId(), limit)
+                .uri(baseUrl() + "/users/{userId}/items?limit={limit}&format=json", userId(), safeLimit)
                 .header("Zotero-API-Key", apiKey())
                 .retrieve()
                 .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+    }
+
+    public List<Map<String, Object>> listAllItems() {
+        return fetchAll("/users/{userId}/items?start={start}&limit={limit}&format=json",
+                Math.max(1, config.getMaxItems()));
     }
 
     public List<Map<String, Object>> listCollections() {
+        return fetchAll("/users/{userId}/collections?start={start}&limit={limit}",
+                Math.max(1, config.getMaxCollections()));
+    }
+
+    public List<Map<String, Object>> listItemsInCollection(String collectionKey, int limit) {
+        int safeLimit = Math.max(1, Math.min(100, limit));
         return restClient.get()
-                .uri(baseUrl() + "/users/{userId}/collections", userId())
+                .uri(baseUrl() + "/users/{userId}/collections/{key}/items?limit={limit}",
+                        userId(), collectionKey, safeLimit)
                 .header("Zotero-API-Key", apiKey())
                 .retrieve()
                 .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
     }
 
-    public List<Map<String, Object>> listItemsInCollection(String collectionKey, int limit) {
-        return restClient.get()
-                .uri(baseUrl() + "/users/{userId}/collections/{key}/items?limit={limit}",
-                        userId(), collectionKey, limit)
-                .header("Zotero-API-Key", apiKey())
-                .retrieve()
-                .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+    private List<Map<String, Object>> fetchAll(String path, int maxEntries) {
+        int pageSize = Math.max(1, Math.min(100, config.getSyncPageSize()));
+        List<Map<String, Object>> all = new ArrayList<>();
+        for (int start = 0; start < maxEntries; start += pageSize) {
+            List<Map<String, Object>> page = restClient.get()
+                    .uri(baseUrl() + path, userId(), start, Math.min(pageSize, maxEntries - start))
+                    .header("Zotero-API-Key", apiKey())
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<List<Map<String, Object>>>() {});
+            if (page == null || page.isEmpty()) break;
+            int remaining = maxEntries - all.size();
+            all.addAll(page.size() <= remaining ? page : page.subList(0, remaining));
+            if (page.size() < pageSize || all.size() >= maxEntries) break;
+        }
+        return List.copyOf(all);
     }
 
     /**
@@ -89,6 +111,10 @@ public class ZoteroService {
                 .GET()
                 .build();
         HttpResponse<InputStream> resp = httpClient.send(req, HttpResponse.BodyHandlers.ofInputStream());
+        if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
+            resp.body().close();
+            throw new IOException("Zotero attachment returned HTTP " + resp.statusCode());
+        }
         String upstreamCt = resp.headers().firstValue("content-type").orElse("");
         long upstreamLength = resp.headers().firstValueAsLong("content-length").orElse(-1);
         PushbackInputStream body = new PushbackInputStream(resp.body(), 4);
@@ -102,7 +128,7 @@ public class ZoteroService {
             ZipInputStream zis = new ZipInputStream(body);
             ZipEntry entry;
             while ((entry = zis.getNextEntry()) != null) {
-                if (!entry.isDirectory()) {
+                if (!entry.isDirectory() && isUsableZipEntry(entry.getName())) {
                     return new ProxiedFile(
                             HttpStatusCode.valueOf(resp.statusCode()),
                             MediaType.parseMediaType(guessContentType(entry.getName())),
@@ -116,7 +142,7 @@ public class ZoteroService {
 
         return new ProxiedFile(
                 HttpStatusCode.valueOf(resp.statusCode()),
-                MediaType.parseMediaType(upstreamCt.isBlank() ? "application/pdf" : upstreamCt),
+                safeMediaType(upstreamCt),
                 upstreamLength,
                 body);
     }
@@ -145,6 +171,25 @@ public class ZoteroService {
         if (name.endsWith(".jpg") || name.endsWith(".jpeg")) return "image/jpeg";
         if (name.endsWith(".svg")) return "image/svg+xml";
         return "application/octet-stream";
+    }
+
+    private boolean isUsableZipEntry(String filename) {
+        if (filename == null || filename.isBlank()) return false;
+        String normalized = filename.replace('\\', '/').toLowerCase(Locale.ROOT);
+        String basename = normalized.substring(normalized.lastIndexOf('/') + 1);
+        return !normalized.startsWith("__macosx/")
+                && !basename.startsWith(".")
+                && !basename.equals("zotero-ft-cache")
+                && !basename.endsWith(".prop");
+    }
+
+    private MediaType safeMediaType(String value) {
+        if (value == null || value.isBlank()) return MediaType.APPLICATION_OCTET_STREAM;
+        try {
+            return MediaType.parseMediaType(value);
+        } catch (IllegalArgumentException ignored) {
+            return MediaType.APPLICATION_OCTET_STREAM;
+        }
     }
 
     /**

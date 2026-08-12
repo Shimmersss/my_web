@@ -27,6 +27,7 @@ function cleanRichText(value) {
     .replace(/&gt;/gi, '>')
     .replace(/\r/g, '')
     .replace(/[ \t]+/g, ' ')
+    .replace(/\n{2,}/g, '\n')
     .trim();
 }
 
@@ -69,19 +70,48 @@ function effectiveCjkFont(value) {
 
 function textCapacity(text, content, bounds) {
   if (!text) return null;
-  const fontSize = Math.max(8, Number(content?.fontSize || 18));
+  const fontSize = Math.max(8, Number(content?.fontSize || 14));
   const lineHeight = Math.max(fontSize, Number(content?.lineHeightPx || fontSize * Number(content?.lineHeight || 1.22)));
   // Numerals and comparison punctuation occupy materially less width than CJK
   // glyphs. Treating a compact metric as all-CJK falsely rejects common cards
   // such as "91.5% | 15.16%" even when the exporter renders it on one line.
   const compactMetric = /^[\d\s.,:%‰+\-–—|｜/()]+$/.test(text);
-  const charsPerLine = Math.max(2, Math.floor(bounds[2] / (fontSize * (compactMetric ? 0.55 : 0.86))));
+  const glyphWidth = (character) => {
+    if (/\s/u.test(character)) return 0.28;
+    if (/[\u3400-\u9fff\uf900-\ufaff]/u.test(character)) return 0.86;
+    if (/[A-Z]/.test(character)) return 0.62;
+    if (/[a-z]/.test(character)) return 0.52;
+    if (/[\d]/.test(character)) return 0.55;
+    if (/[，。！？、；：·｜|]/u.test(character)) return 0.42;
+    return 0.52;
+  };
+  const lineCount = (line) => {
+    if (compactMetric) return Math.max(1, Math.ceil(line.length * fontSize * 0.55 / bounds[2]));
+    const units = [...line].reduce((total, character) => total + glyphWidth(character), 0);
+    return Math.max(1, Math.ceil(units * fontSize / bounds[2]));
+  };
   const availableLines = Math.max(1, Math.floor(bounds[3] / lineHeight));
   const requiredLines = text.split('\n').reduce((total, line) =>
-    total + Math.max(1, Math.ceil(Math.max(1, line.trim().length) / charsPerLine)), 0);
+    total + lineCount(line.trim()), 0);
   return { fontSize, lineHeight, requiredLines, availableLines, compactMetric,
     issue: content?.wrap === false && requiredLines > 1 ? 'single-line text does not fit its width'
       : requiredLines > availableLines ? `estimated ${requiredLines} lines exceed the ${availableLines}-line text box capacity` : null };
+}
+
+function themeStyle(content, theme) {
+  const styleRef = String(content?.style || '');
+  const key = styleRef.startsWith('$') ? styleRef.slice(1) : '';
+  const style = key && theme?.textStyles && typeof theme.textStyles[key] === 'object'
+    ? theme.textStyles[key] : {};
+  return style && typeof style === 'object' ? style : {};
+}
+
+function resolveInlineThemeTokens(value, colors, font) {
+  if (typeof value !== 'string' || !value.includes('<')) return value;
+  return value
+    .replace(/(color\s*:\s*)\$([A-Za-z][A-Za-z0-9_-]*)/gi, (match, prefix, key) =>
+      typeof colors?.[key] === 'string' ? `${prefix}${colors[key]}` : match)
+    .replace(/(font-family\s*:\s*)[^;"']+/gi, `$1${font}`);
 }
 
 function intersects(left, right) {
@@ -105,7 +135,7 @@ function safelyAutofitHeight(page, index, element, capacity, canvas) {
   return true;
 }
 
-function applyFontAndCheckPage(page, pagePath, canvas, font) {
+function applyFontAndCheckPage(page, pagePath, canvas, font, theme) {
   if (!page || !Array.isArray(page.elements)) throw new Error(`${pagePath}: page elements are missing`);
   const issues = [];
   for (const [index, element] of page.elements.entries()) {
@@ -117,10 +147,18 @@ function applyFontAndCheckPage(page, pagePath, canvas, font) {
       issues.push(`${pagePath} element ${index + 1}: text content is missing`);
       continue;
     }
+    // Resolve the manifest's text style before estimating capacity. PPTD style
+    // references are normally applied by the exporter, but the preflight must
+    // make its decision using the same effective font size and line height.
+    const inherited = themeStyle(element.content, theme);
+    for (const [key, value] of Object.entries(inherited)) {
+      if (element.content[key] == null) element.content[key] = value;
+    }
     // The service exposes a single font selection. Apply it at the PPTD text
     // layer so exported files do not quietly fall back to MiSans or a host
     // dependent default. Inline rich-text markup remains untouched.
     element.content.fontFamily = font;
+    element.content.text = resolveInlineThemeTokens(element.content.text, theme?.colors, font);
     const text = cleanRichText(element.content.text);
     if (!text) {
       issues.push(`${pagePath} element ${index + 1}: visible text is empty`);
@@ -152,11 +190,12 @@ export async function preparePptdQuality({ projectDir, manifestFile, pages, font
     && manifest.size.every(value => Number.isFinite(Number(value)) && Number(value) > 0)
     ? manifest.size.map(Number) : FALLBACK_CANVAS;
   const font = effectiveCjkFont(fontFamily);
+  const theme = manifest?.theme && typeof manifest.theme === 'object' ? manifest.theme : {};
   const issues = [];
   for (const relative of pages) {
     const pagePath = path.resolve(projectDir, relative);
     const page = YAML.parse(await fs.readFile(pagePath, 'utf8'));
-    issues.push(...applyFontAndCheckPage(page, relative, size, font));
+    issues.push(...applyFontAndCheckPage(page, relative, size, font, theme));
     await fs.writeFile(pagePath, YAML.stringify(page), 'utf8');
   }
   if (issues.length) throw new Error(`PPTD visual preflight failed:\n- ${issues.slice(0, 12).join('\n- ')}`);

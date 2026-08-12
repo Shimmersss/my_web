@@ -5,9 +5,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.RuntimeConfigService;
 import com.web.backen.config.PptGenerationConfig;
 import jakarta.annotation.PreDestroy;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
@@ -27,9 +30,10 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.stream.Stream;
 
-/** Root-only PPTD generator. Codex can write only a disposable task workspace. */
+/** Authorized PPTD generator. Codex can write only a disposable task workspace. */
 @Component
 public class PptCodexRunner {
+    private static final Logger log = LoggerFactory.getLogger(PptCodexRunner.class);
     private static final int MAX_VISUAL_PREFLIGHT_REPAIRS = 2;
     private final PptGenerationConfig config;
     private final RuntimeConfigService runtime;
@@ -82,20 +86,49 @@ public class PptCodexRunner {
             Files.writeString(input.resolve("request.txt"), session.getPrompt(), StandardCharsets.UTF_8);
             imageGeneration.generate(session, input.resolve("generated-images"), events);
 
+            String providerBaseUrl = runtime.codexPptProviderBaseUrl();
             AuthSource auth = prepareAuth(codex, codexHome, apiKey);
+            boolean customProvider = !providerBaseUrl.isBlank() && !auth.localCli();
+            if (customProvider) writeCcswitchProviderConfig(codexHome, providerBaseUrl,
+                    runtime.codexPptModel(), runtime.codexPptReasoningEffort());
             events.accept("planning", Map.of("progress", 10, "message",
                     auth.localCli() ? "正在复用本机 Codex CLI 登录态" : "正在启动隔离的 Codex PPTD Agent"));
             String prompt = prompt(session);
             List<String> command = execCommand(codex, workspace, runtime.codexPptModel(),
-                    runtime.codexPptReasoningEffort(), "workspace-write", auth.localCli());
-            StringBuilder log = new StringBuilder(run(command, workspace, codexHome, prompt,
-                    Duration.ofSeconds(config.getCodexTimeoutSeconds()), events, true));
+                    runtime.codexPptReasoningEffort(), "workspace-write", auth.localCli(), customProvider);
+            StringBuilder codexEvents = new StringBuilder();
+            try {
+                codexEvents.append(run(command, workspace, codexHome, prompt,
+                        Duration.ofSeconds(config.getCodexTimeoutSeconds()), events, true));
+            } catch (CodexProcessException failure) {
+                appendBounded(codexEvents, failure.processLog());
+                logCodexDiagnostic(session, "process-exit-" + failure.exitCode(), codexEvents);
+                throw new IllegalStateException("Codex PPT 生成未完成，请稍后重试");
+            }
             Path manifest = singleManifest(deck);
-            if (manifest == null) throw new IllegalStateException("Codex 未生成唯一的 deck/*.pptd");
+            if (manifest == null) {
+                logCodexDiagnostic(session, "missing-deck-manifest", codexEvents);
+                throw new IllegalStateException("Codex 未生成完整 PPTD 项目，请重试");
+            }
             Path target = session.getTaskDir().resolve("pptd-project");
-            finalizeWithVisualRepairs(session, events, finalizeScript, vendor, workspace, codexHome,
-                    command, deck, target, log);
-            Files.writeString(session.getTaskDir().resolve("codex-events.jsonl"), log.toString(), StandardCharsets.UTF_8);
+            try {
+                finalizeWithVisualRepairs(session, events, finalizeScript, vendor, workspace, codexHome,
+                        command, deck, target, codexEvents);
+            } catch (CodexProcessException failure) {
+                appendBounded(codexEvents, failure.processLog());
+                // A relay can return a wrapper-level non-zero exit after the repair
+                // agent has already written its deck. Never trust that deck directly:
+                // retry the fixed exporter and every deterministic gate first. This
+                // also makes the recovery independent from transient workspace mount
+                // observations inside the repair loop.
+                if (finalizeRetainedDeck(session, events, finalizeScript, vendor, deck, target)) {
+                    log.info("Codex repair returned exit {} but the retained project passed fixed export: taskId={}",
+                            failure.exitCode(), session.getTaskId());
+                    return;
+                }
+                logCodexDiagnostic(session, "repair-process-exit-" + failure.exitCode(), codexEvents);
+                throw new IllegalStateException("Codex PPT 修复未完成，请稍后重试");
+            }
         } finally {
             deleteTree(workspace);
         }
@@ -108,9 +141,9 @@ public class PptCodexRunner {
         runFinalize(finalizeScript, session.getTaskDir(), vendor, session.getFontFamily(), events);
     }
 
-    public Map<String, Object> testConnection(String apiKey, String model, String effort)
+    public Map<String, Object> testConnection(String apiKey, String model, String effort, String providerBaseUrl)
             throws IOException, InterruptedException {
-        if (!Set.of("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna").contains(model)) {
+        if (!Set.of("gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna").contains(model)) {
             throw new IllegalArgumentException("Codex PPT 模型不在允许列表");
         }
         if (!Set.of("low", "medium", "high", "xhigh", "max", "ultra").contains(effort)) {
@@ -124,7 +157,9 @@ public class PptCodexRunner {
         setOwnerOnly(home);
         try {
             AuthSource auth = prepareAuth(codex, home, apiKey);
-            List<String> command = execCommand(codex, workspace, model, effort, "read-only", auth.localCli());
+            boolean customProvider = providerBaseUrl != null && !providerBaseUrl.isBlank() && !auth.localCli();
+            if (customProvider) writeCcswitchProviderConfig(home, providerBaseUrl, model, effort);
+            List<String> command = execCommand(codex, workspace, model, effort, "read-only", auth.localCli(), customProvider);
             run(command, workspace, home, "Reply exactly OK. Do not use tools.\n", Duration.ofSeconds(45), (a, b) -> {}, true);
             return Map.of("message", auth.localCli() ? "已复用本机 Codex CLI 登录态" : "Codex CLI 连接成功", "configured", true,
                     "model", model, "reasoningEffort", effort, "cliVersion", "0.147.0");
@@ -198,7 +233,9 @@ public class PptCodexRunner {
                 if (value.matches("[A-Za-z0-9_.-]{1,80}")) provider = value;
             }
         }
-        Set<String> topLevel = Set.of("model", "model_provider", "model_reasoning_effort", "web_search", "model_catalog_json");
+        Set<String> topLevel = Set.of("model", "review_model", "model_provider", "model_reasoning_effort",
+                "disable_response_storage", "network_access", "model_context_window", "model_auto_compact_token_limit",
+                "web_search", "model_catalog_json");
         String prefix = provider.isBlank() ? "" : "[model_providers." + provider;
         boolean inActiveProvider = false;
         StringBuilder kept = new StringBuilder();
@@ -236,10 +273,35 @@ public class PptCodexRunner {
         catch (UnsupportedOperationException ignored) {}
     }
 
-    private List<String> execCommand(Path codex, Path workspace, String model, String effort, String sandbox, boolean localCli) {
+    private void writeCcswitchProviderConfig(Path home, String baseUrl, String model, String effort) throws IOException {
+        String normalized = java.net.URI.create(baseUrl).toString().replaceAll("/+$", "");
+        String configText = """
+                model_provider = "OpenAI"
+                model = "%s"
+                review_model = "%s"
+                model_reasoning_effort = "%s"
+                disable_response_storage = true
+                network_access = "enabled"
+                model_context_window = 1000000
+                model_auto_compact_token_limit = 900000
+
+                [model_providers.OpenAI]
+                name = "OpenAI"
+                base_url = "%s"
+                wire_api = "responses"
+                requires_openai_auth = true
+                """.formatted(model, model, effort, normalized);
+        Files.writeString(home.resolve("config.toml"), configText, StandardCharsets.UTF_8);
+        try { Files.setPosixFilePermissions(home.resolve("config.toml"),
+                EnumSet.of(PosixFilePermission.OWNER_READ, PosixFilePermission.OWNER_WRITE)); }
+        catch (UnsupportedOperationException ignored) { }
+    }
+
+    private List<String> execCommand(Path codex, Path workspace, String model, String effort, String sandbox,
+                                     boolean localCli, boolean customProvider) {
         List<String> command = new ArrayList<>(List.of(codex.toString(), "exec", "-", "--ephemeral"));
         // The temporary home only contains a filtered CCSwitch-compatible provider profile.
-        if (!localCli) command.add("--ignore-user-config");
+        if (!localCli && !customProvider) command.add("--ignore-user-config");
         command.addAll(List.of("--ignore-rules", "--skip-git-repo-check", "--sandbox", sandbox, "--json", "--color", "never",
                 "--model", model, "--config", "model_reasoning_effort=\"" + effort + "\"", "--cd", workspace.toString()));
         return command;
@@ -258,7 +320,10 @@ public class PptCodexRunner {
                 "PPT_CODEX_MAX_FILES", Integer.toString(config.getCodexMaxProjectFiles()),
                 "PPT_CODEX_MAX_BYTES", Long.toString(config.getCodexMaxProjectBytes()),
                 "PPT_CODEX_REQUESTED_FONT", fontFamily == null || fontFamily.isBlank() ? "Microsoft YaHei" : fontFamily);
-        run(command, script.getParent(), null, "", Duration.ofSeconds(600), events, true, env);
+        // This is the fixed Node exporter, not Codex JSONL. Preserve its bounded
+        // deterministic preflight message so the author can repair real layout
+        // findings instead of treating the exporter as a failed Codex turn.
+        run(command, script.getParent(), null, "", Duration.ofSeconds(600), events, false, env);
     }
 
     /**
@@ -281,9 +346,26 @@ public class PptCodexRunner {
                 if (!isVisualPreflightFailure(failure) || attempt >= MAX_VISUAL_PREFLIGHT_REPAIRS) throw failure;
                 events.accept("reviewing", Map.of("progress", 76,
                         "message", "发现文字排版问题，正在让 Codex 按真实检测结果修复"));
-                log.append(run(command, workspace, codexHome, repairPrompt(failure.getMessage()),
-                        Duration.ofSeconds(config.getCodexTimeoutSeconds()), events, true));
-                if (singleManifest(deck) == null) throw new IllegalStateException("Codex 修复后未保留唯一的 deck/*.pptd");
+                try {
+                    appendBounded(log, run(command, workspace, codexHome, repairPrompt(failure.getMessage()),
+                            Duration.ofSeconds(config.getCodexTimeoutSeconds()), events, true));
+                } catch (CodexProcessException repairExit) {
+                    appendBounded(log, repairExit.processLog());
+                    // Certain OpenAI-compatible relays have a wrapper-level non-zero
+                    // repair exit even after writing the requested files. The existing
+                    // deck is never trusted directly: the next loop iteration copies it
+                    // into task storage and reruns the fixed exporter, text-boundary and
+                    // real-render gates. If it is incomplete or still invalid, those
+                    // gates either request another bounded repair or block delivery.
+                    if (!Files.isDirectory(deck)) throw repairExit;
+                    PptCodexRunner.log.warn("Codex repair exited {} with a retained PPTD project; validating it with the fixed exporter",
+                            repairExit.exitCode());
+                }
+                // Do not duplicate the exporter's exact-one-manifest/path checks
+                // here. A compatible relay may leave auxiliary authoring files; the
+                // next iteration copies the project and the fixed exporter is the
+                // sole authority that accepts or rejects it for delivery.
+                if (!Files.isDirectory(deck)) throw new IllegalStateException("Codex 修复后未保留 deck 项目目录");
             }
         }
     }
@@ -291,6 +373,27 @@ public class PptCodexRunner {
     private void copyDeckToTask(Path deck, Path target) throws IOException {
         deleteTree(target);
         copyTree(deck, target, config.getCodexMaxProjectFiles(), config.getCodexMaxProjectBytes());
+    }
+
+    /**
+     * Recovery remains safe because this path invokes the same authoritative
+     * exporter, PPTD/path checks, ZIP checks and true-render gates as the
+     * normal flow. A retained but still-invalid deck is never delivered.
+     */
+    private boolean finalizeRetainedDeck(PptGenerationSession session,
+                                         BiConsumer<String, Map<String, Object>> events,
+                                         Path finalizeScript, Path vendor, Path deck, Path target)
+            throws IOException, InterruptedException {
+        if (singleManifest(deck) == null) return false;
+        copyDeckToTask(deck, target);
+        events.accept("rendering", Map.of("progress", 84, "message", "正在复核返修后的 PPTD 排版"));
+        try {
+            runFinalize(finalizeScript, session.getTaskDir(), vendor, session.getFontFamily(), events);
+            return true;
+        } catch (IllegalStateException failure) {
+            if (!isVisualPreflightFailure(failure)) throw failure;
+            return false;
+        }
     }
 
     private boolean isVisualPreflightFailure(IllegalStateException failure) {
@@ -326,17 +429,18 @@ public class PptCodexRunner {
             throws IOException, InterruptedException {
         ProcessBuilder builder = new ProcessBuilder(command).directory(cwd.toFile()).redirectErrorStream(true);
         if (codexHome != null) builder.environment().put("CODEX_HOME", codexHome.toString());
+        prependLockedCodexBin(builder);
         builder.environment().putAll(extraEnv);
         Process process = builder.start();
         active.add(process);
         try (OutputStreamWriter writer = new OutputStreamWriter(process.getOutputStream(), StandardCharsets.UTF_8)) {
             writer.write(stdin == null ? "" : stdin);
         }
-        StringBuilder log = new StringBuilder();
+        StringBuilder outputLog = new StringBuilder();
         long deadline = System.nanoTime() + timeout.toNanos();
         try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream(), StandardCharsets.UTF_8))) {
             while (System.nanoTime() < deadline) {
-                while (reader.ready()) appendLine(reader.readLine(), log, events, parseJson);
+                while (reader.ready()) appendLine(reader.readLine(), outputLog, events, parseJson);
                 if (process.waitFor(200, TimeUnit.MILLISECONDS)) break;
             }
             if (process.isAlive()) {
@@ -344,11 +448,42 @@ public class PptCodexRunner {
                 throw new IllegalStateException("Codex PPT 任务超时");
             }
             String line;
-            while ((line = reader.readLine()) != null) appendLine(line, log, events, parseJson);
-            if (process.exitValue() != 0) throw new IllegalStateException("Codex PPT 子进程失败: " + tail(log.toString(), 4000));
-            return log.toString();
+            while ((line = reader.readLine()) != null) appendLine(line, outputLog, events, parseJson);
+            int exitCode = process.exitValue();
+            if (exitCode != 0) {
+                if (!parseJson) {
+                    throw new IllegalStateException(tail(outputLog.toString(), 12000));
+                }
+                // Some OpenAI-compatible Codex relays return a non-zero wrapper exit
+                // after emitting a complete JSONL turn. The protocol terminal event is
+                // authoritative here: do not discard a fully written PPTD repair.
+                // A terminal turn.completed is successful; turn.failed is the protocol
+                // terminal failure event and never emits turn.completed.
+                if (parseJson && hasCompletedTurn(outputLog)) {
+                    PptCodexRunner.log.warn("Codex CLI returned exitCode={} after a completed JSONL turn; accepting the completed turn", exitCode);
+                    return outputLog.toString();
+                }
+                throw new CodexProcessException(exitCode, outputLog.toString());
+            }
+            return outputLog.toString();
         } finally {
             active.remove(process);
+        }
+    }
+
+    /**
+     * Codex agent shell calls resolve `codex-linux-sandbox` from PATH. The
+     * deployment creates that alias next to the locked CLI; inherit only that
+     * directory for this child instead of relying on a system-wide install.
+     */
+    private void prependLockedCodexBin(ProcessBuilder builder) {
+        try {
+            Path bin = resolve(config.getCodexCommand()).getParent();
+            if (bin == null || !Files.isDirectory(bin)) return;
+            String existing = builder.environment().getOrDefault("PATH", "");
+            builder.environment().put("PATH", bin + (existing.isBlank() ? "" : File.pathSeparator + existing));
+        } catch (Exception ignored) {
+            // The CLI executable check in run() reports a clear error if this path is unusable.
         }
     }
 
@@ -366,9 +501,75 @@ public class PptCodexRunner {
         } catch (Exception ignored) {}
     }
 
+    private boolean hasCompletedTurn(StringBuilder events) {
+        // JSONL is machine-generated by Codex. Check the terminal marker directly
+        // first: compatible relays have occasionally added fields that Jackson's
+        // map conversion does not retain consistently across wrapper versions.
+        if (events.indexOf("turn.completed") >= 0) return true;
+        for (String line : events.toString().split("\\R")) {
+            try {
+                Map<String, Object> event = objectMapper.readValue(line, new TypeReference<>() {});
+                String type = String.valueOf(event.getOrDefault("type", event.getOrDefault("event", "")));
+                if ("turn.completed".equals(type)) return true;
+            } catch (Exception ignored) { }
+        }
+        return false;
+    }
+
+    /**
+     * A failed Codex process may include provider diagnostics in stdout. Keep that
+     * material out of task metadata/SSE while retaining a short sanitized server log
+     * that can distinguish an authentication failure from an authoring failure.
+     */
+    private void logCodexDiagnostic(PptGenerationSession session, String reason, StringBuilder events) {
+        Set<String> types = new java.util.LinkedHashSet<>();
+        String finalMessage = "";
+        for (String line : events.toString().split("\\R")) {
+            try {
+                Map<String, Object> event = objectMapper.readValue(line, new TypeReference<>() {});
+                String type = String.valueOf(event.getOrDefault("type", event.getOrDefault("event", "")));
+                if (!type.isBlank()) types.add(type);
+                Object item = event.get("item");
+                if (item instanceof Map<?, ?> map && "agent_message".equals(String.valueOf(map.get("type")))) {
+                    Object text = map.get("text");
+                    if (text != null) finalMessage = String.valueOf(text);
+                }
+            } catch (Exception ignored) { }
+        }
+        log.warn("Codex PPT diagnostic: taskId={}, reason={}, eventTypes={}, finalMessage={}",
+                session.getTaskId(), reason, types, sanitizeDiagnostic(finalMessage));
+    }
+
+    private String sanitizeDiagnostic(String value) {
+        String normalized = value == null ? "" : value.replaceAll("[\\r\\n\\t]+", " ").replaceAll("\\s+", " ").trim();
+        normalized = normalized.replaceAll("(?i)(sk-[A-Za-z0-9_-]{6,}|bearer\\s+[^\\s]+)", "***");
+        return normalized.isBlank() ? "(no agent final message)" : tail(normalized, 900);
+    }
+
+    private void appendBounded(StringBuilder target, String value) {
+        if (value == null || value.isEmpty()) return;
+        target.append(value);
+        int max = (int) Math.min(Integer.MAX_VALUE, Math.max(64 * 1024, config.getCodexMaxLogBytes()));
+        if (target.length() > max) target.delete(0, target.length() - max);
+    }
+
+    private static final class CodexProcessException extends IllegalStateException {
+        private final int exitCode;
+        private final String processLog;
+
+        private CodexProcessException(int exitCode, String processLog) {
+            super("Codex CLI 子进程异常退出（exit=" + exitCode + "）");
+            this.exitCode = exitCode;
+            this.processLog = processLog == null ? "" : processLog;
+        }
+
+        private int exitCode() { return exitCode; }
+        private String processLog() { return processLog; }
+    }
+
     private String prompt(PptGenerationSession session) {
         return """
-                You are running as the root-only PPTD authoring worker for a web service.
+                You are running as the authorized PPTD authoring worker for a web service.
                 Read ./skill/SKILL.md and ./skill/reference/pptd.md completely, then follow their PPTD authoring rules.
                 The user request is in ./input/request.txt. Any extracted source text, validated upload and extracted figures are under ./input/.
                 Selected design key: %s. Requested font: %s. Research mode: %s. AI image mode: %s.
@@ -377,7 +578,7 @@ public class PptCodexRunner {
                 source-grounded material. In prefer mode, use them as the first visual option where semantically suitable.
                 They are not factual sources: never display a source URL/citation for them and never add text to them.
                 Work only inside this disposable workspace. Create the final self-contained project at ./deck with exactly
-                one ./deck/deck.pptd, ./deck/pages/*.page, and ./deck/media/ as needed. Produce 3-30 pages.
+                one ./deck/deck.pptd, ./deck/pages/*.page, and ./deck/media/ as needed. Produce 3-30 pages. %s
                 Do not run export_pptx.py, browser tools, package managers, network downloaders, or create scripts/binaries.
                 Do not write outside ./deck. Validate PPTD v2 structure and closed relative paths yourself.
                 Every visible text element must explicitly use the requested font. Keep all text inside its own bounds:
@@ -388,7 +589,16 @@ public class PptCodexRunner {
                 or visible bibliography/reference pages. Cite source material only in the page metadata/notes.
                 When a custom template exists at ./input/template.pptx, use it as the visual reference as described by the Skill.
                 Finish only after the complete PPTD project is present. The server will export and render it using fixed vendored code.
-                """.formatted(session.getTemplateKey(), session.getFontFamily(), session.getResearchMode(), session.getImageGenerationMode());
+                """.formatted(session.getTemplateKey(), session.getFontFamily(), session.getResearchMode(), session.getImageGenerationMode(),
+                requestedPageCountInstruction(session.getPrompt()));
+    }
+
+    private String requestedPageCountInstruction(String request) {
+        if (request == null || request.isBlank()) return "Choose an appropriate page count from the request.";
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("(?i)(?<!\\d)([3-9]|[12]\\d|30)\\s*(?:页(?:PPT|演示文稿|幻灯片)?|slides?)")
+                .matcher(request);
+        return matcher.find() ? "The user explicitly requested " + matcher.group(1) + " pages: create exactly "
+                + matcher.group(1) + " pages, including cover and final page." : "Choose an appropriate page count from the request.";
     }
 
     private Path singleManifest(Path deck) throws IOException {

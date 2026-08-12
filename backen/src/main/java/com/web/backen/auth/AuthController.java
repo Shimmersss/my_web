@@ -64,7 +64,10 @@ public class AuthController {
 
     @GetMapping("/quota-settings")
     public Map<String, Object> quotaSettings() {
-        return ok(quotaService.settings());
+        Map<String, Object> data = new LinkedHashMap<>(quotaService.settings());
+        data.put("pptImageGenerationQuality", runtimeConfigService.imageGenerationQuality());
+        data.put("pptImageGenerationMaxImages", runtimeConfigService.imageGenerationMaxImages());
+        return ok(data);
     }
 
     @PostMapping("/daily-checkin")

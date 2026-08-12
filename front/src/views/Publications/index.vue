@@ -5,6 +5,11 @@
         <div class="page-header tool-page__header">
           <h1>文献库</h1>
           <p>同步自 Zotero · 共 {{ total }} 条 · 显示 {{ filtered.length }} 条匹配</p>
+          <div class="sync-status" :class="{ warning: syncWarning }">
+            <span class="sync-dot" :class="{ active: syncing }"></span>
+            {{ syncing ? '正在同步完整文献库…' : `上次同步：${formatUpdatedAt(updatedAt)}` }}
+            <span v-if="syncWarning"> · {{ syncWarning }}</span>
+          </div>
         </div>
 
         <n-alert v-if="error" type="error" title="加载失败" style="margin-bottom: 16px">
@@ -62,7 +67,7 @@
                       @click="selectedKey = c.key"
                     >
                       <span class="coll-name" :title="c.name">{{ c.name }}</span>
-                      <span class="count">{{ countMap[c.key] || 0 }}</span>
+                      <span class="count" title="含所有子分组的去重文献数">{{ countMap[c.key] || 0 }}</span>
                     </button>
                   </div>
                 </template>
@@ -90,7 +95,8 @@
                   clearable
                   style="width: 180px"
                 />
-                <n-button @click="load" :loading="loading" size="small">刷新</n-button>
+                <n-checkbox v-if="selectedKey" v-model:checked="includeDescendants">包含子分组</n-checkbox>
+                <n-button @click="load(true)" :loading="syncing" size="small">同步 Zotero</n-button>
               </div>
 
               <div v-if="filtered.length === 0 && !loading" class="empty">
@@ -239,6 +245,10 @@ const keyword = ref('')
 const typeFilter = ref(null)
 const treeFilter = ref('')
 const selectedKey = ref(null)
+const includeDescendants = ref(true)
+const syncing = ref(false)
+const updatedAt = ref(0)
+const syncWarning = ref('')
 const sidebarCollapsed = ref(false)
 const sidebarSlot = ref(null)
 const sidebarFollowing = ref(false)
@@ -255,8 +265,8 @@ const openedPdfUrl = reactive({})
 const openedMd = reactive({})
 const attachmentDownloads = reactive({})
 const attachmentAbortControllers = new Map()
-let collectionRefreshTimer = null
-let collectionRefreshAfterWarmupTimer = null
+let snapshotRefreshTimer = null
+let warmupPollTimer = null
 
 const typeMap = {
   journalArticle: '期刊论文',
@@ -280,7 +290,7 @@ const exportOptions = [
 
 const typeOptions = computed(() => {
   const set = new Set(items.value.map(i => i.itemType).filter(Boolean))
-  return Array.from(set).map(t => ({ label: typeLabel(t), value: t }))
+  return Array.from(set).map(t => ({ label: typeLabel(t), value: t })).sort((a, b) => a.label.localeCompare(b.label, 'zh'))
 })
 
 const collectionMap = computed(() => {
@@ -292,10 +302,16 @@ const collectionMap = computed(() => {
 const collectionsTree = computed(() => {
   const map = collectionMap.value
   const out = []
+  const visited = new Set()
   const visit = (key, depth) => {
+    if (visited.has(key)) return
     const c = map[key]
     if (!c) return
-    out.push({ key: c.key, name: c.name, depth })
+    visited.add(key)
+    const parent = c.parentCollection ? map[c.parentCollection] : null
+    const parentPath = parent ? out.find(value => value.key === parent.key)?.path : ''
+    const path = parentPath ? `${parentPath} / ${c.name}` : c.name
+    out.push({ key: c.key, name: c.name, depth, path })
     collectionsRaw.value
       .filter(x => x.parentCollection === key)
       .sort((a, b) => a.name.localeCompare(b.name, 'zh'))
@@ -305,37 +321,71 @@ const collectionsTree = computed(() => {
     .filter(c => !c.parentCollection)
     .sort((a, b) => a.name.localeCompare(b.name, 'zh'))
     .forEach(root => visit(root.key, 0))
+  collectionsRaw.value
+    .filter(collection => !visited.has(collection.key))
+    .sort((a, b) => a.name.localeCompare(b.name, 'zh'))
+    .forEach(root => visit(root.key, 0))
   return out
 })
 
 const visibleCollections = computed(() => {
   const f = treeFilter.value.trim().toLowerCase()
   if (!f) return collectionsTree.value
-  return collectionsTree.value.filter(c => c.name.toLowerCase().includes(f))
+  const visibleKeys = new Set()
+  for (const collection of collectionsTree.value) {
+    if (!collection.path.toLowerCase().includes(f)) continue
+    let current = collectionMap.value[collection.key]
+    const seen = new Set()
+    while (current && !seen.has(current.key)) {
+      seen.add(current.key)
+      visibleKeys.add(current.key)
+      current = current.parentCollection ? collectionMap.value[current.parentCollection] : null
+    }
+  }
+  return collectionsTree.value.filter(collection => visibleKeys.has(collection.key))
 })
 
 const total = computed(() => items.value.length)
 
-const countMap = computed(() => {
-  const m = {}
-  for (const item of items.value) {
-    for (const k of (item.collections || [])) {
-      m[k] = (m[k] || 0) + 1
-    }
+const descendantMap = computed(() => {
+  const children = {}
+  for (const collection of collectionsRaw.value) {
+    if (collection.parentCollection) (children[collection.parentCollection] ||= []).push(collection.key)
   }
-  return m
+  const result = {}
+  const collect = (key, seen = new Set()) => {
+    if (seen.has(key)) return []
+    seen.add(key)
+    return [key, ...(children[key] || []).flatMap(child => collect(child, seen))]
+  }
+  for (const collection of collectionsRaw.value) result[collection.key] = collect(collection.key)
+  return result
+})
+
+const countMap = computed(() => {
+  const result = {}
+  for (const collection of collectionsRaw.value) {
+    const keys = new Set(descendantMap.value[collection.key] || [collection.key])
+    result[collection.key] = items.value.filter(item => (item.collections || []).some(key => keys.has(key))).length
+  }
+  return result
 })
 
 function itemMatchesPdfFirst(a, b) {
   const ap = hasPdf(a) ? 1 : 0
   const bp = hasPdf(b) ? 1 : 0
-  return bp - ap
+  if (bp !== ap) return bp - ap
+  const dateCompare = String(b.date || '').localeCompare(String(a.date || ''), undefined, { numeric: true })
+  return dateCompare || String(a.title || '').localeCompare(String(b.title || ''), 'zh')
 }
 
 const filtered = computed(() => {
   const kw = keyword.value.trim().toLowerCase()
+  const selectedKeys = selectedKey.value && includeDescendants.value
+    ? new Set(descendantMap.value[selectedKey.value] || [selectedKey.value])
+    : null
   const list = items.value.filter(item => {
-    if (selectedKey.value && !(item.collections || []).includes(selectedKey.value)) return false
+    if (selectedKey.value && !(item.collections || []).some(key => selectedKeys ? selectedKeys.has(key) : key === selectedKey.value)) return false
     if (typeFilter.value && item.itemType !== typeFilter.value) return false
     return !kw || itemMatchesSearch(item, kw)
   })
@@ -357,7 +407,7 @@ const sidebarFollowStyle = computed(() => {
   }
 })
 
-watch([keyword, typeFilter, selectedKey], () => {
+watch([keyword, typeFilter, selectedKey, includeDescendants], () => {
   currentPage.value = 1
 })
 
@@ -413,7 +463,17 @@ function formatCreators(creators) {
 }
 
 function itemCollections(item) {
-  return (item.collections || []).map(k => collectionMap.value[k]?.name).filter(Boolean)
+  return (item.collections || []).map(k => collectionPath(k)).filter(Boolean)
+}
+
+function collectionPath(key) {
+  const names = []
+  const seen = new Set()
+  let current = collectionMap.value[key]
+  while (current && !seen.has(current.key)) {
+    seen.add(current.key); names.unshift(current.name); current = collectionMap.value[current.parentCollection]
+  }
+  return names.join(' / ')
 }
 
 function normalizeSearchText(value) {
@@ -525,11 +585,12 @@ async function togglePdf(itemKey, att) {
     delete openedMd[itemKey]
     try {
       const res = await fetch(`/api/zotero/file/${att.key}`)
+      if (!res.ok) throw new Error('HTTP ' + res.status)
       const text = await res.text()
       const html = marked.parse(text, { breaks: true, gfm: true })
       openedMd[itemKey] = DOMPurify.sanitize(html)
     } catch (e) {
-      openedMd[itemKey] = `<p style="color:#d03050">加载失败：${e.message}</p>`
+      openedMd[itemKey] = '<p style="color:#d03050">附件加载失败，请稍后重试。</p>'
     }
     return
   }
@@ -548,6 +609,7 @@ async function togglePdf(itemKey, att) {
     const res = await fetch(`/api/zotero/file/${att.key}`, { signal: controller.signal })
     if (!res.ok) throw new Error('HTTP ' + res.status)
     const total = Number(res.headers.get('content-length')) || 0
+    if (total > 120 * 1024 * 1024) throw new Error('附件超过 120 MB，请使用 Zotero 客户端打开')
     const reader = res.body?.getReader()
     if (!reader) throw new Error('浏览器不支持流式下载')
     const chunks = []
@@ -557,6 +619,7 @@ async function togglePdf(itemKey, att) {
       if (done) break
       chunks.push(value)
       loaded += value.byteLength
+      if (loaded > 120 * 1024 * 1024) throw new Error('附件超过 120 MB，请使用 Zotero 客户端打开')
       const elapsedSeconds = Math.max((Date.now() - startedAt) / 1000, 0.001)
       attachmentDownloads[att.key] = {
         status: 'loading',
@@ -629,56 +692,58 @@ function applyCollections(response) {
   }
 }
 
-async function loadCollections(refresh = false) {
-  const response = await getZoteroCollections(refresh)
-  applyCollections(response)
+function applySnapshot(itemsResponse, collectionsResponse) {
+  if (itemsResponse.code !== 200) throw new Error(itemsResponse.message || '拉取文献失败')
+  if (collectionsResponse.code !== 200) throw new Error(collectionsResponse.message || '拉取分组失败')
+  const itemsUpdatedAt = Number(itemsResponse.updatedAt || 0)
+  const collectionsUpdatedAt = Number(collectionsResponse.updatedAt || 0)
+  if (itemsUpdatedAt !== collectionsUpdatedAt) return false
+  items.value = itemsResponse.data || []
+  applyCollections(collectionsResponse)
+  updatedAt.value = itemsUpdatedAt
+  syncWarning.value = itemsResponse.syncWarning || collectionsResponse.syncWarning || ''
+  syncing.value = !syncWarning.value && Boolean(itemsResponse.refreshing || collectionsResponse.refreshing || itemsResponse.warmedUp === false)
+  return true
 }
 
-async function load() {
-  loading.value = true
+async function fetchSnapshot(refresh = false, background = false) {
+  if (!background) loading.value = true
+  if (refresh) syncing.value = true
   error.value = ''
   try {
     const [itemsRes, collRes] = await Promise.all([
-      getZoteroItems(200),
+      getZoteroItems(refresh),
       getZoteroCollections()
     ])
-    if (itemsRes.code === 200) {
-      items.value = itemsRes.data || []
-      // 后端缓存还在预热（首次启动后 3-15 秒），轮询一次
-      if (itemsRes.warmedUp === false || items.value.length === 0) {
-        setTimeout(load, 2000)
-      }
-    } else {
-      error.value = itemsRes.message || '拉取文献失败'
+    const applied = applySnapshot(itemsRes, collRes)
+    if (!applied || syncing.value) {
+      syncing.value = true
+      if (warmupPollTimer) window.clearTimeout(warmupPollTimer)
+      warmupPollTimer = window.setTimeout(() => fetchSnapshot(false, true), applied ? 1500 : 100)
     }
-    applyCollections(collRes)
   } catch (e) {
     error.value = e.message || '网络错误'
   } finally {
-    loading.value = false
+    if (!background) loading.value = false
   }
 }
 
-async function refreshCollections(refresh = false) {
-  try {
-    await loadCollections(refresh)
-  } catch (e) {
-    // 文献主体已加载时，分组短暂失败不覆盖整页内容；下次轮询继续重试。
-    console.warn('刷新 Zotero 分组失败:', e)
-  }
-}
+async function load(refresh = false) { await fetchSnapshot(refresh, false) }
 
 function handleVisibilityChange() {
   if (document.visibilityState === 'visible') {
-    // 先异步要求后端更新缓存，再读取一次新快照，避免等待下一次 5 分钟定时刷新。
-    refreshCollections(true)
-    collectionRefreshAfterWarmupTimer = window.setTimeout(() => refreshCollections(), 2000)
+    fetchSnapshot(true, true)
   }
 }
 
+function formatUpdatedAt(value) {
+  if (!value) return syncing.value ? '首次同步中' : '尚未完成'
+  return new Intl.DateTimeFormat('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(new Date(value))
+}
+
 onMounted(() => {
-  load()
-  collectionRefreshTimer = window.setInterval(refreshCollections, 60 * 1000)
+  load(false)
+  snapshotRefreshTimer = window.setInterval(() => fetchSnapshot(false, true), 60 * 1000)
   document.addEventListener('visibilitychange', handleVisibilityChange)
   nextTick(() => {
     bindSidebarFollowListeners()
@@ -689,8 +754,8 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  if (collectionRefreshTimer) window.clearInterval(collectionRefreshTimer)
-  if (collectionRefreshAfterWarmupTimer) window.clearTimeout(collectionRefreshAfterWarmupTimer)
+  if (snapshotRefreshTimer) window.clearInterval(snapshotRefreshTimer)
+  if (warmupPollTimer) window.clearTimeout(warmupPollTimer)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   attachmentAbortControllers.forEach(controller => controller.abort())
   Object.values(openedPdfUrl).forEach(url => URL.revokeObjectURL(url))
@@ -717,6 +782,11 @@ onBeforeUnmount(() => {
 
 .page-header { margin-bottom: 24px; }
 .page-header p { color: #666; margin: 0; }
+.sync-status { display:flex; align-items:center; gap:6px; margin-top:9px; color:#71695f; font-size:12px; }
+.sync-status.warning { color:#a14a36; }
+.sync-dot { width:7px; height:7px; border-radius:50%; background:#7c9a7f; box-shadow:0 0 0 3px rgba(124,154,127,.13); }
+.sync-dot.active { background:#b83126; animation:sync-pulse 1.2s ease-in-out infinite; }
+@keyframes sync-pulse { 50% { opacity:.35; transform:scale(.75); } }
 
 .layout {
   display: grid;

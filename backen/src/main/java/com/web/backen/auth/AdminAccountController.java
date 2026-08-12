@@ -2,10 +2,12 @@ package com.web.backen.auth;
 
 import com.web.backen.translate.LlmService;
 import com.web.backen.zotero.ZoteroService;
+import com.web.backen.zotero.ZoteroCache;
 import com.web.backen.github.GithubRankingService;
 import com.web.backen.ppt.PptGenerationService;
 import com.web.backen.ppt.PptCodexRunner;
 import com.web.backen.translate.TranslationService;
+import com.web.backen.imagegen.ImageGenerationService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,25 +23,30 @@ public class AdminAccountController {
     private final RuntimeConfigService runtimeConfigService;
     private final LlmService llmService;
     private final ZoteroService zoteroService;
+    private final ZoteroCache zoteroCache;
     private final GithubRankingService githubRankingService;
     private final PptGenerationService pptGenerationService;
     private final TranslationService translationService;
     private final PptCodexRunner pptCodexRunner;
+    private final ImageGenerationService imageGenerationService;
 
     public AdminAccountController(AuthService authService, QuotaService quotaService,
                                   RuntimeConfigService runtimeConfigService, LlmService llmService,
-                                  ZoteroService zoteroService, GithubRankingService githubRankingService,
+                                  ZoteroService zoteroService, ZoteroCache zoteroCache,
+                                  GithubRankingService githubRankingService,
                                   PptGenerationService pptGenerationService, TranslationService translationService,
-                                  PptCodexRunner pptCodexRunner) {
+                                  PptCodexRunner pptCodexRunner, ImageGenerationService imageGenerationService) {
         this.authService = authService;
         this.quotaService = quotaService;
         this.runtimeConfigService = runtimeConfigService;
         this.llmService = llmService;
         this.zoteroService = zoteroService;
+        this.zoteroCache = zoteroCache;
         this.githubRankingService = githubRankingService;
         this.pptGenerationService = pptGenerationService;
         this.translationService = translationService;
         this.pptCodexRunner = pptCodexRunner;
+        this.imageGenerationService = imageGenerationService;
     }
 
     @GetMapping
@@ -90,7 +97,11 @@ public class AdminAccountController {
             authService.requireCsrf(request);
             authService.requireRoot(request);
             quotaService.updateSettings(intValue(body.get("translationCreditPerPage"), 1), intValue(body.get("pptCreditPerTask"), 10),
-                    booleanValue(body.get("dailyCheckinEnabled"), true), intValue(body.get("dailyCheckinMinCredits"), intValue(body.get("dailyCheckinCredits"), 2)), intValue(body.get("dailyCheckinMaxCredits"), intValue(body.get("dailyCheckinCredits"), 2)));
+                    booleanValue(body.get("dailyCheckinEnabled"), true), intValue(body.get("dailyCheckinMinCredits"), intValue(body.get("dailyCheckinCredits"), 2)),
+                    intValue(body.get("dailyCheckinMaxCredits"), intValue(body.get("dailyCheckinCredits"), 2)),
+                    intValue(body.get("imageLowCredits"), quotaService.imageCredit("low")),
+                    intValue(body.get("imageMediumCredits"), quotaService.imageCredit("medium")),
+                    intValue(body.get("imageHighCredits"), quotaService.imageCredit("high")));
             return ResponseEntity.ok(Map.of("code", 200, "data", quotaService.settings(), "message", "success"));
         } catch (AuthException e) {
             return error(e);
@@ -103,8 +114,10 @@ public class AdminAccountController {
             authService.requireCsrf(request);
             authService.requireRoot(request);
             runtimeConfigService.update(body);
+            zoteroCache.refreshAsync();
             pptGenerationService.cleanupHistory();
             translationService.cleanupHistory();
+            imageGenerationService.cleanupHistory();
             return ResponseEntity.ok(Map.of("code", 200, "data", publicApiSettings(), "message", "success"));
         } catch (AuthException e) { return error(e); }
     }
@@ -153,7 +166,13 @@ public class AdminAccountController {
                 case "codexppt" -> pptCodexRunner.testConnection(
                         secret(config.get("apiKey"), runtimeConfigService.codexPptKey()),
                         text(config, "model", runtimeConfigService.codexPptModel()),
-                        text(config, "reasoningEffort", runtimeConfigService.codexPptReasoningEffort()));
+                        text(config, "reasoningEffort", runtimeConfigService.codexPptReasoningEffort()),
+                        runtimeConfigService.normalizeCodexPptProviderBaseUrl(
+                                text(config, "providerBaseUrl", runtimeConfigService.codexPptProviderBaseUrl())));
+                case "imagegeneration" -> runtimeConfigService.testImageGenerationConnection(
+                        text(config, "baseUrl", runtimeConfigService.imageGenerationEndpoint()),
+                        secret(config.get("apiKey"), runtimeConfigService.imageGenerationKey()),
+                        text(config, "model", runtimeConfigService.imageGenerationModel()));
                 default -> throw new AuthException(400, "不支持的 API 提供方");
             };
             Map<String, Object> data = new LinkedHashMap<>(result);

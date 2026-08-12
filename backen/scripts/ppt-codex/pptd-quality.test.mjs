@@ -26,6 +26,31 @@ test('quality preflight normalizes the selected text font', async () => {
   });
 });
 
+test('quality preflight resolves theme styles and inline color tokens before export', async () => {
+  await withProject(`elements:
+  - elementType: text
+    bounds: [60, 60, 360, 80]
+    content:
+      style: $title
+      text: '<p><span style="font-size:34px; color:$white; font-family:Microsoft YaHei;">智慧实验室</span></p>'
+`, async ({ root, manifestFile }) => {
+    await fs.writeFile(manifestFile, `version: v2
+size: [960, 540]
+theme:
+  colors: {white: "#F5FBFF"}
+  textStyles:
+    title: {fontSize: 34, lineHeight: 1.1, color: "$white"}
+pages:
+  - pages/one.page
+`);
+    await preparePptdQuality({ projectDir: root, manifestFile, pages: ['pages/one.page'], fontFamily: 'Noto Sans CJK SC' });
+    const written = await fs.readFile(path.join(root, 'pages/one.page'), 'utf8');
+    assert.match(written, /color:#F5FBFF/);
+    assert.match(written, /font-family:Noto Sans CJK\s+SC/);
+    assert.match(written, /fontSize: 34/);
+  });
+});
+
 test('quality preflight rejects overflowing title boxes and raw PDF page images', async () => {
   await withProject(`elements:\n  - elementType: text\n    bounds: [60, 60, 320, 35]\n    content: {fontSize: 30, text: \"这是一条过长、必须换行却没有足够高度的标题\"}\n  - elementType: image\n    bounds: [400, 60, 300, 220]\n    src: media/paper-page-3.png\n`, async ({ root, manifestFile }) => {
     await assert.rejects(
@@ -56,5 +81,29 @@ test('quality preflight keeps compact metrics on one line and safely grows an is
     await preparePptdQuality({ projectDir: root, manifestFile, pages: ['pages/one.page'], fontFamily: 'Microsoft YaHei' });
     const written = await fs.readFile(path.join(root, 'pages/one.page'), 'utf8');
     assert.match(written, /- 69\n/);
+  });
+});
+
+test('quality preflight permits a mixed CJK and punctuation status line that fits in its rendered width', async () => {
+  await withProject(`elements:
+  - elementType: text
+    bounds: [94, 392, 280, 22]
+    content: {fontSize: 14, wrap: false, text: "3 页概览 | 封面 · 核心流程 · 行动建议"}
+`, async ({ root, manifestFile }) => {
+    await preparePptdQuality({ projectDir: root, manifestFile, pages: ['pages/one.page'], fontFamily: 'Microsoft YaHei' });
+  });
+});
+
+test('quality preflight does not count empty rich-text paragraph gaps as visible lines', async () => {
+  await withProject(`elements:
+  - elementType: text
+    bounds: [648, 208, 102, 74]
+    content:
+      fontSize: 16
+      text: |
+        <p>协作中枢</p>
+        <p style="margin-top:6px;">排程 / 审核 / 回写</p>
+`, async ({ root, manifestFile }) => {
+    await preparePptdQuality({ projectDir: root, manifestFile, pages: ['pages/one.page'], fontFamily: 'Microsoft YaHei' });
   });
 });

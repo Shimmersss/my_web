@@ -2,6 +2,7 @@ package com.web.backen.auth;
 
 import com.web.backen.config.BabelDocConfig;
 import com.web.backen.config.LlmConfig;
+import com.web.backen.config.ImageGenerationConfig;
 import com.web.backen.config.PptGenerationConfig;
 import com.web.backen.config.TranslationConfig;
 import com.web.backen.config.ZoteroConfig;
@@ -20,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
@@ -46,17 +48,20 @@ public class RuntimeConfigService {
     private static final String CODEX_PPT_KEY = "ppt.codex.api-key";
     private static final String CODEX_PPT_MODEL = "ppt.codex.model";
     private static final String CODEX_PPT_REASONING = "ppt.codex.reasoning-effort";
+    private static final String CODEX_PPT_PROVIDER_BASE_URL = "ppt.codex.provider-base-url";
     private static final String IMAGE_GENERATION_URL = "ppt.image-generation.url";
     private static final String IMAGE_GENERATION_KEY = "ppt.image-generation.key";
     private static final String IMAGE_GENERATION_MODEL = "ppt.image-generation.model";
     private static final String IMAGE_GENERATION_QUALITY = "ppt.image-generation.quality";
     private static final String IMAGE_GENERATION_MAX_IMAGES = "ppt.image-generation.max-images";
-    private static final Set<String> CODEX_MODELS = Set.of("gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna");
+    private static final Set<String> CODEX_MODELS = Set.of("gpt-5.4", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna");
     private static final Set<String> CODEX_REASONING = Set.of("low", "medium", "high", "xhigh", "max", "ultra");
     private static final String PPT_MAX_HISTORY = "ppt.history.max-per-user";
     private static final String PPT_MAX_GLOBAL_HISTORY = "ppt.history.max-total";
     private static final String TRANSLATION_MAX_HISTORY = "translation.history.max-per-user";
     private static final String TRANSLATION_MAX_GLOBAL_HISTORY = "translation.history.max-total";
+    private static final String IMAGE_MAX_HISTORY = "image.history.max-per-user";
+    private static final String IMAGE_MAX_GLOBAL_HISTORY = "image.history.max-total";
     private static final String GITHUB_RANKING_ENABLED = "github.ranking.enabled";
     private static final String GITHUB_RANKING_INTERVAL_HOURS = "github.ranking.interval.hours";
     private static final String GITHUB_RANKING_MANUAL_COOLDOWN_MINUTES = "github.ranking.manual.cooldown.minutes";
@@ -64,7 +69,8 @@ public class RuntimeConfigService {
     private static final String GITHUB_RANKING_MONTHLY_LIMIT = "github.ranking.monthly.limit";
     private static final String GITHUB_RANKING_AI_ENABLED = "github.ranking.ai.enabled";
     private static final Map<String, String> VISIBILITY_DEFAULTS = Map.of(
-            "Publications", "PUBLIC", "Translate", "USER", "Contact", "USER", "News", "PUBLIC");
+            "Publications", "PUBLIC", "Translate", "USER", "Contact", "USER",
+            "ImageGenerate", "USER", "News", "PUBLIC");
     private static final String VISIBILITY_POLICY_VERSION = "visibility.policy.version";
 
     private final JdbcTemplate jdbc;
@@ -73,29 +79,37 @@ public class RuntimeConfigService {
     private final ZoteroConfig zotero;
     private final PptGenerationConfig pptGeneration;
     private final TranslationConfig translation;
+    private final ImageGenerationConfig imageGeneration;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public RuntimeConfigService(JdbcTemplate jdbc, LlmConfig llm, BabelDocConfig babeldoc, ZoteroConfig zotero) {
-        this(jdbc, llm, babeldoc, zotero, null, null);
+        this(jdbc, llm, babeldoc, zotero, null, null, null);
     }
 
     @Autowired
     public RuntimeConfigService(JdbcTemplate jdbc, LlmConfig llm, BabelDocConfig babeldoc,
-                                ZoteroConfig zotero, PptGenerationConfig pptGeneration, TranslationConfig translation) {
+                                ZoteroConfig zotero, PptGenerationConfig pptGeneration, TranslationConfig translation,
+                                ImageGenerationConfig imageGeneration) {
         this.jdbc = jdbc;
         this.llm = llm;
         this.babeldoc = babeldoc;
         this.zotero = zotero;
         this.pptGeneration = pptGeneration;
         this.translation = translation;
+        this.imageGeneration = imageGeneration;
     }
 
     /** 将上一轮错误的一刀切登录策略恢复为原有默认值；之后完全由 root 后台配置。 */
     @PostConstruct
     public void migrateVisibilityDefaults() {
-        if ("3".equals(value(VISIBILITY_POLICY_VERSION, ""))) return;
-        VISIBILITY_DEFAULTS.forEach((feature, level) -> save("visibility." + feature, level));
-        save(VISIBILITY_POLICY_VERSION, "3");
+        if ("4".equals(value(VISIBILITY_POLICY_VERSION, ""))) return;
+        VISIBILITY_DEFAULTS.forEach((feature, level) -> {
+            String key = "visibility." + feature;
+            if (jdbc.queryForList("SELECT setting_value FROM app_settings WHERE setting_key=?", String.class, key).isEmpty()) {
+                save(key, level);
+            }
+        });
+        save(VISIBILITY_POLICY_VERSION, "4");
     }
 
     public String llmUrl() { return value(LLM_URL, llm.getApiUrl()); }
@@ -157,6 +171,16 @@ public class RuntimeConfigService {
         String effort = value(CODEX_PPT_REASONING, "high").toLowerCase();
         return CODEX_REASONING.contains(effort) ? effort : "high";
     }
+    /** Empty keeps the normal OpenAI CLI route; a configured URL enables the isolated CCSwitch Responses provider. */
+    public String codexPptProviderBaseUrl() {
+        String value = value(CODEX_PPT_PROVIDER_BASE_URL, "");
+        return normalizeCodexPptProviderBaseUrl(value);
+    }
+
+    /** Validate a transient admin-test value using the same rules as the persisted provider setting. */
+    public String normalizeCodexPptProviderBaseUrl(String value) {
+        return value == null || value.isBlank() ? "" : url(value, "");
+    }
     /** Accept an OpenAI-compatible base URL or the complete generations endpoint. */
     public String imageGenerationEndpoint() {
         String base = value(IMAGE_GENERATION_URL,
@@ -165,8 +189,13 @@ public class RuntimeConfigService {
     }
     private String imageGenerationEndpoint(String base) {
         base = url(base, "https://api.openai.com/v1");
+        if (base.endsWith("/images/edits")) base = base.substring(0, base.length() - "/images/edits".length());
         return base.endsWith("/images/generations") ? base
                 : (base.endsWith("/v1") ? base : base + "/v1") + "/images/generations";
+    }
+    public String imageEditEndpoint() {
+        String generations = imageGenerationEndpoint();
+        return generations.substring(0, generations.length() - "/generations".length()) + "/edits";
     }
     public String imageGenerationKey() {
         return value(IMAGE_GENERATION_KEY,
@@ -186,6 +215,65 @@ public class RuntimeConfigService {
         int fallback = pptGeneration == null ? 3 : pptGeneration.getImageGenerationMaxImages();
         return safeInt(IMAGE_GENERATION_MAX_IMAGES, fallback, 1, 4);
     }
+
+    /**
+     * Verifies the Images route without creating a billable image.  Some relays
+     * intentionally expose /images/generations but not /models, so a 404 model
+     * lookup falls back to an empty JSON request to the actual Images endpoint.
+     * The fallback is only considered healthy when it returns a client validation
+     * status (400/405/422); it never sends a prompt or image-generation payload.
+     */
+    public Map<String, Object> testImageGenerationConnection(String baseUrl, String apiKey, String model) {
+        if (apiKey == null || apiKey.isBlank()) throw new AuthException(400, "Images API Key 未配置");
+        String cleanModel = model == null ? "" : model.trim();
+        if (!cleanModel.matches("[A-Za-z0-9._:-]{1,100}")) throw new AuthException(400, "Image 模型名称不合法");
+        try {
+            String generations = imageGenerationEndpoint(baseUrl);
+            int marker = generations.lastIndexOf("/images/generations");
+            if (marker < 0) throw new AuthException(400, "Images API 地址不合法");
+            URI endpoint = URI.create(generations.substring(0, marker) + "/models/" + cleanModel);
+            HttpRequest request = HttpRequest.newBuilder(endpoint)
+                    .timeout(Duration.ofSeconds(20))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .GET().build();
+            HttpClient client = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            if (response.statusCode() >= 200 && response.statusCode() < 300) {
+                return Map.of("message", "Images API 认证与路由正常（未生成图片）", "configured", true,
+                        "model", cleanModel);
+            }
+            if (response.statusCode() != 404) {
+                throw imageGenerationTestFailure(response.statusCode(), response.body());
+            }
+            HttpRequest fallback = HttpRequest.newBuilder(URI.create(generations))
+                    .timeout(Duration.ofSeconds(20))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString("{}", StandardCharsets.UTF_8)).build();
+            HttpResponse<String> fallbackResponse = client.send(fallback, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            int status = fallbackResponse.statusCode();
+            if (status == 400 || status == 405 || status == 422) {
+                return Map.of("message", "Images 生成路径可达（中转未实现 Models API；未生成图片）", "configured", true,
+                        "model", cleanModel);
+            }
+            throw imageGenerationTestFailure(status, fallbackResponse.body());
+        } catch (AuthException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new AuthException(502, "Images API 延迟测试失败：" + conciseMessage(e));
+        }
+    }
+
+    /** Keep vendor diagnostics out of the browser while making a common relay entitlement error actionable. */
+    private AuthException imageGenerationTestFailure(int status, String responseBody) {
+        String normalized = responseBody == null ? "" : responseBody.toLowerCase(Locale.ROOT);
+        if (status == 403 && normalized.contains("image generation is not enabled")) {
+            return new AuthException(422, "Images API 已到达，但该中转账户/分组未开通图像生成（HTTP 403）");
+        }
+        if (status == 401) return new AuthException(401, "Images API 认证失败（HTTP 401），请检查独立 Images Key");
+        if (status == 403) return new AuthException(403, "Images API 被上游拒绝（HTTP 403），请检查中转账户权限");
+        return new AuthException(502, "Images API 延迟测试失败：HTTP " + status);
+    }
     public String visibilityLevel(String feature) { return value("visibility." + feature, VISIBILITY_DEFAULTS.getOrDefault(feature, "PUBLIC")); }
 
     public Map<String, Object> publicSettings() {
@@ -200,6 +288,7 @@ public class RuntimeConfigService {
         data.put("githubRanking", githubRankingSettings());
         data.put("pptRetention", pptRetentionSettings());
         data.put("translationRetention", translationRetentionSettings());
+        data.put("imageRetention", imageRetentionSettings());
         data.put("research", new LinkedHashMap<>(Map.of(
                 "name", "Tavily / 演示研究",
                 "baseUrl", tavilyUrl(),
@@ -218,6 +307,7 @@ public class RuntimeConfigService {
         data.put("codexPpt", new LinkedHashMap<>(Map.of(
                 "name", "Codex PPTD", "model", codexPptModel(),
                 "reasoningEffort", codexPptReasoningEffort(), "cliVersion", "0.147.0",
+                "providerBaseUrl", codexPptProviderBaseUrl(),
                 "configured", !codexPptKey().isBlank(), "apiKeyConfigured", !codexPptKey().isBlank(),
                 "apiKeyHint", secretHint(codexPptKey()))));
         data.put("imageGeneration", new LinkedHashMap<>(Map.of(
@@ -267,6 +357,8 @@ public class RuntimeConfigService {
             if (!CODEX_REASONING.contains(effort)) throw new AuthException(400, "Codex reasoning effort 不合法");
             save(CODEX_PPT_MODEL, model);
             save(CODEX_PPT_REASONING, effort);
+            String providerBaseUrl = string(codexPptBody, "providerBaseUrl");
+            save(CODEX_PPT_PROVIDER_BASE_URL, normalizeCodexPptProviderBaseUrl(providerBaseUrl));
             saveSecret(CODEX_PPT_KEY, codexPptBody.get("apiKey"), codexPptKey());
         }
         Map<String, Object> imageGenerationBody = map(body.get("imageGeneration"));
@@ -293,23 +385,29 @@ public class RuntimeConfigService {
         Map<String, Object> pptRetentionBody = map(body.get("pptRetention"));
         if (!pptRetentionBody.isEmpty()) {
             int maxPerUser = clamp(intValue(pptRetentionBody.get("maxPerUser"), pptMaxHistory()), 1, 100);
-            int maxTotal = Math.max(maxPerUser,
-                    clamp(intValue(pptRetentionBody.get("maxTotal"), pptMaxGlobalHistory()), 1, 1000));
+            int maxTotal = clamp(intValue(pptRetentionBody.get("maxTotal"), pptMaxGlobalHistory()), 1, 1000);
             save(PPT_MAX_HISTORY, Integer.toString(maxPerUser));
             save(PPT_MAX_GLOBAL_HISTORY, Integer.toString(maxTotal));
         }
         Map<String, Object> translationRetentionBody = map(body.get("translationRetention"));
         if (!translationRetentionBody.isEmpty()) {
             int maxPerUser = clamp(intValue(translationRetentionBody.get("maxPerUser"), translationMaxHistory()), 1, 100);
-            int maxTotal = Math.max(maxPerUser,
-                    clamp(intValue(translationRetentionBody.get("maxTotal"), translationMaxGlobalHistory()), 1, 1000));
+            int maxTotal = clamp(intValue(translationRetentionBody.get("maxTotal"), translationMaxGlobalHistory()), 1, 1000);
             save(TRANSLATION_MAX_HISTORY, Integer.toString(maxPerUser));
             save(TRANSLATION_MAX_GLOBAL_HISTORY, Integer.toString(maxTotal));
+        }
+        Map<String, Object> imageRetentionBody = map(body.get("imageRetention"));
+        if (!imageRetentionBody.isEmpty()) {
+            int maxPerUser = clamp(intValue(imageRetentionBody.get("maxPerUser"), imageMaxHistory()), 1, 100);
+            int maxTotal = clamp(intValue(imageRetentionBody.get("maxTotal"), imageMaxGlobalHistory()), 1, 1000);
+            save(IMAGE_MAX_HISTORY, Integer.toString(maxPerUser));
+            save(IMAGE_MAX_GLOBAL_HISTORY, Integer.toString(maxTotal));
         }
         Map<String, Object> visibility = map(body.get("visibility"));
         VISIBILITY_DEFAULTS.forEach((feature, fallback) -> {
             String level = string(visibility, feature).toUpperCase();
-            save("visibility." + feature, List.of("PUBLIC", "USER", "ROOT").contains(level) ? level : value("visibility." + feature, fallback));
+            List<String> allowed = "ImageGenerate".equals(feature) ? List.of("USER", "ROOT") : List.of("PUBLIC", "USER", "ROOT");
+            save("visibility." + feature, allowed.contains(level) ? level : value("visibility." + feature, fallback));
         });
     }
 
@@ -413,6 +511,11 @@ public class RuntimeConfigService {
         detail = detail.replace(apiKey == null ? "" : apiKey, "***").replaceAll("[\\r\\n\\t]+", " ").trim();
         return detail.isBlank() ? "上游未返回详情" : detail.substring(0, Math.min(detail.length(), 360));
     }
+    private String conciseMessage(Exception error) {
+        String message = error == null || error.getMessage() == null ? "未知错误" : error.getMessage();
+        String clean = message.replaceAll("[\\r\\n\\t]+", " ").trim();
+        return clean.substring(0, Math.min(clean.length(), 240));
+    }
     private String text(String value, String fallback) { return value == null || value.isBlank() ? fallback : value.trim(); }
     public Map<String, Object> githubRankingSettings() {
         return new LinkedHashMap<>(Map.of(
@@ -439,7 +542,7 @@ public class RuntimeConfigService {
     }
     public int pptMaxGlobalHistory() {
         int fallback = pptGeneration == null ? 20 : pptGeneration.getMaxGlobalHistory();
-        return Math.max(pptMaxHistory(), safeInt(PPT_MAX_GLOBAL_HISTORY, fallback, 1, 1000));
+        return safeInt(PPT_MAX_GLOBAL_HISTORY, fallback, 1, 1000);
     }
     public Map<String, Object> translationRetentionSettings() {
         return new LinkedHashMap<>(Map.of(
@@ -451,7 +554,19 @@ public class RuntimeConfigService {
     }
     public int translationMaxGlobalHistory() {
         int fallback = translation == null ? 20 : translation.getMaxGlobalHistory();
-        return Math.max(translationMaxHistory(), safeInt(TRANSLATION_MAX_GLOBAL_HISTORY, fallback, 1, 1000));
+        return safeInt(TRANSLATION_MAX_GLOBAL_HISTORY, fallback, 1, 1000);
+    }
+    public Map<String, Object> imageRetentionSettings() {
+        return new LinkedHashMap<>(Map.of(
+                "maxPerUser", imageMaxHistory(),
+                "maxTotal", imageMaxGlobalHistory()));
+    }
+    public int imageMaxHistory() {
+        return safeInt(IMAGE_MAX_HISTORY, imageGeneration == null ? 5 : imageGeneration.getMaxHistory(), 1, 100);
+    }
+    public int imageMaxGlobalHistory() {
+        int fallback = imageGeneration == null ? 20 : imageGeneration.getMaxGlobalHistory();
+        return safeInt(IMAGE_MAX_GLOBAL_HISTORY, fallback, 1, 1000);
     }
     private int safeInt(String key, int fallback, int min, int max) { return clamp(intValue(value(key, Integer.toString(fallback)), fallback), min, max); }
     private int clamp(int value, int min, int max) { return Math.max(min, Math.min(max, value)); }

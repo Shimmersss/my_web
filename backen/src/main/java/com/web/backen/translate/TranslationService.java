@@ -439,13 +439,25 @@ public class TranslationService {
             session.setRefundPending(true);
             session.setRefundError(refundError.getMessage());
         }
+        String userMessage = userFacingErrorMessage(e);
         session.setStatus("error");
-        session.setErrorMessage(e.getMessage());
+        // Keep subprocess diagnostics in the server log only. Session metadata is returned
+        // by both SSE and status/history APIs, so it must never contain a stack trace or path.
+        session.setErrorMessage(userMessage);
         session.setProgressStage("error");
         saveMetadata(session);
-        emit(session, "task-error", Map.of(
-                "message", e.getMessage() != null ? e.getMessage() : "翻译过程中发生未知错误"));
+        emit(session, "task-error", Map.of("message", userMessage));
         completeEmitters(session.getTaskId());
+    }
+
+    static String userFacingErrorMessage(Exception error) {
+        String message = error.getMessage();
+        if (message != null && (message.contains("MuPDF error")
+                || message.contains("cannot save with zero pages")
+                || message.contains("cannot parse object"))) {
+            return "PDF 文件无法解析，请更换文件后重试";
+        }
+        return "翻译失败，请稍后重试";
     }
 
     private void refundIfNeeded(TranslationSession session, String reason) {
@@ -727,7 +739,7 @@ public class TranslationService {
     }
 
     private int maxTotalHistory() {
-        return runtimeConfig == null ? Math.max(maxPerUserHistory(), config.getMaxGlobalHistory()) : runtimeConfig.translationMaxGlobalHistory();
+        return runtimeConfig == null ? Math.max(1, config.getMaxGlobalHistory()) : runtimeConfig.translationMaxGlobalHistory();
     }
 
     /** Previews and terminal jobs retain independent bounded lists, matching the existing task-state lifecycle. */

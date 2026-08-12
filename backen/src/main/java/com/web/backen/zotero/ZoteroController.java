@@ -7,13 +7,15 @@ import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
 @RestController
 @RequestMapping("/api/zotero")
-@CrossOrigin(origins = "*")
 public class ZoteroController {
+    private static final Logger log = LoggerFactory.getLogger(ZoteroController.class);
 
     private final ZoteroService zoteroService;
     private final ZoteroCache zoteroCache;
@@ -42,19 +44,21 @@ public class ZoteroController {
             return result;
         }
         if (Boolean.TRUE.equals(refresh)) {
-            zoteroCache.warmAsync();
+            zoteroCache.refreshAsync();
         }
         result.put("code", 200);
         result.put("data", zoteroCache.getItems());
         result.put("updatedAt", zoteroCache.getItemsUpdatedAt());
         result.put("warmedUp", zoteroCache.isWarmedUp());
+        result.put("refreshing", zoteroCache.isRefreshing());
+        if (zoteroCache.getLastError() != null) result.put("syncWarning", zoteroCache.getLastError());
         result.put("message", "success");
         return result;
     }
 
     @GetMapping("/items/raw")
     public List<Map<String, Object>> itemsRaw(@RequestParam(defaultValue = "200") int limit) {
-        requirePublicationAccess();
+        authService.requireRoot(request());
         return zoteroService.listItems(limit);
     }
 
@@ -63,11 +67,14 @@ public class ZoteroController {
         requirePublicationAccess();
         Map<String, Object> result = new HashMap<>();
         if (Boolean.TRUE.equals(refresh) && zoteroService.isConfigured()) {
-            zoteroCache.warmAsync();
+            zoteroCache.refreshAsync();
         }
         result.put("code", 200);
         result.put("data", zoteroCache.getCollections());
         result.put("updatedAt", zoteroCache.getCollectionsUpdatedAt());
+        result.put("warmedUp", zoteroCache.isWarmedUp());
+        result.put("refreshing", zoteroCache.isRefreshing());
+        if (zoteroCache.getLastError() != null) result.put("syncWarning", zoteroCache.getLastError());
         return result;
     }
 
@@ -77,6 +84,9 @@ public class ZoteroController {
     @GetMapping("/file/{key}")
     public ResponseEntity<?> file(@PathVariable String key) {
         requirePublicationAccess();
+        if (!isValidKey(key)) {
+            return ResponseEntity.badRequest().body("附件标识无效".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
         try {
             ZoteroService.ProxiedFile upstream = zoteroService.fetchItemFile(key);
             HttpHeaders out = new HttpHeaders();
@@ -89,7 +99,8 @@ public class ZoteroController {
             }
             return new ResponseEntity<>(new InputStreamResource(upstream.body()), out, upstream.statusCode());
         } catch (Exception e) {
-            return ResponseEntity.status(502).body(("file proxy error: " + e.getMessage()).getBytes());
+            log.error("Zotero 附件代理失败: itemKey={}", key, e);
+            return ResponseEntity.status(502).body("附件暂时无法读取".getBytes(java.nio.charset.StandardCharsets.UTF_8));
         }
     }
 
@@ -103,7 +114,14 @@ public class ZoteroController {
                                          @RequestParam(defaultValue = "bibtex") String format,
                                          @RequestParam(defaultValue = "apa") String style) {
         requirePublicationAccess();
+        if (!isValidKey(key)) return ResponseEntity.badRequest().body("条目标识无效");
+        if (style == null || !style.matches("[A-Za-z0-9._-]{1,80}")) {
+            return ResponseEntity.badRequest().body("引用样式无效");
+        }
         try {
+            if (!List.of("bibtex", "ris", "bibliography").contains(format)) {
+                return ResponseEntity.badRequest().body("导出格式无效");
+            }
             String body = zoteroService.exportItem(key, format, style);
             HttpHeaders headers = new HttpHeaders();
             if ("bibtex".equals(format)) {
@@ -115,7 +133,8 @@ public class ZoteroController {
             }
             return new ResponseEntity<>(body, headers, 200);
         } catch (Exception e) {
-            return ResponseEntity.status(502).body("export error: " + e.getMessage());
+            log.error("Zotero 引用导出失败: itemKey={}, format={}", key, format, e);
+            return ResponseEntity.status(502).body("引用暂时无法导出");
         }
     }
 
@@ -128,5 +147,9 @@ public class ZoteroController {
         String level = runtimeConfig.visibilityLevel("Publications");
         if ("ROOT".equals(level)) authService.requireRoot(request());
         else if ("USER".equals(level)) authService.requireUser(request());
+    }
+
+    private boolean isValidKey(String key) {
+        return key != null && key.matches("[A-Za-z0-9]{8}");
     }
 }

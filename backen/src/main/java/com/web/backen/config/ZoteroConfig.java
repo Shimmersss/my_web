@@ -12,6 +12,9 @@ public class ZoteroConfig {
     private String apiKey;
     private String userId;
     private String baseUrl = "https://api.zotero.org";
+    private int syncPageSize = 100;
+    private int maxItems = 10000;
+    private int maxCollections = 5000;
 
     public String getApiKey() {
         return apiKey;
@@ -36,6 +39,13 @@ public class ZoteroConfig {
     public void setBaseUrl(String baseUrl) {
         this.baseUrl = baseUrl;
     }
+
+    public int getSyncPageSize() { return syncPageSize; }
+    public void setSyncPageSize(int syncPageSize) { this.syncPageSize = syncPageSize; }
+    public int getMaxItems() { return maxItems; }
+    public void setMaxItems(int maxItems) { this.maxItems = maxItems; }
+    public int getMaxCollections() { return maxCollections; }
+    public void setMaxCollections(int maxCollections) { this.maxCollections = maxCollections; }
 
     @Bean
     public RestClient zoteroRestClient() {

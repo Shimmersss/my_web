@@ -34,6 +34,9 @@ public class PptGenerationSession {
     private long completedAt;
     private long userId;
     private int creditCost;
+    /** GPT Image 2 portion included in the single PPT quota transaction. */
+    private int imageGenerationCount;
+    private int imageGenerationCreditCost;
     private Long creditTransactionId;
     private boolean creditRefunded;
     private boolean refundPending;
@@ -111,6 +114,10 @@ public class PptGenerationSession {
     public void setUserId(long userId) { this.userId = userId; touch(); }
     public int getCreditCost() { return creditCost; }
     public void setCreditCost(int creditCost) { this.creditCost = creditCost; touch(); }
+    public int getImageGenerationCount() { return imageGenerationCount; }
+    public void setImageGenerationCount(int imageGenerationCount) { this.imageGenerationCount = Math.max(0, imageGenerationCount); touch(); }
+    public int getImageGenerationCreditCost() { return imageGenerationCreditCost; }
+    public void setImageGenerationCreditCost(int imageGenerationCreditCost) { this.imageGenerationCreditCost = Math.max(0, imageGenerationCreditCost); touch(); }
     public Long getCreditTransactionId() { return creditTransactionId; }
     public void setCreditTransactionId(Long creditTransactionId) { this.creditTransactionId = creditTransactionId; touch(); }
     public boolean isCreditRefunded() { return creditRefunded; }

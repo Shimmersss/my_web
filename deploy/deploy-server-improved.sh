@@ -293,6 +293,9 @@ if [[ -f "$CURRENT_DIR/backen/package.json" ]]; then
   [[ ! -f "$CURRENT_DIR/backen/package-lock.json" ]] || cp "$CURRENT_DIR/backen/package-lock.json" "$INSTALL_DIR/backen/package-lock.json"
   info "Installing the locked Codex CLI, HTML worker, and presentation runtime..."
   (cd "$INSTALL_DIR/backen" && npm ci --omit=dev --ignore-scripts --no-audit --no-fund)
+  # Codex 0.147.0 requires this multi-call helper to be visible to agent shell
+  # commands. Keep it inside the release's node_modules rather than /usr/local.
+  (cd "$INSTALL_DIR/backen" && npm run prepare:codex-linux-sandbox && npm run verify:codex-linux-sandbox)
 fi
 rm -rf "$INSTALL_DIR/front/dist"
 cp -R "$CURRENT_DIR/front/dist" "$INSTALL_DIR/front/dist"

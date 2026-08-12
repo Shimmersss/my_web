@@ -4,10 +4,10 @@ import { apiUrl, get, post, put, requestWithOptions } from '@/utils/request'
 
 /**
  * 获取 Zotero 文献列表（已精简字段）
- * @param {number} limit - 拉取条数，默认 50
+ * @param {boolean} refresh - 是否异步触发一次完整同步
  */
-export function getZoteroItems(limit = 50) {
-  return get('/zotero/items', { limit })
+export function getZoteroItems(refresh = false) {
+  return get('/zotero/items', refresh ? { refresh: true } : {})
 }
 
 /**
@@ -87,10 +87,37 @@ export function adjustUserCredits({ userId, amount, note }) {
   return post('/admin/accounts/credits', { userId, amount, note })
 }
 
-export function updateQuotaSettings({ translationCreditPerPage, pptCreditPerTask, dailyCheckinEnabled, dailyCheckinCredits, dailyCheckinMinCredits, dailyCheckinMaxCredits }) {
+export function updateQuotaSettings({ translationCreditPerPage, pptCreditPerTask, imageLowCredits, imageMediumCredits, imageHighCredits, dailyCheckinEnabled, dailyCheckinCredits, dailyCheckinMinCredits, dailyCheckinMaxCredits }) {
   const fallback = dailyCheckinCredits ?? 2
-  return put('/admin/accounts/settings', { translationCreditPerPage, pptCreditPerTask, dailyCheckinEnabled, dailyCheckinMinCredits: dailyCheckinMinCredits ?? fallback, dailyCheckinMaxCredits: dailyCheckinMaxCredits ?? fallback })
+  return put('/admin/accounts/settings', { translationCreditPerPage, pptCreditPerTask, imageLowCredits, imageMediumCredits, imageHighCredits, dailyCheckinEnabled, dailyCheckinMinCredits: dailyCheckinMinCredits ?? fallback, dailyCheckinMaxCredits: dailyCheckinMaxCredits ?? fallback })
 }
+
+// ==================== Codex 生图 API ====================
+
+export async function createImageGenerationTask(payload) {
+  const form = new FormData()
+  form.append('prompt', payload.prompt)
+  form.append('mode', payload.mode)
+  form.append('size', payload.size)
+  form.append('quality', payload.quality)
+  if (payload.parentTaskId) form.append('parentTaskId', payload.parentTaskId)
+  if (payload.referenceFile) form.append('referenceFile', payload.referenceFile)
+  const csrf = localStorage.getItem('csrfToken')
+  const response = await fetch(apiUrl('/image-generate/tasks'), {
+    method: 'POST', credentials: /^https?:\/\//i.test(apiUrl('')) ? 'include' : 'same-origin',
+    headers: csrf ? { 'X-CSRF-Token': csrf } : {}, body: form
+  })
+  const data = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(data.message || `提交失败（HTTP ${response.status}）`)
+  return data
+}
+
+export function getRecentImageGenerations() { return requestWithOptions('/image-generate/recent', { method: 'GET', cache: 'no-store' }) }
+export function getImageGenerationStatus(taskId) { return get(`/image-generate/status/${encodeURIComponent(taskId)}`) }
+export function imageGenerationResultUrl(taskId) { return apiUrl(`/image-generate/result/${encodeURIComponent(taskId)}`) }
+export function imageGenerationPreviewUrl(taskId) { return apiUrl(`/image-generate/preview/${encodeURIComponent(taskId)}`) }
+export function imageGenerationStreamUrl(taskId) { return apiUrl(`/image-generate/stream/${encodeURIComponent(taskId)}`) }
+export function deleteImageGenerationTask(taskId) { return requestWithOptions(`/image-generate/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' }) }
 
 export function updateAdminApiSettings(settings) {
   return put('/admin/accounts/api-settings', settings)

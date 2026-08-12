@@ -185,7 +185,7 @@ public class PptGenerationService {
         return template(key, name, description, palette, design, "PPTD 设计系统", List.of("pptx"),
                 "open-kimi-ppt-skill 1.3.0", "MIT + separately authorized editor assets",
                 "https://github.com/Binaryify/open-kimi-ppt-skill",
-                "PPTX 试运行仅 root 可用；自定义 PPTX 模板会作为视觉参考传给隔离 Codex 工作区");
+                "PPTX 权限由后台“PPT 生成”节目范围控制；自定义 PPTX 模板会作为视觉参考传给隔离 Codex 工作区");
     }
 
     private Map<String, Object> htmlTemplate(String key, String name, String description,
@@ -417,13 +417,30 @@ public class PptGenerationService {
     }
 
     private void charge(PptGenerationSession session, AuthUser user, String type, String description) {
-        if (user == null || quotaService == null || user.isRoot()) return;
-        int cost = quotaService.pptCreditPerTask();
-        long transaction = quotaService.spend(user.id(), cost, type, session.getTaskId(), description);
+        int imageCount = requestedImageGenerationCount(session);
+        int imageCost = quotaService == null || runtimeConfig == null ? 0
+                : imageCount * quotaService.imageCredit(runtimeConfig.imageGenerationQuality());
+        session.setImageGenerationCount(imageCount);
+        session.setImageGenerationCreditCost(imageCost);
+        if (user == null || quotaService == null || user.isRoot()) {
+            saveMetadata(session);
+            return;
+        }
+        int pptCost = quotaService.pptCreditPerTask();
+        int cost = pptCost + imageCost;
+        String billedDescription = imageCount == 0 ? description
+                : description + "（含 GPT Image 2 " + imageCount + " 张，"
+                + runtimeConfig.imageGenerationQuality() + "）";
+        long transaction = quotaService.spend(user.id(), cost, type, session.getTaskId(), billedDescription);
         session.setCreditCost(cost);
         session.setCreditTransactionId(transaction);
         session.setCreditRefunded(false);
         saveMetadata(session);
+    }
+
+    private int requestedImageGenerationCount(PptGenerationSession session) {
+        if (runtimeConfig == null || session == null || !"pptx".equals(session.getOutputFormat())) return 0;
+        return PptImageGenerationService.requestedImageCount(session.getImageGenerationMode(), runtimeConfig.imageGenerationMaxImages());
     }
 
     private void queue(PptGenerationSession session, String claimKey, String message) {
@@ -593,7 +610,9 @@ public class PptGenerationService {
                                                      List<Map<String, Object>> changes, AuthUser user) throws IOException {
         assertDeploymentNotLocked();
         requireCompletedPptd(parent);
-        if (user == null || !user.isRoot()) throw new IllegalArgumentException("Codex PPTD 编辑器当前仅 root 可用");
+        if (user == null || (!user.isRoot() && parent.getUserId() != user.id())) {
+            throw new IllegalArgumentException("仅任务所有者可保存 PPTD 编辑版本");
+        }
         if (baseVersion != parent.getVersion()) throw new IllegalStateException("版本冲突：请重新加载最新版本");
         if (sessions.values().stream().anyMatch(session -> parent.getTaskId().equals(session.getParentTaskId())
                 && session.getVersion() > baseVersion)) {
@@ -743,8 +762,8 @@ public class PptGenerationService {
     }
 
     private int maxTotalHistory() {
-        int fallback = Math.max(maxPerUserHistory(), config.getMaxGlobalHistory());
-        return runtimeConfig == null ? fallback : Math.max(maxPerUserHistory(), runtimeConfig.pptMaxGlobalHistory());
+        int fallback = Math.max(1, config.getMaxGlobalHistory());
+        return runtimeConfig == null ? fallback : runtimeConfig.pptMaxGlobalHistory();
     }
 
     Path getOutput(String taskId) {

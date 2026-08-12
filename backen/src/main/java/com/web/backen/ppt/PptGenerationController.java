@@ -4,6 +4,7 @@ import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthService;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.QuotaService;
+import com.web.backen.auth.RuntimeConfigService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,11 +34,14 @@ public class PptGenerationController {
     private final PptGenerationService pptGenerationService;
     private final AuthService authService;
     private final QuotaService quotaService;
+    private final RuntimeConfigService runtimeConfig;
 
-    public PptGenerationController(PptGenerationService pptGenerationService, AuthService authService, QuotaService quotaService) {
+    public PptGenerationController(PptGenerationService pptGenerationService, AuthService authService, QuotaService quotaService,
+                                   RuntimeConfigService runtimeConfig) {
         this.pptGenerationService = pptGenerationService;
         this.authService = authService;
         this.quotaService = quotaService;
+        this.runtimeConfig = runtimeConfig;
     }
 
     @PostMapping("/tasks")
@@ -55,16 +59,13 @@ public class PptGenerationController {
                                         HttpServletRequest request) {
         AuthUser user;
         try {
+            requirePptFeatureAccess(request);
             authService.requireCsrf(request);
-            user = authService.requireUser(request);
+            user = requirePptTaskUser(request);
         } catch (AuthException e) {
             return authError(e);
         }
         try {
-            if ("pptx".equalsIgnoreCase(outputFormat) && !user.isRoot()) {
-                return ResponseEntity.status(403).body(Map.of("code", 403,
-                        "message", "Codex PPTX 试运行仅 root 可用；普通用户仍可生成 HTML 演示"));
-            }
             MultipartFile materialFile = sourceFile != null && !sourceFile.isEmpty() ? sourceFile : legacyPaperFile;
             PptGenerationSession session = pptGenerationService.createTask(prompt, templateKey, 100,
                     templateFile, materialFile, user, clientRequestId, outputFormat, researchMode, visualMode, fontFamily, imageGenerationMode);
@@ -85,8 +86,13 @@ public class PptGenerationController {
     }
 
     @GetMapping("/templates")
-    public ResponseEntity<?> templates() {
-        return ResponseEntity.ok(Map.of("code", 200, "data", pptGenerationService.templates()));
+    public ResponseEntity<?> templates(HttpServletRequest request) {
+        try {
+            requirePptFeatureAccess(request);
+            return ResponseEntity.ok(Map.of("code", 200, "data", pptGenerationService.templates()));
+        } catch (AuthException e) {
+            return authError(e);
+        }
     }
 
     @PostMapping("/tasks/{taskId}/revise")
@@ -97,8 +103,9 @@ public class PptGenerationController {
                                         HttpServletRequest request) {
         AuthUser user;
         try {
+            requirePptFeatureAccess(request);
             authService.requireCsrf(request);
-            user = authService.requireUser(request);
+            user = requirePptTaskUser(request);
         } catch (AuthException e) {
             return authError(e);
         }
@@ -106,9 +113,6 @@ public class PptGenerationController {
             PptGenerationSession original = pptGenerationService.getSession(taskId);
             if (!pptGenerationService.canAccess(original, user)) {
                 original = pptGenerationService.getAuthorizedSession(taskId, accessToken);
-            }
-            if ("pptx".equalsIgnoreCase(original.getOutputFormat()) && !user.isRoot()) {
-                return ResponseEntity.status(403).body(Map.of("code", 403, "message", "Codex PPTX 修改仅 root 可用"));
             }
             String prompt = body == null ? "" : String.valueOf(body.getOrDefault("prompt", ""));
             PptGenerationSession session = pptGenerationService.createRevisionTask(
@@ -134,6 +138,7 @@ public class PptGenerationController {
                                      @RequestHeader(value = "X-Ppt-Task-Token", required = false) String accessToken,
                                      HttpServletRequest request) {
         try {
+            requirePptFeatureAccess(request);
             AuthUser user = authService.currentUser(request).orElse(null);
             PptGenerationSession session = pptGenerationService.getSession(taskId);
             if (!pptGenerationService.canAccess(session, user)) {
@@ -142,6 +147,8 @@ public class PptGenerationController {
             return ResponseEntity.ok(Map.of("code", 200, "data", pptGenerationService.preview(session)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).body(Map.of("code", 404, "message", e.getMessage()));
+        } catch (AuthException e) {
+            return authError(e);
         } catch (Exception e) {
             log.error("读取 PPT 网页预览失败: taskId={}", taskId, e);
             return ResponseEntity.internalServerError().body(Map.of("code", 500, "message", "PPT 预览暂时不可用"));
@@ -154,6 +161,7 @@ public class PptGenerationController {
                                           @RequestHeader(value = "X-Ppt-Task-Token", required = false) String accessToken,
                                           HttpServletRequest request) {
         try {
+            requirePptFeatureAccess(request);
             AuthUser user = authService.currentUser(request).orElse(null);
             PptGenerationSession session = pptGenerationService.getSession(taskId);
             if (!pptGenerationService.canAccess(session, user)) {
@@ -166,6 +174,8 @@ public class PptGenerationController {
                     .contentType(type).body(new FileSystemResource(image));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).body(Map.of("code", 404, "message", "预览素材不存在"));
+        } catch (AuthException e) {
+            return authError(e);
         } catch (Exception e) {
             log.error("读取 PPT 预览素材失败: taskId={}, file={}", taskId, fileName, e);
             return ResponseEntity.internalServerError().body(Map.of("code", 500, "message", "预览素材暂时不可用"));
@@ -177,6 +187,7 @@ public class PptGenerationController {
                                          @RequestHeader(value = "X-Ppt-Task-Token", required = false) String headerToken,
                                          HttpServletRequest request) {
         try {
+            requirePptFeatureAccess(request);
             AuthUser user = authService.currentUser(request).orElse(null);
             PptGenerationSession session = pptGenerationService.getSession(taskId);
             boolean sessionAuthorized = pptGenerationService.canAccess(session, user);
@@ -198,6 +209,8 @@ public class PptGenerationController {
                     .body(new FileSystemResource(output));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).body(Map.of("code", 404, "message", "预览不存在"));
+        } catch (AuthException e) {
+            return authError(e);
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of("code", 400, "message", e.getMessage()));
         } catch (Exception e) {
@@ -210,6 +223,14 @@ public class PptGenerationController {
     public SseEmitter stream(@PathVariable String taskId,
                              HttpServletRequest request) {
         SseEmitter emitter = new SseEmitter(30L * 60L * 1000L);
+        try {
+            requirePptFeatureAccess(request);
+        } catch (AuthException e) {
+            try { emitter.send(SseEmitter.event().name("task-error").data(Map.of("message", e.getMessage()))); }
+            catch (Exception ignored) { }
+            emitter.complete();
+            return emitter;
+        }
         AuthUser user = authService.currentUser(request).orElse(null);
         PptGenerationSession session = pptGenerationService.getSession(taskId);
         if (!pptGenerationService.canAccess(session, user)) {
@@ -236,6 +257,8 @@ public class PptGenerationController {
             return ResponseEntity.ok(Map.of("code", 200, "data", pptGenerationService.pptdProject(session)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).body(Map.of("code", 404, "message", e.getMessage()));
+        } catch (AuthException e) {
+            return authError(e);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("code", 400, "message", e.getMessage()));
         }
@@ -253,6 +276,7 @@ public class PptGenerationController {
             return ResponseEntity.ok().cacheControl(org.springframework.http.CacheControl.noStore())
                     .contentType(type).body(new FileSystemResource(file));
         } catch (Exception e) {
+            if (e instanceof AuthException authException) return authError(authException);
             return ResponseEntity.status(404).body(Map.of("code", 404, "message", "PPTD 媒体不存在"));
         }
     }
@@ -263,8 +287,9 @@ public class PptGenerationController {
                                            @RequestBody Map<String, Object> body,
                                            HttpServletRequest request) {
         try {
+            requirePptFeatureAccess(request);
             authService.requireCsrf(request);
-            AuthUser user = authService.requireUser(request);
+            AuthUser user = requirePptTaskUser(request);
             PptGenerationSession parent = authorized(taskId, accessToken, request);
             int baseVersion = body.get("baseVersion") instanceof Number value ? value.intValue() : 0;
             @SuppressWarnings("unchecked")
@@ -288,6 +313,7 @@ public class PptGenerationController {
                                     @RequestHeader(value = "X-Ppt-Task-Token", required = false) String accessToken,
                                     HttpServletRequest request) {
         try {
+            requirePptFeatureAccess(request);
             AuthUser user = authService.currentUser(request).orElse(null);
             PptGenerationSession session = pptGenerationService.getSession(taskId);
             if (!pptGenerationService.canAccess(session, user)) {
@@ -296,12 +322,19 @@ public class PptGenerationController {
             return ResponseEntity.ok(Map.of("code", 200, "data", toSummary(session)));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).body(Map.of("code", 404, "message", "任务不存在"));
+        } catch (AuthException e) {
+            return authError(e);
         }
     }
 
     @GetMapping("/recent")
     public ResponseEntity<?> recent(@RequestHeader(value = "X-Ppt-Task-Tokens", required = false) String accessTokens,
                                     HttpServletRequest request) {
+        try {
+            requirePptFeatureAccess(request);
+        } catch (AuthException e) {
+            return authError(e);
+        }
         AuthUser user = authService.currentUser(request).orElse(null);
         List<Map<String, Object>> data = pptGenerationService.getRecentSessions(user, accessTokens).stream()
                 .map(this::toSummary)
@@ -315,6 +348,7 @@ public class PptGenerationController {
                                       @RequestParam(value = "artifact", required = false, defaultValue = "pptx") String artifact,
                                       HttpServletRequest request) {
         try {
+            requirePptFeatureAccess(request);
             AuthUser user = authService.currentUser(request).orElse(null);
             PptGenerationSession session = pptGenerationService.getSession(taskId);
             Path output;
@@ -340,6 +374,8 @@ public class PptGenerationController {
                     .body(new FileSystemResource(output));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.status(404).body(Map.of("code", 404, "message", e.getMessage()));
+        } catch (AuthException e) {
+            return authError(e);
         } catch (IllegalStateException e) {
             return ResponseEntity.badRequest().body(Map.of("code", 400, "message", e.getMessage()));
         } catch (Exception e) {
@@ -349,6 +385,7 @@ public class PptGenerationController {
     }
 
     private PptGenerationSession authorized(String taskId, String accessToken, HttpServletRequest request) {
+        requirePptFeatureAccess(request);
         AuthUser user = authService.currentUser(request).orElse(null);
         PptGenerationSession session = pptGenerationService.getSession(taskId);
         return pptGenerationService.canAccess(session, user)
@@ -376,6 +413,8 @@ public class PptGenerationController {
         data.put("errorMessage", session.getErrorMessage() == null ? "" : session.getErrorMessage());
         data.put("queuePosition", session.getQueuePosition());
         data.put("creditCost", session.getCreditCost());
+        data.put("imageGenerationCount", session.getImageGenerationCount());
+        data.put("imageGenerationCreditCost", session.getImageGenerationCreditCost());
         data.put("refundPending", session.isRefundPending());
         data.put("refundError", session.getRefundError() == null ? "" : session.getRefundError());
         data.put("revisionOfTaskId", session.getRevisionOfTaskId() == null ? "" : session.getRevisionOfTaskId());
@@ -396,5 +435,20 @@ public class PptGenerationController {
 
     private ResponseEntity<?> authError(AuthException e) {
         return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus(), "message", e.getMessage()));
+    }
+
+    /**
+     * PPT maps to the Contact programme in runtime visibility settings.  The
+     * programme policy governs every PPT endpoint; task mutation additionally
+     * requires an account because a task must retain an owner and quota ledger.
+     */
+    private void requirePptFeatureAccess(HttpServletRequest request) {
+        String level = runtimeConfig.visibilityLevel("Contact");
+        if ("ROOT".equalsIgnoreCase(level)) authService.requireRoot(request);
+        else if ("USER".equalsIgnoreCase(level)) authService.requireUser(request);
+    }
+
+    private AuthUser requirePptTaskUser(HttpServletRequest request) {
+        return authService.requireUser(request);
     }
 }

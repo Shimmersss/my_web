@@ -139,7 +139,8 @@ import {
   BookOutline,
   DocumentTextOutline,
   LogoGithub,
-  SchoolOutline
+  SchoolOutline,
+  ImagesOutline
 } from '@vicons/ionicons5'
 import { getDailyCheckinLeaderboard, getGithubProjects } from '@/api'
 import { defaultGithubProjects, githubProjectFallback } from '@/config/githubProjects'
@@ -154,6 +155,7 @@ const tools = [
   { title: '文献库', description: '管理与阅读学术文献', path: '/publications', icon: BookOutline },
   { title: '论文翻译', description: '保留版式输出双语 PDF', path: '/translate', icon: DocumentTextOutline },
   { title: 'PPT 生成', description: '从论文生成答辩材料', path: '/contact', icon: SchoolOutline },
+  { title: 'Codex 生图', description: '生成图片或用参考图继续创作', path: '/image-generate', icon: ImagesOutline },
   { title: '开源项目', description: '浏览 GitHub 仓库与 README', path: '/news', icon: LogoGithub }
 ]
 

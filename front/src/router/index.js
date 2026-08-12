@@ -21,6 +21,12 @@ const routes = [
     meta: { title: 'PPT 生成', visibility: 'Contact' }
   },
   {
+    path: '/image-generate',
+    name: 'ImageGenerate',
+    component: () => import('@/views/ImageGenerate/index.vue'),
+    meta: { title: 'Codex 生图', visibility: 'ImageGenerate' }
+  },
+  {
     path: '/publications',
     name: 'Publications',
     component: () => import('@/views/Publications/index.vue'),

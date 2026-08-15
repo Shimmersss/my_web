@@ -4,6 +4,14 @@ dist/
 target/
 *.class
 .release/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/*.jks
+android/*.keystore
+android/keystore.properties
+android/internal-signing.env
 server-upload/
 outputs/
 deploy/*

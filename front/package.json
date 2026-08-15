@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "prepare:pptd-editor": "node scripts/prepare-pptd-editor.mjs",
-    "build": "npm run prepare:pptd-editor && node ../backen/scripts/check_html_template_previews.mjs && vite build",
+    "build": "npm run prepare:pptd-editor && node ../backen/scripts/check_html_template_previews.mjs && vite build && npm run check:pwa",
+    "check:pwa": "node scripts/check-pwa.mjs dist",
     "preview": "vite preview"
   },
   "dependencies": {

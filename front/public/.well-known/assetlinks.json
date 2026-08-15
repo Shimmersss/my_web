@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "help.shimmer.app",
+      "sha256_cert_fingerprints": [
+        "EA:D8:A2:08:BE:A1:26:3A:C0:AC:5F:77:52:B6:D6:DE:EB:BE:10:6C:AD:75:64:4F:AE:B8:CC:2F:5D:14:6C:D3"
+      ]
+    }
+  }
+]

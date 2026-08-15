@@ -1,0 +1,165 @@
+/*
+ * Copyright 2019 Google Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+plugins {
+    id 'com.android.application'
+}
+
+def internalKeystorePath = System.getenv('SHIMMER_ANDROID_KEYSTORE')
+def internalKeystorePassword = System.getenv('SHIMMER_ANDROID_STORE_PASSWORD')
+
+def twaManifest = [
+    applicationId: 'help.shimmer.app',
+    hostName: 'shimmer.help', // The domain being opened in the TWA.
+    launchUrl: '/', // The start path for the TWA. Must be relative to the domain.
+    name: '闪闪小站', // The application name.
+    launcherName: '闪闪小站', // The name shown on the Android Launcher.
+    themeColor: '#B83126', // The color used for the status bar.
+    themeColorDark: '#000000', // The color used for the dark status bar.
+    navigationColor: '#000000', // The color used for the navigation bar.
+    navigationColorDark: '#000000', // The color used for the dark navbar.
+    navigationDividerColor: '#000000', // The navbar divider color.
+    navigationDividerColorDark: '#000000', // The dark navbar divider color.
+    backgroundColor: '#FBF9F3', // The color used for the splash screen background.
+    // The duration of fade out animation in milliseconds to be played when removing splash screen.
+    splashScreenFadeOutDuration: 300,
+    generatorApp: 'bubblewrap-cli', // Application that generated the Android Project
+    // The fallback strategy for when Trusted Web Activity is not available. Possible values are
+    // 'customtabs' and 'webview'.
+    fallbackType: 'customtabs',
+    orientation: 'any',
+]
+
+android {
+    compileSdkVersion 35
+    namespace "help.shimmer.app"
+    signingConfigs {
+        internal {
+            if (internalKeystorePath && internalKeystorePassword) {
+                storeFile file(internalKeystorePath)
+                storePassword internalKeystorePassword
+                keyAlias 'shimmer-internal'
+                keyPassword internalKeystorePassword
+            }
+        }
+    }
+    defaultConfig {
+        applicationId "help.shimmer.app"
+        minSdkVersion 21
+        targetSdkVersion 35
+        versionCode 1
+        versionName "0.1.0-internal"
+
+        // The name for the application
+        resValue "string", "appName", twaManifest.name
+
+        // The name for the application on the Android Launcher
+        resValue "string", "launcherName", twaManifest.launcherName
+
+        // The URL that will be used when launching the TWA from the Android Launcher
+        def launchUrl = "https://" + twaManifest.hostName + twaManifest.launchUrl
+        resValue "string", "launchUrl", launchUrl
+
+
+
+
+            // The URL the Web Manifest for the Progressive Web App that the TWA points to. This
+            // is used by Chrome OS and Meta Quest to open the Web version of the PWA instead of
+            // the TWA, as it will probably give a better user experience for non-mobile devices.
+            resValue "string", "webManifestUrl", 'https://shimmer.help/manifest.webmanifest'
+
+
+        // The hostname is used when building the intent-filter, so the TWA is able to
+        // handle Intents to open host url of the application.
+        resValue "string", "hostName", twaManifest.hostName
+
+        // This attribute sets the status bar color for the TWA. It can be either set here or in
+        // `res/values/colors.xml`. Setting in both places is an error and the app will not
+        // compile. If not set, the status bar color defaults to #FFFFFF - white.
+        resValue "color", "colorPrimary", twaManifest.themeColor
+
+        // This attribute sets the dark status bar color for the TWA. It can be either set here or in
+        // `res/values/colors.xml`. Setting in both places is an error and the app will not
+        // compile. If not set, the status bar color defaults to #000000 - white.
+        resValue "color", "colorPrimaryDark", twaManifest.themeColorDark
+
+        // This attribute sets the navigation bar color for the TWA. It can be either set here or
+        // in `res/values/colors.xml`. Setting in both places is an error and the app will not
+        // compile. If not set, the navigation bar color defaults to #FFFFFF - white.
+        resValue "color", "navigationColor", twaManifest.navigationColor
+
+        // This attribute sets the dark navigation bar color for the TWA. It can be either set here
+        // or in `res/values/colors.xml`. Setting in both places is an error and the app will not
+        // compile. If not set, the navigation bar color defaults to #000000 - black.
+        resValue "color", "navigationColorDark", twaManifest.navigationColorDark
+
+        // This attribute sets the navbar divider color for the TWA. It can be either
+        // set here or in `res/values/colors.xml`. Setting in both places is an error and the app
+        // will not compile. If not set, the divider color defaults to #00000000 - transparent.
+        resValue "color", "navigationDividerColor", twaManifest.navigationDividerColor
+
+        // This attribute sets the dark navbar divider color for the TWA. It can be either
+        // set here or in `res/values/colors.xml`. Setting in both places is an error and the
+        //app will not compile. If not set, the divider color defaults to #000000 - black.
+        resValue "color", "navigationDividerColorDark", twaManifest.navigationDividerColorDark
+
+        // Sets the color for the background used for the splash screen when launching the
+        // Trusted Web Activity.
+        resValue "color", "backgroundColor", twaManifest.backgroundColor
+
+        // Defines a provider authority for the Splash Screen
+        resValue "string", "providerAuthority", twaManifest.applicationId + '.fileprovider'
+
+        // The splashScreenFadeOutDuration resource is used to set the duration of fade out animation in milliseconds
+        // to be played when removing splash screen. The default is 0 (no animation).
+        resValue "integer", "splashScreenFadeOutDuration", twaManifest.splashScreenFadeOutDuration.toString()
+
+        resValue "string", "generatorApp", twaManifest.generatorApp
+
+        resValue "string", "fallbackType", twaManifest.fallbackType
+
+        resValue "string", "orientation", twaManifest.orientation
+
+
+    }
+    buildTypes {
+        release {
+            minifyEnabled true
+            if (!internalKeystorePath || !internalKeystorePassword) {
+                throw new GradleException('Internal release signing credentials are not configured')
+            }
+            signingConfig signingConfigs.internal
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+    lintOptions {
+        checkReleaseBuilds false
+    }
+}
+
+repositories {
+
+}
+
+dependencies {
+    implementation fileTree(include: ['*.jar'], dir: 'libs')
+
+        implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+
+}

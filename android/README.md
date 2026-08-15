@@ -3,7 +3,7 @@
 This directory contains the internal Trusted Web Activity wrapper for `https://shimmer.help/`.
 
 - Application ID: `help.shimmer.app`
-- Version: `0.1.0-internal` (`versionCode` 1)
+- Version: `0.1.1-internal` (`versionCode` 2)
 - Minimum SDK: 21
 - Compile/target SDK: 35
 - Signing alias: `shimmer-internal`
@@ -20,4 +20,8 @@ Build the signed internal APK with:
 ./android/build-internal.sh
 ```
 
-The APK is written to `.release/android/shimmer-internal-0.1.0.apk`.
+The APK is written to `.release/android/shimmer-internal-0.1.1.apk`.
+
+On first launch, the app lists the installed browsers that support Trusted Web
+Activities or Custom Tabs. The selected browser is reused until the app data is
+cleared or that browser is uninstalled.

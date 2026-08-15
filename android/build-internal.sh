@@ -27,7 +27,7 @@ cd "$ANDROID_DIR"
 
 SOURCE_APK="$ANDROID_DIR/app/build/outputs/apk/release/app-release.apk"
 OUTPUT_DIR="$PROJECT_ROOT/.release/android"
-OUTPUT_APK="$OUTPUT_DIR/shimmer-internal-0.1.0.apk"
+OUTPUT_APK="$OUTPUT_DIR/shimmer-internal-0.1.1.apk"
 mkdir -p "$OUTPUT_DIR"
 cp "$SOURCE_APK" "$OUTPUT_APK"
 

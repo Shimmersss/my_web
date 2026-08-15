@@ -211,7 +211,7 @@
           </div>
 
           <div class="result-actions">
-            <n-radio-group v-model:value="pdfPreviewMode" size="small" @update:value="loadPdfPreview">
+            <n-radio-group class="result-mode" v-model:value="pdfPreviewMode" size="small" @update:value="loadPdfPreview">
               <n-radio-button value="translated">{{ isImageInput ? '中文译图' : '纯中文' }}</n-radio-button>
               <n-radio-button value="bilingual">{{ isImageInput ? '双语译图' : '双语对照' }}</n-radio-button>
             </n-radio-group>
@@ -244,12 +244,7 @@
           <div v-if="isLoadingPdfPreview" class="pdf-preview-loading">
             正在生成 PDF 预览...
           </div>
-          <iframe
-            v-else-if="pdfPreviewUrl"
-            class="pdf-preview-frame"
-            :src="pdfPreviewUrl"
-            title="翻译 PDF 预览"
-          ></iframe>
+          <PdfCanvasPreview v-else-if="pdfPreviewBlob" :file="pdfPreviewBlob" />
           <n-alert v-else type="warning" title="PDF 预览暂不可用">
             {{ pdfPreviewError || '请刷新预览或稍后重试。' }}
           </n-alert>
@@ -346,6 +341,7 @@ import {
   downloadTranslatedImage
 } from '@/api'
 import { useAuthStore } from '@/stores/auth'
+import PdfCanvasPreview from '@/components/PdfCanvasPreview.vue'
 
 const message = useMessage()
 const auth = useAuthStore()
@@ -389,6 +385,7 @@ const isStarting = ref(false)
 const isLoadingPdfPreview = ref(false)
 const isGeneratingPdf = ref(false)
 const pdfPreviewUrl = ref('')
+const pdfPreviewBlob = ref(null)
 const pdfPreviewError = ref('')
 let eventSource = null
 let recentRefreshTimer = null
@@ -691,7 +688,13 @@ async function loadPdfPreview() {
     if (pdfPreviewUrl.value) {
       URL.revokeObjectURL(pdfPreviewUrl.value)
     }
-    pdfPreviewUrl.value = URL.createObjectURL(blob)
+    pdfPreviewUrl.value = ''
+    if (isImageInput.value) {
+      pdfPreviewBlob.value = null
+      pdfPreviewUrl.value = URL.createObjectURL(blob)
+    } else {
+      pdfPreviewBlob.value = blob
+    }
   } catch (e) {
     pdfPreviewError.value = e.message || (isImageInput.value ? '生成图片预览失败' : '生成 PDF 预览失败')
   } finally {
@@ -707,6 +710,7 @@ function resetToUpload() {
     URL.revokeObjectURL(pdfPreviewUrl.value)
   }
   pdfPreviewUrl.value = ''
+  pdfPreviewBlob.value = null
   pdfPreviewError.value = ''
   step.value = 'upload'
   errorMsg.value = ''
@@ -793,6 +797,7 @@ async function restoreTask(savedTaskId, notify = false) {
     URL.revokeObjectURL(pdfPreviewUrl.value)
     pdfPreviewUrl.value = ''
   }
+  if (taskId.value !== savedTaskId) pdfPreviewBlob.value = null
   taskId.value = savedTaskId
   fileName.value = data.fileName
   inputKind.value = data.inputKind || 'pdf'
@@ -867,6 +872,7 @@ onBeforeUnmount(() => {
   if (pdfPreviewUrl.value) {
     URL.revokeObjectURL(pdfPreviewUrl.value)
   }
+  pdfPreviewBlob.value = null
 })
 </script>
 
@@ -1319,6 +1325,10 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
+.result-mode {
+  flex: 0 0 auto;
+}
+
 .pdf-preview-panel {
   margin-bottom: 24px;
   border: 1px solid #e5e7eb;
@@ -1373,15 +1383,6 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   color: #888;
-  background: #f8fafc;
-}
-
-.pdf-preview-frame {
-  display: block;
-  width: 100%;
-  height: 72vh;
-  min-height: 520px;
-  border: 0;
   background: #f8fafc;
 }
 
@@ -1503,14 +1504,28 @@ onBeforeUnmount(() => {
   }
 
   .result-actions,
-  .result-actions :deep(.n-radio-group),
   .result-actions :deep(.n-button) {
     width: 100%;
   }
 
+  .result-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+
   .result-actions :deep(.n-radio-group) {
+    width: 100%;
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .result-actions :deep(.n-radio-button) {
+    min-width: 0;
+  }
+
+  .result-actions :deep(.n-radio-button__state-border) {
+    width: 100%;
   }
 
   .pdf-preview-header {
@@ -1518,7 +1533,6 @@ onBeforeUnmount(() => {
     flex-direction: column;
   }
 
-  .pdf-preview-frame,
   .pdf-preview-loading {
     height: 62vh;
     min-height: 360px;

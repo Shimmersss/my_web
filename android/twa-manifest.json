@@ -20,8 +20,8 @@
     "path": "~/.config/shimmer-android/internal-release.jks",
     "alias": "shimmer-internal"
   },
-  "appVersionName": "0.1.0-internal",
-  "appVersionCode": 1,
+  "appVersionName": "0.1.1-internal",
+  "appVersionCode": 2,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://shimmer.help/manifest.webmanifest",
@@ -43,5 +43,5 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "0.1.0-internal"
+  "appVersion": "0.1.1-internal"
 }

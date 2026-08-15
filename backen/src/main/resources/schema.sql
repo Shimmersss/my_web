@@ -68,3 +68,37 @@ CREATE TABLE IF NOT EXISTS app_settings (
     setting_value VARCHAR(255) NOT NULL,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS guestbook_entries (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    parent_id BIGINT NULL,
+    author_id BIGINT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (parent_id) REFERENCES guestbook_entries(id) ON DELETE CASCADE,
+    FOREIGN KEY (author_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS guestbook_likes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    entry_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uk_guestbook_like_entry_user UNIQUE (entry_id, user_id),
+    FOREIGN KEY (entry_id) REFERENCES guestbook_entries(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS guestbook_notifications (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    recipient_id BIGINT NOT NULL,
+    actor_id BIGINT NOT NULL,
+    entry_id BIGINT NOT NULL,
+    notification_type VARCHAR(16) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    read_at TIMESTAMP NULL,
+    CONSTRAINT uk_guestbook_notification_once UNIQUE (recipient_id, actor_id, entry_id, notification_type),
+    FOREIGN KEY (recipient_id) REFERENCES users(id),
+    FOREIGN KEY (actor_id) REFERENCES users(id),
+    FOREIGN KEY (entry_id) REFERENCES guestbook_entries(id) ON DELETE CASCADE
+);

@@ -3,7 +3,7 @@
     <div class="header-content">
       <button class="logo" type="button" aria-label="返回首页" @click="navigateTo('/')">
         <span class="logo-mark" aria-hidden="true"></span>
-        <span class="logo-text">闪闪的个人小站</span>
+        <span class="logo-text">闪闪小站</span>
       </button>
 
       <div class="header-right">
@@ -28,6 +28,8 @@
               <SunIcon v-else />
             </n-icon>
           </n-button>
+
+          <NotificationPanel v-if="auth.isLoggedIn" class="desktop-auth-action" />
 
           <n-button v-if="!auth.isLoggedIn" size="small" secondary class="desktop-auth-action" @click="openLogin">
             登录
@@ -67,6 +69,7 @@
         />
         <div class="mobile-account-actions">
           <template v-if="auth.isLoggedIn">
+            <NotificationPanel class="mobile-notification" />
             <button type="button" class="mobile-account" @click="auth.isRoot ? navigateTo('/admin') : null">
               <span>{{ auth.user?.username }}</span>
               <strong>{{ auth.credits }} credits</strong>
@@ -112,6 +115,7 @@ import {
 } from '@vicons/ionicons5'
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
+import NotificationPanel from './NotificationPanel.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -163,7 +167,7 @@ const allMenuOptions = computed(() => [
     onClick: () => navigateTo('/contact')
   },
   {
-    label: 'Codex 生图',
+    label: 'GPT 生图',
     key: 'ImageGenerate',
     onClick: () => navigateTo('/image-generate')
   },
@@ -171,6 +175,11 @@ const allMenuOptions = computed(() => [
     label: 'GitHub 项目',
     key: 'News',
     onClick: () => navigateTo('/news')
+  },
+  {
+    label: '留言板',
+    key: 'Guestbook',
+    onClick: () => navigateTo('/guestbook')
   },
   ...(auth.isRoot ? [{
     label: '后台',
@@ -440,6 +449,10 @@ async function handleDailyCheckin() {
 
 .mobile-account-actions {
   display: none;
+}
+
+.mobile-notification {
+  justify-self: start;
 }
 
 @media (max-width: 1200px) {

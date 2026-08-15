@@ -59,6 +59,8 @@ public class RuntimeConfigService {
     private static final String TRANSLATION_MAX_GLOBAL_HISTORY = "translation.history.max-total";
     private static final String IMAGE_MAX_HISTORY = "image.history.max-per-user";
     private static final String IMAGE_MAX_GLOBAL_HISTORY = "image.history.max-total";
+    private static final String PRESENTATION_IMAGE_MAX_HISTORY = "presentation-image.history.max-per-user";
+    private static final String PRESENTATION_IMAGE_MAX_GLOBAL_HISTORY = "presentation-image.history.max-total";
     private static final String GITHUB_RANKING_ENABLED = "github.ranking.enabled";
     private static final String GITHUB_RANKING_INTERVAL_HOURS = "github.ranking.interval.hours";
     private static final String GITHUB_RANKING_MANUAL_COOLDOWN_MINUTES = "github.ranking.manual.cooldown.minutes";
@@ -67,7 +69,7 @@ public class RuntimeConfigService {
     private static final String GITHUB_RANKING_AI_ENABLED = "github.ranking.ai.enabled";
     private static final Map<String, String> VISIBILITY_DEFAULTS = Map.of(
             "Publications", "PUBLIC", "Translate", "USER", "Contact", "USER",
-            "ImageGenerate", "USER", "News", "PUBLIC");
+            "ImageGenerate", "USER", "News", "PUBLIC", "Guestbook", "PUBLIC");
     private static final String VISIBILITY_POLICY_VERSION = "visibility.policy.version";
 
     private final JdbcTemplate jdbc;
@@ -99,14 +101,14 @@ public class RuntimeConfigService {
     /** 将上一轮错误的一刀切登录策略恢复为原有默认值；之后完全由 root 后台配置。 */
     @PostConstruct
     public void migrateVisibilityDefaults() {
-        if ("4".equals(value(VISIBILITY_POLICY_VERSION, ""))) return;
+        if ("5".equals(value(VISIBILITY_POLICY_VERSION, ""))) return;
         VISIBILITY_DEFAULTS.forEach((feature, level) -> {
             String key = "visibility." + feature;
             if (jdbc.queryForList("SELECT setting_value FROM app_settings WHERE setting_key=?", String.class, key).isEmpty()) {
                 save(key, level);
             }
         });
-        save(VISIBILITY_POLICY_VERSION, "4");
+        save(VISIBILITY_POLICY_VERSION, "5");
     }
 
     public String llmUrl() { return value(LLM_URL, llm.getApiUrl()); }
@@ -274,6 +276,7 @@ public class RuntimeConfigService {
         data.put("pptRetention", pptRetentionSettings());
         data.put("translationRetention", translationRetentionSettings());
         data.put("imageRetention", imageRetentionSettings());
+        data.put("presentationImageRetention", presentationImageRetentionSettings());
         data.put("research", new LinkedHashMap<>(Map.of(
                 "name", "Tavily / 演示研究",
                 "baseUrl", tavilyUrl(),
@@ -374,6 +377,11 @@ public class RuntimeConfigService {
             int maxTotal = clamp(intValue(imageRetentionBody.get("maxTotal"), imageMaxGlobalHistory()), 1, 1000);
             save(IMAGE_MAX_HISTORY, Integer.toString(maxPerUser));
             save(IMAGE_MAX_GLOBAL_HISTORY, Integer.toString(maxTotal));
+        }
+        Map<String, Object> presentationImageRetentionBody = map(body.get("presentationImageRetention"));
+        if (!presentationImageRetentionBody.isEmpty()) {
+            save(PRESENTATION_IMAGE_MAX_HISTORY, Integer.toString(clamp(intValue(presentationImageRetentionBody.get("maxPerUser"), presentationImageMaxHistory()), 1, 100)));
+            save(PRESENTATION_IMAGE_MAX_GLOBAL_HISTORY, Integer.toString(clamp(intValue(presentationImageRetentionBody.get("maxTotal"), presentationImageMaxGlobalHistory()), 1, 1000)));
         }
         Map<String, Object> visibility = map(body.get("visibility"));
         VISIBILITY_DEFAULTS.forEach((feature, fallback) -> {
@@ -506,6 +514,11 @@ public class RuntimeConfigService {
         int fallback = imageGeneration == null ? 20 : imageGeneration.getMaxGlobalHistory();
         return safeInt(IMAGE_MAX_GLOBAL_HISTORY, fallback, 1, 1000);
     }
+    public Map<String, Object> presentationImageRetentionSettings() {
+        return new LinkedHashMap<>(Map.of("maxPerUser", presentationImageMaxHistory(), "maxTotal", presentationImageMaxGlobalHistory()));
+    }
+    public int presentationImageMaxHistory() { return safeInt(PRESENTATION_IMAGE_MAX_HISTORY, 20, 1, 100); }
+    public int presentationImageMaxGlobalHistory() { return safeInt(PRESENTATION_IMAGE_MAX_GLOBAL_HISTORY, 100, 1, 1000); }
     private int safeInt(String key, int fallback, int min, int max) { return clamp(intValue(value(key, Integer.toString(fallback)), fallback), min, max); }
     private int clamp(int value, int min, int max) { return Math.max(min, Math.min(max, value)); }
     private int intValue(Object value, int fallback) { try { return Integer.parseInt(value == null ? "" : value.toString().trim()); } catch (Exception e) { return fallback; } }

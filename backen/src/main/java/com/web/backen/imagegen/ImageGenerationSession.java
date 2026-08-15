@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class ImageGenerationSession {
@@ -15,6 +17,9 @@ public class ImageGenerationSession {
     private String parentTaskId;
     private String referenceFileName;
     private String referenceContentType;
+    /** New tasks may keep several references. The scalar fields above remain for old task.json files. */
+    private List<String> referenceFileNames = new ArrayList<>();
+    private List<String> referenceContentTypes = new ArrayList<>();
     private String status = "queued";
     private String progressStage = "queued";
     private String errorMessage;
@@ -51,6 +56,20 @@ public class ImageGenerationSession {
     public void setReferenceFileName(String referenceFileName) { this.referenceFileName = referenceFileName; touch(); }
     public String getReferenceContentType() { return referenceContentType; }
     public void setReferenceContentType(String referenceContentType) { this.referenceContentType = referenceContentType; touch(); }
+    public List<String> getReferenceFileNames() {
+        if ((referenceFileNames == null || referenceFileNames.isEmpty()) && referenceFileName != null && !referenceFileName.isBlank()) {
+            return List.of(referenceFileName);
+        }
+        return referenceFileNames == null ? List.of() : List.copyOf(referenceFileNames);
+    }
+    public void setReferenceFileNames(List<String> value) { this.referenceFileNames = value == null ? new ArrayList<>() : new ArrayList<>(value); touch(); }
+    public List<String> getReferenceContentTypes() {
+        if ((referenceContentTypes == null || referenceContentTypes.isEmpty()) && referenceContentType != null && !referenceContentType.isBlank()) {
+            return List.of(referenceContentType);
+        }
+        return referenceContentTypes == null ? List.of() : List.copyOf(referenceContentTypes);
+    }
+    public void setReferenceContentTypes(List<String> value) { this.referenceContentTypes = value == null ? new ArrayList<>() : new ArrayList<>(value); touch(); }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; touch(); }
     public String getProgressStage() { return progressStage; }
@@ -81,6 +100,15 @@ public class ImageGenerationSession {
     public void setTaskDir(Path taskDir) { this.taskDir = taskDir; }
     @JsonIgnore public Path getMetadataPath() { return taskDir.resolve("task.json"); }
     @JsonIgnore public Path getReferencePath() { return taskDir.resolve("reference" + ("image/jpeg".equals(referenceContentType) ? ".jpg" : ".png")); }
+    @JsonIgnore public List<Path> getReferencePaths() {
+        List<String> types = getReferenceContentTypes();
+        if (types.size() <= 1 && (referenceFileNames == null || referenceFileNames.isEmpty())) return List.of(getReferencePath());
+        List<Path> paths = new ArrayList<>();
+        for (int index = 0; index < types.size(); index++) {
+            paths.add(taskDir.resolve(String.format("reference-%02d%s", index + 1, "image/jpeg".equals(types.get(index)) ? ".jpg" : ".png")));
+        }
+        return paths;
+    }
     @JsonIgnore public Path getResultPath() { return taskDir.resolve("output.png"); }
     @JsonIgnore public Path getPreviewPath() { return taskDir.resolve("preview.jpg"); }
     private void touch() { updatedAt = System.currentTimeMillis(); }

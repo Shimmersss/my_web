@@ -281,7 +281,7 @@
                     </div>
                     <p class="field-hint">系统“减少动态效果”设置始终优先；下载文件也支持按 L 切换低功耗静态模式。</p>
                   </div>
-                  <div v-if="outputFormat === 'pptx'" class="preference-group preference-group--wide">
+                  <div class="preference-group preference-group--wide">
                     <div class="field-label">AI 生图（GPT Image 2）</div>
                     <div class="output-format-picker" role="radiogroup" aria-label="AI 生图">
                       <button type="button" role="radio" :class="['output-format-card', { active: imageGenerationMode === 'off' }]" :aria-checked="imageGenerationMode === 'off'" @click="imageGenerationMode = 'off'">
@@ -296,10 +296,10 @@
                     </div>
                     <div v-if="imageGenerationMode !== 'off'" class="image-count-control">
                       <span><strong>生图数量</strong><small>{{ imageGenerationMode === 'supplement' ? '补充模式最多 2 张' : `最多 ${imageGenerationMaxImages} 张` }}</small></span>
-                      <n-input-number v-model:value="requestedImageGenerationCount" :min="1" :max="imageGenerationCountMax" :show-button="false" aria-label="Codex 生图数量" />
+                      <n-input-number v-model:value="requestedImageGenerationCount" :min="1" :max="imageGenerationCountMax" :show-button="false" aria-label="GPT 生图数量" />
                       <span class="image-count-control__unit">张</span>
                     </div>
-                    <p class="field-hint">与“Codex 生图”共用同一余额和 low / medium / high 单价；当前会预扣 {{ pptImageCredits }} credits（{{ pptImageCount }} 张 {{ imageGenerationQuality }}），任务失败会连同 PPT 基础额度一并退回。</p>
+                    <p class="field-hint">先完成演示大纲，再为绑定页面生成图片。与“GPT 生图”共用同一余额和 low / medium / high 单价；当前会预扣 {{ pptImageCredits }} credits（{{ pptImageCount }} 张 {{ imageGenerationQuality }}），任务失败会连同演示基础额度一并退回。</p>
                   </div>
                 </div>
               </div>
@@ -364,6 +364,7 @@
             </div>
             <div class="actions">
               <n-button @click="backToForm">返回表单</n-button>
+              <n-button type="error" secondary @click="cancelCurrentPpt">取消本次任务</n-button>
             </div>
           </section>
 
@@ -469,7 +470,7 @@
           <div class="recent-header">
             <div>
               <h2>最近任务</h2>
-              <p>保留最近 5 条生成记录</p>
+              <p>{{ recentRetentionLabel }}</p>
             </div>
             <n-button size="small" :loading="isLoadingRecent" @click="loadRecent">刷新</n-button>
           </div>
@@ -478,6 +479,7 @@
             <button v-for="item in recentTasks" :key="item.taskId" type="button" class="recent-item" @click="openRecent(item)">
               <strong>{{ recentTitle(item) }}</strong>
               <span>{{ formatTime(item.createdAt) }}</span>
+              <small v-if="auth.isRoot">用户 #{{ item.userId }}</small>
               <n-tag size="small" :type="tagType(item.status)">{{ statusLabel(item) }}</n-tag>
             </button>
           </div>
@@ -512,6 +514,7 @@ import {
   getPptGenerationStatus,
   getPptTemplates,
   getRecentPptGenerations,
+  cancelPptGenerationTask,
   revisePptGenerationTask
 } from '@/api'
 import { apiUrl, BASE_URL } from '@/utils/request'
@@ -537,6 +540,8 @@ const isSubmitting = ref(false)
 const isLoadingRecent = ref(false)
 const recentTasks = ref([])
 const recentError = ref('')
+const recentScope = ref('own')
+const recentRetention = ref({ maxPerUser: 5, maxTotal: 20 })
 const errorMsg = ref('')
 const activeTask = ref(null)
 const previewData = ref(null)
@@ -576,10 +581,12 @@ const imageGenerationCountMax = computed(() => imageGenerationMode.value === 'su
   ? Math.min(2, imageGenerationMaxImages.value)
   : imageGenerationMaxImages.value)
 const pptImageCount = computed(() => {
-  if (outputFormat.value !== 'pptx') return 0
   if (!['supplement', 'prefer'].includes(imageGenerationMode.value)) return 0
   return Math.min(imageGenerationCountMax.value, Math.max(1, Number(requestedImageGenerationCount.value || imageGenerationCountMax.value)))
 })
+const recentRetentionLabel = computed(() => recentScope.value === 'all'
+  ? `全站保留最多 ${recentRetention.value.maxTotal || 20} 条终态任务；活动任务始终显示`
+  : `每账号保留最多 ${recentRetention.value.maxPerUser || 5} 条终态任务；活动任务始终显示`)
 const pptImageCredits = computed(() => pptImageCount.value * (imageCredits.value[imageGenerationQuality.value] || imageCredits.value.medium))
 const pptEstimatedCredits = computed(() => pptCreditPerTask.value + pptImageCredits.value)
 const fontOptions = [
@@ -602,7 +609,7 @@ const preferenceSummary = computed(() => {
   ]
   parts.push(requestedPageCount.value ? `${requestedPageCount.value} 页` : '智能页数')
   if (outputFormat.value === 'html') parts.push(motionModeLabels[motionMode.value] || motionModeLabels.auto)
-  else parts.push(imageGenerationMode.value === 'prefer' ? '优先 AI 生图' : imageGenerationMode.value === 'supplement' ? '补充 AI 生图' : '不开启 AI 生图')
+  parts.push(imageGenerationMode.value === 'prefer' ? '优先 GPT 生图' : imageGenerationMode.value === 'supplement' ? '补充 GPT 生图' : '不开启 GPT 生图')
   return parts.join(' · ')
 })
 // Vite dev server only serves the vendored editor reliably through its explicit static file.
@@ -635,8 +642,6 @@ const stageItems = [
 const runningTitle = computed(() => activeTask.value?.sourceFileName || activeTask.value?.paperFileName || activeTask.value?.templateFileName || 'PPT 生成任务')
 
 onMounted(async () => {
-  sessionStorage.removeItem('ppt-generation-task-tokens')
-  sessionStorage.removeItem('ppt-generation-active-task')
   await auth.refresh().catch(() => {})
   await Promise.all([loadTemplates(), loadRecent(), loadQuotaSettings()])
   authWatchReady = true
@@ -646,7 +651,6 @@ onMounted(async () => {
 
 watch(outputFormat, () => {
   if (outputFormat.value === 'html') templateFile.value = null
-  if (outputFormat.value === 'html') imageGenerationMode.value = 'off'
   const first = formatTemplates.value[0]
   if (first && !formatTemplates.value.some(item => item.key === templateKey.value)) templateKey.value = first.key
   templatePreviewIndex.value = 0
@@ -1057,6 +1061,8 @@ async function loadRecent() {
   try {
     const res = await getRecentPptGenerations(Object.values(readTaskTokens()))
     recentTasks.value = Array.isArray(res.data) ? res.data : []
+    recentScope.value = res.scope || 'own'
+    recentRetention.value = res.retention || { maxPerUser: 5, maxTotal: 20 }
   } catch (error) {
     recentError.value = error.message || '最近任务加载失败'
   } finally {
@@ -1163,6 +1169,17 @@ function backToForm() {
   queuePosition.value = 0
   revisionPrompt.value = ''
   clearPreview()
+}
+
+async function cancelCurrentPpt() {
+  if (!taskId.value || !window.confirm('取消本次演示生成？后台任务会停止，未完成任务的额度将退回。')) return
+  try {
+    const res = await cancelPptGenerationTask(taskId.value)
+    if (res.code !== 200) throw new Error(res.message || '取消失败')
+    if (typeof res.data?.credits !== 'undefined') auth.updateCredits(res.data.credits)
+    message.success('演示生成任务已取消')
+    backToForm(); loadRecentTasks()
+  } catch (error) { message.error(error.message || '取消失败') }
 }
 
 async function restoreActiveTask() {

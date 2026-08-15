@@ -37,6 +37,8 @@ public class BabelDocService {
     private static final Logger log = LoggerFactory.getLogger(BabelDocService.class);
     private static final int MAX_OUTPUT_CHARS = 64 * 1024;
     private static final long MONITOR_INTERVAL_MILLIS = 2000;
+    private static final String CHUNK_CACHE_VERSION = "version=3";
+    private static final Pattern CHUNK_RANGE = Pattern.compile("^(\\d+)-(\\d+)$");
     private static final Pattern REFERENCE_HEADING = Pattern.compile(
             "^[\\t ]*(?:references|bibliography|works[\\t ]+cited|"
                     + "literature[\\t ]+cited)[\\t ]*$",
@@ -57,6 +59,22 @@ public class BabelDocService {
 
     public TranslationResult translatePdf(Path inputPdf, Path resultDir, String fileName, int startPage, int endPage,
                                           String fontFamily, int qps, Consumer<ProgressUpdate> progressConsumer) {
+        return translatePdf(inputPdf, resultDir, fileName, startPage, endPage, fontFamily, qps,
+                config.getMaxPagesPerChunk(), progressConsumer);
+    }
+
+    /** Stable mode may lower the page batch size without mutating global runtime configuration. */
+    public TranslationResult translatePdf(Path inputPdf, Path resultDir, String fileName, int startPage, int endPage,
+                                          String fontFamily, int qps, int maxPagesPerChunk,
+                                          Consumer<ProgressUpdate> progressConsumer) {
+        return translatePdf(inputPdf, resultDir, fileName, startPage, endPage, fontFamily, qps, qps,
+                maxPagesPerChunk, progressConsumer);
+    }
+
+    /** The first missing chunk may use recovery QPS; later chunks resume the requested speed. */
+    public TranslationResult translatePdf(Path inputPdf, Path resultDir, String fileName, int startPage, int endPage,
+                                          String fontFamily, int firstPendingQps, int followingQps,
+                                          int maxPagesPerChunk, Consumer<ProgressUpdate> progressConsumer) {
         if (!config.isEnabled()) {
             throw new IllegalStateException("BabelDOC 未启用，请设置 BABELDOC_ENABLED=true");
         }
@@ -67,23 +85,27 @@ public class BabelDocService {
         if (totalPages <= 0) {
             throw new IllegalArgumentException("BabelDOC 页面范围无效");
         }
-        int chunkSize = Math.max(1, config.getMaxPagesPerChunk());
+        int chunkSize = Math.max(1, Math.min(config.getMaxPagesPerChunk(), maxPagesPerChunk));
         if (totalPages <= chunkSize) {
             return translateRange(inputPdf, resultDir, fileName, startPage, endPage,
-                    fontFamily, qps,
+                    fontFamily, firstPendingQps,
                     isReferenceSectionActiveBefore(inputPdf, startPage),
                     progressConsumer);
         }
 
-        Path chunkRoot = resultDir.resolve(".babeldoc-chunks")
-                .resolve(startPage + "-" + endPage);
+        Path chunkCacheBase = resultDir.resolve(".babeldoc-chunks");
+        // Chunks are page-addressed and are safe to reuse when the source and rendering
+        // parameters match.  Do not key them by the requested range: a user narrowing a
+        // failed 224-page job to 1-100 must not throw away completed pages 1-90.
+        Path chunkRoot = chunkCacheBase.resolve("shared");
         List<Path> translatedParts = new ArrayList<>();
         List<Path> bilingualParts = new ArrayList<>();
         int totalChunks = (totalPages + chunkSize - 1) / chunkSize;
         int completedPages = 0;
+        boolean processedPendingChunk = false;
         try {
-            prepareChunkRoot(chunkRoot, inputPdf, startPage, endPage, chunkSize,
-                    fontFamily);
+            prepareChunkRoot(chunkRoot, inputPdf, fontFamily);
+            importCompatibleLegacyChunks(chunkCacheBase, chunkRoot, inputPdf, fontFamily);
             log.info("BabelDOC 长文档启用分片: file={}, pages={}-{}, chunkSize={}, chunks={}",
                     fileName, startPage, endPage, chunkSize, totalChunks);
             for (int chunkIndex = 0, chunkStart = startPage;
@@ -97,6 +119,10 @@ public class BabelDocService {
                 Path bilingualPart = chunkDir.resolve("bilingual.pdf");
 
                 if (!isCompleteChunk(translatedPart, bilingualPart, chunkPages)) {
+                    materializeCoveringCachedChunk(chunkRoot, chunkStart, chunkEnd,
+                            translatedPart, bilingualPart);
+                }
+                if (!isCompleteChunk(translatedPart, bilingualPart, chunkPages)) {
                     if (chunkIndex > 0) {
                         emitProgress(progressConsumer, completedPages * 100.0 / totalPages,
                                 "chunk-wait", chunkIndex, totalChunks);
@@ -108,16 +134,21 @@ public class BabelDocService {
                             aggregateProgress(completedBeforeChunk, chunkPages, totalPages,
                                     update.progress()),
                             update.stage(), update.current(), update.total());
+                    int chunkQps = processedPendingChunk ? followingQps : firstPendingQps;
                     log.info("启动 BabelDOC 分片: file={}, chunk={}/{}, pages={}-{}, qps={}",
-                            fileName, chunkIndex + 1, totalChunks, chunkStart, chunkEnd, qps);
-                    translateRange(inputPdf, chunkDir, fileName, chunkStart, chunkEnd,
-                            fontFamily, qps,
-                            isReferenceSectionActiveBefore(inputPdf, chunkStart),
-                            chunkProgress);
+                            fileName, chunkIndex + 1, totalChunks, chunkStart, chunkEnd, chunkQps);
+                    try {
+                        translateRange(inputPdf, chunkDir, fileName, chunkStart, chunkEnd,
+                                fontFamily, chunkQps,
+                                isReferenceSectionActiveBefore(inputPdf, chunkStart), chunkProgress);
+                    } catch (ResourcePressureException pressure) {
+                        throw new ResourcePressureException(pressure.getMessage(), chunkQps);
+                    }
                     if (!isCompleteChunk(translatedPart, bilingualPart, chunkPages)) {
                         throw new IllegalStateException("BabelDOC 分片结果不完整: "
                                 + chunkStart + "-" + chunkEnd);
                     }
+                    processedPendingChunk = true;
                 } else {
                     log.info("复用已完成 BabelDOC 分片: file={}, pages={}-{}",
                             fileName, chunkStart, chunkEnd);
@@ -269,14 +300,11 @@ public class BabelDocService {
         }
     }
 
-    private void prepareChunkRoot(Path chunkRoot, Path inputPdf, int startPage,
-                                  int endPage, int chunkSize, String fontFamily)
+    private void prepareChunkRoot(Path chunkRoot, Path inputPdf, String fontFamily)
             throws IOException {
         String fingerprint = String.join("\n",
-                "version=1",
+                CHUNK_CACHE_VERSION,
                 "input=" + inputFingerprint(inputPdf),
-                "pages=" + startPage + "-" + endPage,
-                "chunkSize=" + chunkSize,
                 "fontFamily=" + String.valueOf(fontFamily),
                 "model=" + String.valueOf(runtimeConfig.babelModel()));
         Path manifest = chunkRoot.resolve("manifest.txt");
@@ -284,13 +312,110 @@ public class BabelDocService {
             String existing = Files.isRegularFile(manifest)
                     ? Files.readString(manifest, StandardCharsets.UTF_8)
                     : "";
-            if (!fingerprint.equals(existing)) {
+            if (!isCompatibleChunkManifest(existing, inputPdf, fontFamily)) {
                 log.info("BabelDOC 分片参数已变化，清理旧缓存: {}", chunkRoot);
                 deleteRecursively(chunkRoot);
             }
         }
         Files.createDirectories(chunkRoot);
         Files.writeString(manifest, fingerprint, StandardCharsets.UTF_8);
+    }
+
+    /**
+     * One-time compatibility bridge for jobs created before the shared cache existed.
+     * Older builds placed valid chunks under e.g. {@code 1-224/}; importing only verified
+     * page pairs lets an interrupted production job resume after the upgrade.
+     */
+    private void importCompatibleLegacyChunks(Path cacheBase, Path sharedRoot, Path inputPdf,
+                                               String fontFamily) throws IOException {
+        if (!Files.isDirectory(cacheBase)) return;
+        try (Stream<Path> candidates = Files.list(cacheBase)) {
+            for (Path candidate : candidates.toList()) {
+                if (candidate.equals(sharedRoot) || !Files.isDirectory(candidate)
+                        || !CHUNK_RANGE.matcher(candidate.getFileName().toString()).matches()) {
+                    continue;
+                }
+                Path manifest = candidate.resolve("manifest.txt");
+                if (!Files.isRegularFile(manifest) || !isCompatibleLegacyManifest(
+                        Files.readString(manifest, StandardCharsets.UTF_8), inputPdf, fontFamily)) {
+                    continue;
+                }
+                importCompleteChunks(candidate, sharedRoot);
+            }
+        }
+    }
+
+    private boolean isCompatibleLegacyManifest(String manifest, Path inputPdf, String fontFamily) {
+        return isCompatibleChunkManifest(manifest, inputPdf, fontFamily);
+    }
+
+    private boolean isCompatibleChunkManifest(String manifest, Path inputPdf, String fontFamily) {
+        String normalized = manifest.replaceFirst("(?m)^version=.*\\R?", "")
+                .replaceFirst("(?m)^pages=.*\\R?", "")
+                .replaceFirst("(?m)^chunkSize=.*\\R?", "");
+        return String.join("\n",
+                "input=" + inputFingerprint(inputPdf),
+                "fontFamily=" + String.valueOf(fontFamily),
+                "model=" + String.valueOf(runtimeConfig.babelModel())).equals(normalized);
+    }
+
+    private void importCompleteChunks(Path legacyRoot, Path sharedRoot) throws IOException {
+        try (Stream<Path> children = Files.list(legacyRoot)) {
+            for (Path sourceDir : children.toList()) {
+                var matcher = CHUNK_RANGE.matcher(sourceDir.getFileName().toString());
+                if (!Files.isDirectory(sourceDir) || !matcher.matches()) continue;
+                int expectedPages = Integer.parseInt(matcher.group(2))
+                        - Integer.parseInt(matcher.group(1)) + 1;
+                Path translated = sourceDir.resolve("translated.pdf");
+                Path bilingual = sourceDir.resolve("bilingual.pdf");
+                if (!isCompleteChunk(translated, bilingual, expectedPages)) continue;
+                Path destination = sharedRoot.resolve(sourceDir.getFileName().toString());
+                Files.createDirectories(destination);
+                Files.copy(translated, destination.resolve("translated.pdf"),
+                        StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(bilingual, destination.resolve("bilingual.pdf"),
+                        StandardCopyOption.REPLACE_EXISTING);
+                log.info("导入可复用 BabelDOC 旧分片: pages={}", sourceDir.getFileName());
+            }
+        }
+    }
+
+    /** Re-slice a verified older 5-page cache into stable one-page cache entries without retranslation. */
+    private void materializeCoveringCachedChunk(Path chunkRoot, int startPage, int endPage,
+                                                Path translatedTarget, Path bilingualTarget) throws IOException {
+        try (Stream<Path> children = Files.list(chunkRoot)) {
+            for (Path sourceDir : children.toList()) {
+                var matcher = CHUNK_RANGE.matcher(sourceDir.getFileName().toString());
+                if (!Files.isDirectory(sourceDir) || !matcher.matches()
+                        || sourceDir.equals(translatedTarget.getParent())) continue;
+                int sourceStart = Integer.parseInt(matcher.group(1));
+                int sourceEnd = Integer.parseInt(matcher.group(2));
+                if (sourceStart > startPage || sourceEnd < endPage) continue;
+                int sourcePages = sourceEnd - sourceStart + 1;
+                Path translated = sourceDir.resolve("translated.pdf");
+                Path bilingual = sourceDir.resolve("bilingual.pdf");
+                if (!isCompleteChunk(translated, bilingual, sourcePages)) continue;
+                copyPdfRange(translated, translatedTarget, startPage - sourceStart, endPage - startPage + 1);
+                copyPdfRange(bilingual, bilingualTarget, startPage - sourceStart, endPage - startPage + 1);
+                log.info("复用并切分 BabelDOC 旧分片: pages={}-{} from={}",
+                        startPage, endPage, sourceDir.getFileName());
+                return;
+            }
+        }
+    }
+
+    private void copyPdfRange(Path source, Path target, int offset, int pageCount) throws IOException {
+        Path temporary = target.resolveSibling(target.getFileName() + ".part");
+        Files.deleteIfExists(temporary);
+        try (PDDocument input = Loader.loadPDF(source.toFile()); PDDocument output = new PDDocument()) {
+            for (int index = offset; index < offset + pageCount; index++) output.importPage(input.getPage(index));
+            output.save(temporary.toFile());
+        }
+        try {
+            Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(temporary, target, StandardCopyOption.REPLACE_EXISTING);
+        }
     }
 
     private String inputFingerprint(Path inputPdf) {
@@ -407,10 +532,18 @@ public class BabelDocService {
 
     public static class ResourcePressureException extends IllegalStateException {
         private static final long serialVersionUID = 1L;
+        private final int qps;
 
         public ResourcePressureException(String message) {
-            super(message);
+            this(message, 0);
         }
+
+        public ResourcePressureException(String message, int qps) {
+            super(message);
+            this.qps = qps;
+        }
+
+        public int getQps() { return qps; }
     }
 
     private String tail(String text, int maxLength) {
@@ -499,6 +632,16 @@ public class BabelDocService {
         throw new ResourcePressureException("上一分片结束后等待内存恢复超时: " + lastRisk);
     }
 
+    /** Wait for two healthy samples before restarting after a resource-protection stop. */
+    public void awaitResourceRecovery() {
+        try {
+            waitForResourceRecovery();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("等待服务器资源恢复时被中断", e);
+        }
+    }
+
     private Optional<String> detectRecoveryRisk() {
         Optional<String> hardRisk = detectResourceRisk();
         if (hardRisk.isPresent()) {
@@ -511,6 +654,12 @@ public class BabelDocService {
                 && memoryInfo.memAvailableBytes < mibToBytes(recoveryAvailableMiB)) {
             return Optional.of("系统可用内存 " + formatMiB(memoryInfo.memAvailableBytes)
                     + " MiB 尚未恢复到 " + recoveryAvailableMiB + " MiB");
+        }
+        long swapUsed = memoryInfo.swapTotalBytes - memoryInfo.swapFreeBytes;
+        long safeSwapMiB = Math.max(0L, config.getResourceMaxSwapUsedMiB() - 300L);
+        if (memoryInfo.swapTotalBytes > 0 && swapUsed > mibToBytes(safeSwapMiB)) {
+            return Optional.of("Swap 已用 " + formatMiB(swapUsed) + " MiB 尚未降至 "
+                    + safeSwapMiB + " MiB 以下");
         }
         return Optional.empty();
     }

@@ -4,7 +4,7 @@
       <div class="container hero-layout">
         <article class="hero-copy">
           <p class="section-kicker">01 / 首页</p>
-          <h1>闪闪的个人小站</h1>
+          <h1>闪闪小站</h1>
           <p class="lead">网站试运营中</p>
 
           <div class="hero-actions" aria-label="首页快捷操作">
@@ -37,8 +37,8 @@
           />
           <div class="visual-status">
             <span class="status-dot" aria-hidden="true"></span>
-            <span>同步中</span>
-            <strong>68%</strong>
+            <span>每日更新</span>
+            <strong>{{ dailyStatus.date || '等待同步' }}</strong>
           </div>
           <div class="visual-caption">
             <span>LIVE WORKSPACE</span>
@@ -67,6 +67,12 @@
               <span class="row-arrow" aria-hidden="true">→</span>
             </a>
           </nav>
+
+          <section class="checkin-panel" aria-labelledby="checkin-title">
+            <div class="checkin-heading"><div><p class="section-kicker">TODAY / DAILY CHECK-IN</p><h3 id="checkin-title">今日签到榜</h3></div><span>前 10 名</span></div>
+            <ol v-if="checkinLeaders.length" class="checkin-list"><li v-for="(item, index) in checkinLeaders" :key="`${item.username}-${index}`"><b>{{ String(index + 1).padStart(2, '0') }}</b><strong>{{ item.username }}</strong><span>+{{ item.amount }} 积分</span></li></ol>
+            <p v-else class="checkin-empty">今天还没有签到记录，来抢第一名吧。</p>
+          </section>
         </article>
 
         <aside class="paper-panel progress-panel">
@@ -78,27 +84,34 @@
             <span class="panel-pulse" aria-hidden="true"></span>
           </div>
 
-          <div v-for="item in progress" :key="item.label" class="progress-row">
+          <div v-for="item in dailyProgress" :key="item.label" class="progress-row">
             <div class="progress-head">
               <span>{{ item.label }}</span>
-              <strong>{{ item.value }}</strong>
+              <strong>{{ item.status }}</strong>
             </div>
-            <div class="progress-track"><span :style="{ width: item.percent + '%' }"></span></div>
             <small>{{ item.note }}</small>
           </div>
-          <div class="paper-note">本周目标：完成论文整理，并把核心结果汇总为可分享材料。</div>
+          <div class="paper-note">按上海时区日更：只展示真实同步与任务更新时间。</div>
         </aside>
 
         <article class="paper-panel github-panel">
           <div class="panel-heading">
             <div>
               <p class="section-kicker">04 / GitHub</p>
-              <h2>我的开源项目</h2>
+              <h2>GitHub 排行榜</h2>
             </div>
             <a href="/news" @click.prevent="navigateTo('/news')">查看全部 <span aria-hidden="true">→</span></a>
           </div>
 
-          <div v-if="featuredProject" class="featured-repo">
+          <div class="ranking-toggle"><button :class="{active: rankingPeriod === 'weekly'}" @click="rankingPeriod = 'weekly'">周榜</button><button :class="{active: rankingPeriod === 'monthly'}" @click="rankingPeriod = 'monthly'">月榜</button></div>
+          <div v-if="rankedProjects.length" class="featured-repo ranking-list">
+            <a v-for="project in rankedProjects" :key="project.full_name" class="ranking-row" :href="project.html_url" target="_blank" rel="noopener">
+              <b>#{{ project.rank }}</b><div><strong>{{ project.full_name }}</strong><p>{{ project.aiSummary || project.description || '暂无项目摘要' }}</p><small>{{ project.language || 'Unknown' }} · ★ {{ formatNumber(project.stargazers_count) }}</small></div>
+            </a>
+          </div>
+          <div v-else class="featured-repo repo-loading">排行榜正在整理或等待首次同步…</div>
+          <!-- kept only as a resilient fallback for old cached API payloads -->
+          <div v-if="false && featuredProject" class="featured-repo">
             <div class="repo-title">
               <n-icon size="22"><LogoGithub /></n-icon>
               <div>
@@ -119,15 +132,6 @@
       </div>
     </section>
 
-    <section class="checkin-section" aria-labelledby="checkin-title">
-      <div class="container">
-        <article class="paper-panel checkin-panel">
-          <div class="panel-heading"><div><p class="section-kicker">05 / DAILY CHECK-IN</p><h2 id="checkin-title">今日签到榜</h2></div><span>前 10 名</span></div>
-          <ol v-if="checkinLeaders.length" class="checkin-list"><li v-for="(item, index) in checkinLeaders" :key="`${item.username}-${index}`"><b>{{ String(index + 1).padStart(2, '0') }}</b><strong>{{ item.username }}</strong><span>+{{ item.amount }} 积分</span></li></ol>
-          <p v-else class="checkin-empty">今天还没有签到记录，来抢第一名吧。</p>
-        </article>
-      </div>
-    </section>
   </div>
 </template>
 
@@ -142,12 +146,13 @@ import {
   SchoolOutline,
   ImagesOutline
 } from '@vicons/ionicons5'
-import { getDailyCheckinLeaderboard, getGithubProjects } from '@/api'
-import { defaultGithubProjects, githubProjectFallback } from '@/config/githubProjects'
+import { getDailyCheckinLeaderboard, getGithubRankings, getHomeDailyStatus } from '@/api'
 import workspaceImage from '@/assets/images/home-workspace-aurora.png'
 
 const router = useRouter()
-const projects = ref([])
+const rankingData = ref({})
+const rankingPeriod = ref('weekly')
+const dailyStatus = ref({})
 const checkinLeaders = ref([])
 const heroPointer = ref({ x: 0, y: 0 })
 
@@ -155,36 +160,26 @@ const tools = [
   { title: '文献库', description: '管理与阅读学术文献', path: '/publications', icon: BookOutline },
   { title: '论文翻译', description: '保留版式输出双语 PDF', path: '/translate', icon: DocumentTextOutline },
   { title: 'PPT 生成', description: '从论文生成答辩材料', path: '/contact', icon: SchoolOutline },
-  { title: 'Codex 生图', description: '生成图片或用参考图继续创作', path: '/image-generate', icon: ImagesOutline },
+  { title: 'GPT 生图', description: '生成图片或用参考图继续创作', path: '/image-generate', icon: ImagesOutline },
   { title: '开源项目', description: '浏览 GitHub 仓库与 README', path: '/news', icon: LogoGithub }
 ]
 
-const progress = [
-  { label: '文献阅读与整理', value: '18 / 24', percent: 75, note: '已整理 18 篇，待处理 6 篇' },
-  { label: '论文翻译', value: '7 / 10', percent: 70, note: '已完成 7 篇，排队中 3 篇' },
-  { label: 'PPT 资料准备', value: '2 / 4', percent: 50, note: '已完成 2 份，进行中 1 份' }
-]
-
-const featuredProject = computed(() => projects.value[0] || null)
+const dailyProgress = computed(() => [
+  statusItem('文献库同步', dailyStatus.value.zoteroReady, dailyStatus.value.zoteroUpdatedAt),
+  statusItem('GitHub 排行榜', dailyStatus.value.githubReady, dailyStatus.value.githubUpdatedAt),
+  statusItem('研究任务', dailyStatus.value.siteTaskReady, dailyStatus.value.siteTaskUpdatedAt)
+])
+const rankedProjects = computed(() => (rankingData.value?.[rankingPeriod.value]?.projects || []).slice(0, 3))
+const featuredProject = computed(() => null)
 
 onMounted(async () => {
   getDailyCheckinLeaderboard().then(response => { checkinLeaders.value = response?.data || [] }).catch(() => {})
-  try {
-    const response = await getGithubProjects()
-    const items = response?.data || response || []
-    projects.value = items
-      .filter(item => item.featured !== false)
-      .map(item => ({
-        ...item,
-        full_name: item.full_name || item.repo || '未命名仓库'
-      }))
-  } catch {
-    projects.value = defaultGithubProjects.map(item => {
-      const fullName = item.repo.replace(/^https?:\/\/github\.com\//, '')
-      return { ...githubProjectFallback, ...item, full_name: fullName, language: githubProjectFallback.language }
-    })
-  }
+  getHomeDailyStatus().then(response => { dailyStatus.value = response?.data || {} }).catch(() => {})
+  getGithubRankings().then(response => { rankingData.value = response?.data || {} }).catch(() => {})
 })
+
+function statusItem(label, ready, updatedAt) { return { label, status: ready ? '已更新' : '等待首次同步', note: ready && updatedAt ? `最近更新：${formatTime(updatedAt)}` : '暂无可展示的真实更新时间' } }
+function formatTime(value) { const date = new Date(value); return Number.isNaN(date.getTime()) ? String(value || '') : date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) }
 
 function handleHeroMove(event) {
   const rect = event.currentTarget.getBoundingClientRect()
@@ -218,10 +213,13 @@ function formatNumber(value) {
   color: #25251f;
 }
 
-.checkin-section { padding: 0 0 72px; background:#eee9df; }
-.checkin-panel { max-width:760px; margin:auto; padding:24px; }
-.checkin-panel .panel-heading>span { color:#756f64; font-size:13px; }
-.checkin-list { list-style:none; margin:16px 0 0; padding:0; display:grid; gap:2px; }
+.ranking-toggle{display:flex;gap:6px;margin:0 0 12px}.ranking-toggle button{border:1px solid #d7ccba;background:#f8f4ec;padding:6px 11px;cursor:pointer}.ranking-toggle button.active{background:#b83126;color:#fff;border-color:#b83126}.ranking-list{display:grid;gap:0}.ranking-row{display:grid;grid-template-columns:36px 1fr;gap:10px;padding:12px 0;border-bottom:1px solid #e5ddd1;color:inherit;text-decoration:none}.ranking-row:last-child{border-bottom:0}.ranking-row b{color:#b83126}.ranking-row p{margin:5px 0;font-size:12px;line-height:1.45;color:#665f55}.ranking-row small{color:#8a6654}
+.checkin-panel { margin-top: 22px; border-top: 1px solid #d8d1c5; padding-top: 20px; }
+.checkin-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+.checkin-heading .section-kicker { margin-bottom: 8px; }
+.checkin-heading h3 { margin:0; color:#25251f; font-family:Georgia, 'Noto Serif SC', serif; font-size:20px; font-weight:500; }
+.checkin-heading > span { color:#756f64; font-size:13px; }
+.checkin-list { list-style:none; margin:14px 0 0; padding:0; display:grid; gap:2px; }
 .checkin-list li { display:grid; grid-template-columns:42px 1fr auto; gap:12px; align-items:center; padding:12px 8px; border-bottom:1px solid #e7e0d5; }
 .checkin-list b { color:#b83126; font-size:12px; }.checkin-list span { color:#58745f; font-weight:700; }.checkin-empty { color:#756f64; margin:18px 0 4px; }
 

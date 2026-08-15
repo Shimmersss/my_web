@@ -65,4 +65,19 @@ class RuntimeConfigImageTest {
 
         assertEquals(10, runtime.imageGenerationMaxImages());
     }
+
+    @Test
+    void migratesGuestbookVisibilityWithoutOverwritingExistingProgramSettings() {
+        JdbcTemplate jdbc = new JdbcTemplate(new EmbeddedDatabaseBuilder().generateUniqueName(true)
+                .setType(EmbeddedDatabaseType.H2).addScript("schema.sql").build());
+        jdbc.update("INSERT INTO app_settings(setting_key, setting_value) VALUES ('visibility.News', 'ROOT')");
+        jdbc.update("INSERT INTO app_settings(setting_key, setting_value) VALUES ('visibility.policy.version', '4')");
+        RuntimeConfigService runtime = new RuntimeConfigService(jdbc, new LlmConfig(), new BabelDocConfig(),
+                new ZoteroConfig(), new PptGenerationConfig(), new TranslationConfig(), new ImageGenerationConfig());
+
+        runtime.migrateVisibilityDefaults();
+
+        assertEquals("PUBLIC", runtime.visibilityLevel("Guestbook"));
+        assertEquals("ROOT", runtime.visibilityLevel("News"));
+    }
 }

@@ -39,9 +39,11 @@ class PptImageGenerationServiceTest {
 
         service.generate(session, output, (stage, payload) -> {});
 
-        assertTrue(Files.isRegularFile(output.resolve("ai-1.png")));
-        assertTrue(Files.isRegularFile(output.resolve("ai-2.png")));
+        assertTrue(Files.isRegularFile(output.resolve("gpt-1.png")));
+        assertTrue(Files.isRegularFile(output.resolve("gpt-2.png")));
         assertTrue(Files.isRegularFile(output.resolve("manifest.json")));
+        assertTrue(Files.isRegularFile(temp.resolve("presentation-plan.json")));
+        assertTrue(Files.readString(output.resolve("generated-image-manifest.json")).contains("slideId"));
         assertFalse(Files.readString(output.resolve("manifest.json")).contains("test-secret"));
     }
 
@@ -76,6 +78,6 @@ class PptImageGenerationServiceTest {
         service.generate(session, temp.resolve("ten-generated-images"), (stage, payload) -> {});
 
         assertEquals(10, PptImageGenerationService.requestedImageCount("prefer", 10, 10));
-        assertTrue(Files.isRegularFile(temp.resolve("ten-generated-images/ai-10.png")));
+        assertTrue(Files.isRegularFile(temp.resolve("ten-generated-images/gpt-10.png")));
     }
 }

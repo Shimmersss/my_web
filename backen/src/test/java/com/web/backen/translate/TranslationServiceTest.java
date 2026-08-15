@@ -285,6 +285,7 @@ class TranslationServiceTest {
                     any(Path.class), any(Path.class), eq("paper.pdf"), eq(1), eq(3), eq("auto"), eq(4), any());
             verify(babelDocService).translatePdf(
                     any(Path.class), any(Path.class), eq("paper.pdf"), eq(1), eq(3), eq("auto"), eq(2), any());
+            verify(babelDocService).awaitResourceRecovery();
         } finally {
             service.shutdown();
         }

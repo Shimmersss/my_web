@@ -37,4 +37,6 @@ public class PptAgentRunner {
             throws IOException, InterruptedException {
         codexRunner.finalizeExisting(session, eventConsumer);
     }
+
+    public void cancelActiveTask() { codexRunner.cancelActiveProcesses(); }
 }

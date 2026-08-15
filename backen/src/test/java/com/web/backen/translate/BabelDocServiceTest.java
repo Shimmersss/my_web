@@ -54,7 +54,48 @@ class BabelDocServiceTest {
         assertTrue(stages.contains("chunk-wait"));
         assertTrue(stages.contains("merge"));
         assertTrue(isNonDecreasing(progress));
-        assertTrue(Files.notExists(tempDir.resolve("result/.babeldoc-chunks/1-10")));
+        assertTrue(Files.notExists(tempDir.resolve("result/.babeldoc-chunks/shared")));
+    }
+
+    @Test
+    void stableModeCanReduceLongDocumentBatchesToOnePage() throws Exception {
+        RecordingBabelDocService service = newService();
+
+        BabelDocService.TranslationResult result = service.translatePdf(
+                tempDir.resolve("input.pdf"), tempDir.resolve("result"), "paper.pdf",
+                1, 8, "auto", 2, 1, ignored -> { });
+
+        assertEquals(List.of("1-1@2", "2-2@2", "3-3@2", "4-4@2",
+                "5-5@2", "6-6@2", "7-7@2", "8-8@2"), service.calls);
+        assertEquals(8, pageCount(result.translatedPdf()));
+    }
+
+    @Test
+    void recoveryBatchReturnsToRequestedQpsForFollowingChunks() throws Exception {
+        RecordingBabelDocService service = newService();
+
+        service.translatePdf(tempDir.resolve("input.pdf"), tempDir.resolve("result"), "paper.pdf",
+                1, 4, "auto", 2, 4, 1, ignored -> { });
+
+        assertEquals(List.of("1-1@2", "2-2@4", "3-3@4", "4-4@4"), service.calls);
+    }
+
+    @Test
+    void stableModeReslicesCompletedLargerChunksWithoutRetranslatingThem() throws Exception {
+        RecordingBabelDocService service = newService();
+        Path resultDir = tempDir.resolve("result");
+        Path cached = resultDir.resolve(".babeldoc-chunks/shared/1-4");
+        Files.createDirectories(cached);
+        writeTextPdf(cached.resolve("translated.pdf"), 4, 0, "");
+        writeTextPdf(cached.resolve("bilingual.pdf"), 4, 0, "");
+        Files.writeString(resultDir.resolve(".babeldoc-chunks/shared/manifest.txt"), String.join("\n",
+                "version=2", "input=" + tempDir.resolve("input.pdf").toAbsolutePath().normalize(),
+                "chunkSize=4", "fontFamily=auto", "model=null"));
+
+        service.translatePdf(tempDir.resolve("input.pdf"), resultDir, "paper.pdf",
+                1, 8, "auto", 2, 1, ignored -> { });
+
+        assertEquals(List.of("5-5@2", "6-6@2", "7-7@2", "8-8@2"), service.calls);
     }
 
     @Test
@@ -68,7 +109,7 @@ class BabelDocServiceTest {
                         "paper.pdf", 1, 10, "auto", 4, ignored -> {
                         }));
         assertTrue(Files.isRegularFile(
-                resultDir.resolve(".babeldoc-chunks/1-10/1-4/translated.pdf")));
+                resultDir.resolve(".babeldoc-chunks/shared/1-4/translated.pdf")));
 
         BabelDocService.TranslationResult result = service.translatePdf(
                 tempDir.resolve("input.pdf"), resultDir, "paper.pdf",
@@ -78,6 +119,26 @@ class BabelDocServiceTest {
         assertEquals(List.of("1-4@4", "5-8@4", "5-8@2", "9-10@2"), service.calls);
         assertEquals(10, pageCount(result.translatedPdf()));
         assertEquals(10, pageCount(result.bilingualPdf()));
+    }
+
+    @Test
+    void importsCompatibleLegacyChunksWhenTheRetryUsesANewPageRange() throws Exception {
+        RecordingBabelDocService service = newService();
+        Path resultDir = tempDir.resolve("result");
+        writeTextPdf(tempDir.resolve("input.pdf"), 10, 0, "");
+        Path legacyChunk = resultDir.resolve(".babeldoc-chunks/1-10/1-4");
+        Files.createDirectories(legacyChunk);
+        writeTextPdf(legacyChunk.resolve("translated.pdf"), 4, 0, "");
+        writeTextPdf(legacyChunk.resolve("bilingual.pdf"), 4, 0, "");
+        Files.writeString(resultDir.resolve(".babeldoc-chunks/1-10/manifest.txt"), String.join("\n",
+                "version=1", "input=" + Files.size(tempDir.resolve("input.pdf"))
+                        + ":" + Files.getLastModifiedTime(tempDir.resolve("input.pdf")).toMillis(),
+                "pages=1-10", "chunkSize=4", "fontFamily=auto", "model=null"));
+
+        service.translatePdf(tempDir.resolve("input.pdf"), resultDir, "paper.pdf",
+                1, 8, "auto", 2, ignored -> { });
+
+        assertEquals(List.of("5-8@2"), service.calls);
     }
 
     @Test

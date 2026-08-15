@@ -331,6 +331,17 @@ public class PptGenerationController {
         }
     }
 
+    @PostMapping("/tasks/{taskId}/cancel")
+    public ResponseEntity<?> cancel(@PathVariable String taskId, HttpServletRequest request) {
+        try {
+            requirePptFeatureAccess(request); authService.requireCsrf(request);
+            AuthUser user = requirePptTaskUser(request); pptGenerationService.cancel(taskId, user);
+            return ResponseEntity.ok(Map.of("code", 200, "data", Map.of("cancelled", true, "credits", quotaService.balance(user.id()))));
+        } catch (AuthException e) { return authError(e); }
+        catch (IllegalArgumentException e) { return ResponseEntity.status(404).body(Map.of("code", 404, "message", e.getMessage())); }
+        catch (IllegalStateException e) { return ResponseEntity.status(409).body(Map.of("code", 409, "message", e.getMessage())); }
+    }
+
     @GetMapping("/recent")
     public ResponseEntity<?> recent(@RequestHeader(value = "X-Ppt-Task-Tokens", required = false) String accessTokens,
                                     HttpServletRequest request) {
@@ -343,7 +354,10 @@ public class PptGenerationController {
         List<Map<String, Object>> data = pptGenerationService.getRecentSessions(user, accessTokens).stream()
                 .map(this::toSummary)
                 .toList();
-        return ResponseEntity.ok(Map.of("code", 200, "data", data));
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("code", 200); payload.put("data", data);
+        payload.putAll(pptGenerationService.recentMetadata(user));
+        return ResponseEntity.ok(payload);
     }
 
     @GetMapping("/download/{taskId}")
@@ -399,6 +413,7 @@ public class PptGenerationController {
     private Map<String, Object> toSummary(PptGenerationSession session) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("taskId", session.getTaskId());
+        data.put("userId", session.getUserId());
         data.put("prompt", session.getPrompt());
         data.put("templateKey", session.getTemplateKey());
         data.put("outputFormat", session.getOutputFormat());

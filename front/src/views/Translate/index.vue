@@ -105,7 +105,7 @@
               <n-radio-button :value="2">稳定模式</n-radio-button>
               <n-radio-button :value="4">加速模式</n-radio-button>
             </n-radio-group>
-            <p v-if="!isImageInput" class="range-hint">加速模式会监控服务器内存，压力较高时自动切换稳定模式重试。</p>
+            <p v-if="!isImageInput" class="range-hint">每份新任务默认优先加速模式；某一分片触发内存保护时仅回退该分片，下一分片仍优先尝试加速。</p>
 
             <n-button
               type="primary"
@@ -188,6 +188,15 @@
         >
           服务器内存压力较高，已停止加速翻译并使用稳定模式重新处理当前任务。
         </n-alert>
+
+        <div class="next-submission">
+          <n-button type="error" secondary @click="cancelCurrentTranslation">取消本次任务</n-button>
+          <n-button @click="continueWithNewTranslation">
+            <template #icon><n-icon><CloudUploadOutline /></n-icon></template>
+            继续提交新任务
+          </n-button>
+          <span>当前任务会继续在后台处理，可在“最近翻译”中随时查看结果。</span>
+        </div>
 
       </div>
 
@@ -313,6 +322,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { useMessage } from 'naive-ui'
 import {
   CloudUploadOutline,
@@ -325,6 +335,7 @@ import {
 import {
   uploadTranslationFile,
   startTranslation,
+  cancelTranslation,
   getTranslationStatus,
   getRecentTranslations,
   getQuotaSettings,
@@ -338,6 +349,8 @@ import { useAuthStore } from '@/stores/auth'
 
 const message = useMessage()
 const auth = useAuthStore()
+const route = useRoute()
+const DEFAULT_FAST_QPS = 4
 
 // 状态
 const step = ref('upload') // 'upload' | 'config' | 'translating' | 'result'
@@ -361,8 +374,8 @@ const fontFamilyOptions = [
   { label: '无衬线字体', value: 'sans-serif' },
   { label: '手写 / 斜体风格', value: 'script' }
 ]
-const translationQps = ref(4)
-const requestedQps = ref(4)
+const translationQps = ref(DEFAULT_FAST_QPS)
+const requestedQps = ref(DEFAULT_FAST_QPS)
 const resourceDowngraded = ref(false)
 const translationProgress = ref(0)
 const progressStageLabel = ref('正在启动 BabelDOC...')
@@ -640,6 +653,18 @@ function retryTranslation() {
   step.value = 'config'
 }
 
+async function cancelCurrentTranslation() {
+  if (!taskId.value || !window.confirm('取消本次翻译？后台处理会停止，未完成任务的额度将退回。')) return
+  try {
+    const res = await cancelTranslation(taskId.value)
+    if (res.code !== 200) throw new Error(res.message || '取消失败')
+    eventSource?.close(); eventSource = null
+    if (typeof res.data?.credits !== 'undefined') auth.updateCredits(res.data.credits)
+    message.success('翻译任务已取消')
+    resetToUpload(); loadRecentTranslations()
+  } catch (e) { message.error(e.message || '取消失败') }
+}
+
 // 下载结果
 function downloadResult() {
   downloadTranslation(taskId.value)
@@ -688,8 +713,8 @@ function resetToUpload() {
   isUploading.value = false
   isGeneratingPdf.value = false
   fontFamily.value = 'auto'
-  translationQps.value = 4
-  requestedQps.value = 4
+  translationQps.value = DEFAULT_FAST_QPS
+  requestedQps.value = DEFAULT_FAST_QPS
   resourceDowngraded.value = false
   translationProgress.value = 0
   queuePosition.value = 0
@@ -702,6 +727,11 @@ function resetToUpload() {
   textQualityWarning.value = ''
   fileName.value = ''
   sessionStorage.removeItem('translateTaskId')
+}
+
+function continueWithNewTranslation() {
+  resetToUpload()
+  message.info('当前翻译仍在后台继续，现可提交新的翻译任务')
 }
 
 async function loadRecentTranslations() {
@@ -807,10 +837,12 @@ onMounted(async () => {
   await loadQuotaSettings()
   await loadRecentTranslations()
   recentRefreshTimer = window.setInterval(loadRecentTranslations, 5000)
-  const savedTaskId = sessionStorage.getItem('translateTaskId')
+  const requestedTaskId = String(route.query.taskId || '')
+  const savedTaskId = requestedTaskId || sessionStorage.getItem('translateTaskId')
   if (savedTaskId) {
     try {
       await restoreTask(savedTaskId)
+      sessionStorage.setItem('translateTaskId', savedTaskId)
     } catch {
       sessionStorage.removeItem('translateTaskId')
     }
@@ -1095,6 +1127,16 @@ onBeforeUnmount(() => {
   border-radius: 14px;
   background: linear-gradient(135deg, #fff7f5 0%, #fff 72%);
   box-shadow: 0 10px 28px rgba(184, 49, 38, 0.14), 4px 4px 0 rgba(184, 49, 38, 0.08);
+}
+
+.next-submission {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 20px;
+  color: #7e786d;
+  font-size: 13px;
 }
 
 .failure-hero {

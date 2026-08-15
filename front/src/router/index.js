@@ -15,6 +15,12 @@ const routes = [
     meta: { title: 'GitHub 项目开源', visibility: 'News' }
   },
   {
+    path: '/guestbook',
+    name: 'Guestbook',
+    component: () => import('@/views/Guestbook/index.vue'),
+    meta: { title: '留言板', visibility: 'Guestbook' }
+  },
+  {
     path: '/contact',
     name: 'Contact',
     component: () => import('@/views/PptGenerate/index.vue'),
@@ -24,7 +30,7 @@ const routes = [
     path: '/image-generate',
     name: 'ImageGenerate',
     component: () => import('@/views/ImageGenerate/index.vue'),
-    meta: { title: 'Codex 生图', visibility: 'ImageGenerate' }
+    meta: { title: 'GPT 生图', visibility: 'ImageGenerate' }
   },
   {
     path: '/publications',

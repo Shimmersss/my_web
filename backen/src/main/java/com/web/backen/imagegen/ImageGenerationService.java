@@ -31,7 +31,7 @@ public class ImageGenerationService {
     private static final Logger log = LoggerFactory.getLogger(ImageGenerationService.class);
     private static final Set<String> SIZES = Set.of("1024x1024", "1536x1024", "1024x1536");
     private static final Set<String> QUALITIES = Set.of("low", "medium", "high");
-    private static final Set<String> TERMINAL = Set.of("completed", "failed");
+    private static final Set<String> TERMINAL = Set.of("completed", "failed", "cancelled");
 
     private final ImageGenerationConfig config;
     private final OpenAiImageClient client;
@@ -41,6 +41,7 @@ public class ImageGenerationService {
     private final Map<String, ImageGenerationSession> sessions = new ConcurrentHashMap<>();
     private final Map<String, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
     private final ThreadPoolExecutor executor;
+    private final Map<String, Future<?>> taskFutures = new ConcurrentHashMap<>();
     private Path storage;
 
     public ImageGenerationService(ImageGenerationConfig config, OpenAiImageClient client, ObjectMapper mapper,
@@ -82,7 +83,7 @@ public class ImageGenerationService {
             }
             if ("queued".equals(session.getStatus()) || "generating".equals(session.getStatus())) {
                 session.setStatus("queued"); session.setProgressStage("queued");
-                try { persist(session); executor.execute(() -> run(session)); }
+            try { persist(session); taskFutures.put(session.getTaskId(), executor.submit(() -> run(session))); }
                 catch (Exception e) { fail(session, "任务恢复失败，请重新提交", e); }
             }
         });
@@ -93,6 +94,12 @@ public class ImageGenerationService {
 
     public ImageGenerationSession create(String prompt, String mode, String size, String quality,
                                          String parentTaskId, MultipartFile referenceFile, AuthUser user) throws IOException {
+        return create(prompt, mode, size, quality, parentTaskId, referenceFile, List.of(), user);
+    }
+
+    public ImageGenerationSession create(String prompt, String mode, String size, String quality,
+                                         String parentTaskId, MultipartFile referenceFile, List<MultipartFile> referenceFiles,
+                                         AuthUser user) throws IOException {
         String cleanPrompt = prompt == null ? "" : prompt.trim();
         if (cleanPrompt.isEmpty() || cleanPrompt.length() > 4000) throw new IllegalArgumentException("提示词需为 1–4000 个字符");
         String cleanMode = mode == null ? "GENERATE" : mode.trim().toUpperCase(Locale.ROOT);
@@ -102,9 +109,13 @@ public class ImageGenerationService {
         String cleanQuality = quality == null ? "medium" : quality.toLowerCase(Locale.ROOT);
         if (!QUALITIES.contains(cleanQuality)) throw new IllegalArgumentException("质量参数无效");
         if (runtime.imageGenerationKey() == null || runtime.imageGenerationKey().isBlank()) throw new AuthException(503, "生图服务暂未配置");
-        boolean hasUpload = referenceFile != null && !referenceFile.isEmpty();
+        List<MultipartFile> uploads = new ArrayList<>();
+        if (referenceFiles != null) uploads.addAll(referenceFiles.stream().filter(file -> file != null && !file.isEmpty()).toList());
+        if (uploads.isEmpty() && referenceFile != null && !referenceFile.isEmpty()) uploads.add(referenceFile);
+        boolean hasUpload = !uploads.isEmpty();
         boolean hasParent = parentTaskId != null && !parentTaskId.isBlank();
-        if ("EDIT".equals(cleanMode) && hasUpload == hasParent) throw new IllegalArgumentException("编辑模式请选择一张参考图");
+        if (uploads.size() > 4) throw new IllegalArgumentException("一次最多上传 4 张参考图");
+        if ("EDIT".equals(cleanMode) && hasUpload == hasParent) throw new IllegalArgumentException("编辑模式请选择上传参考图或一张历史结果");
         if ("GENERATE".equals(cleanMode) && (hasUpload || hasParent)) throw new IllegalArgumentException("文生图无需参考图");
 
         String taskId = newTaskId();
@@ -113,16 +124,16 @@ public class ImageGenerationService {
         session.setMode(cleanMode); session.setSize(cleanSize); session.setQuality(cleanQuality); session.setUserId(user.id());
         session.setStatus("creating"); session.setProgressStage("creating");
         try {
-            if ("EDIT".equals(cleanMode)) prepareReference(session, parentTaskId, referenceFile, user);
+            if ("EDIT".equals(cleanMode)) prepareReferences(session, parentTaskId, uploads, user);
             int cost = user.isRoot() ? 0 : quota.imageCredit(cleanQuality);
             session.setCreditCost(cost); persist(session);
             if (cost > 0) {
                 session.setCreditTransactionId(quota.spend(user.id(), cost, "IMAGE_GENERATION", taskId,
-                        "Codex 生图（" + cleanQuality + "）"));
+                        "GPT 生图（" + cleanQuality + "）"));
                 persist(session);
             }
             session.setStatus("queued"); session.setProgressStage("queued"); persist(session); sessions.put(taskId, session);
-            try { executor.execute(() -> run(session)); }
+            try { taskFutures.put(taskId, executor.submit(() -> run(session))); }
             catch (RejectedExecutionException e) {
                 fail(session, "当前生图队列已满，请稍后再试", e);
                 throw new IllegalStateException("当前生图队列已满，请稍后再试");
@@ -136,35 +147,47 @@ public class ImageGenerationService {
         }
     }
 
-    private void prepareReference(ImageGenerationSession session, String parentTaskId, MultipartFile file, AuthUser user) throws IOException {
+    private void prepareReferences(ImageGenerationSession session, String parentTaskId, List<MultipartFile> files, AuthUser user) throws IOException {
         if (parentTaskId != null && !parentTaskId.isBlank()) {
             ImageGenerationSession parent = requireOwned(parentTaskId, user);
             if (!"completed".equals(parent.getStatus()) || !Files.isRegularFile(parent.getResultPath())) throw new IllegalArgumentException("参考任务尚未完成");
             session.setParentTaskId(parentTaskId); session.setReferenceContentType("image/png");
             Files.copy(parent.getResultPath(), session.getReferencePath()); return;
         }
-        if (file.getSize() <= 0 || file.getSize() > config.getMaxReferenceBytes()) throw new IllegalArgumentException("参考图最大 20 MB");
-        byte[] head;
-        try (var input = file.getInputStream()) { head = input.readNBytes(16); }
-        String type = isPng(head) ? "image/png" : isJpeg(head) ? "image/jpeg" : null;
-        if (type == null) throw new IllegalArgumentException("参考图仅支持 PNG 或 JPEG");
-        session.setReferenceContentType(type); session.setReferenceFileName(safeName(file.getOriginalFilename()));
-        file.transferTo(session.getReferencePath());
-        validateImageDimensions(session.getReferencePath());
+        long totalBytes = 0;
+        List<String> names = new ArrayList<>(), types = new ArrayList<>();
+        for (int index = 0; index < files.size(); index++) {
+            MultipartFile file = files.get(index);
+            if (file.getSize() <= 0 || file.getSize() > config.getMaxReferenceBytes()) throw new IllegalArgumentException("每张参考图最大 20 MB");
+            totalBytes += file.getSize();
+            if (totalBytes > 40L * 1024 * 1024) throw new IllegalArgumentException("参考图总大小不能超过 40 MB");
+            byte[] head;
+            try (var input = file.getInputStream()) { head = input.readNBytes(16); }
+            String type = isPng(head) ? "image/png" : isJpeg(head) ? "image/jpeg" : null;
+            if (type == null) throw new IllegalArgumentException("参考图仅支持 PNG 或 JPEG");
+            Path path = session.getTaskDir().resolve(String.format("reference-%02d%s", index + 1, "image/jpeg".equals(type) ? ".jpg" : ".png"));
+            file.transferTo(path);
+            validateImageDimensions(path);
+            names.add(safeName(file.getOriginalFilename())); types.add(type);
+        }
+        session.setReferenceFileNames(names); session.setReferenceContentTypes(types);
+        if (!names.isEmpty()) { session.setReferenceFileName(names.get(0)); session.setReferenceContentType(types.get(0)); }
     }
 
     private void run(ImageGenerationSession session) {
         try {
+            if ("cancelled".equals(session.getStatus())) return;
             session.setStatus("generating"); session.setProgressStage("generating"); persist(session); send(session);
             byte[] output = "EDIT".equals(session.getMode())
-                    ? client.edit(session.getPrompt(), session.getSize(), session.getQuality(), session.getReferencePath(), session.getReferenceContentType())
+                    ? client.edit(session.getPrompt(), session.getSize(), session.getQuality(), session.getReferencePaths(), session.getReferenceContentTypes())
                     : client.generate(session.getPrompt(), session.getSize(), session.getQuality());
             Path temp = session.getTaskDir().resolve("output.png.tmp"); Files.write(temp, output); move(temp, session.getResultPath());
             createPreview(session.getResultPath(), session.getPreviewPath());
+            if ("cancelled".equals(session.getStatus())) return;
             session.setStatus("completed"); session.setProgressStage("completed"); session.setCompletedAt(System.currentTimeMillis());
             persist(session); send(session); completeEmitters(session.getTaskId()); cleanupHistory();
-        } catch (Exception e) { fail(session, "生图失败，请稍后重试", e); }
-        finally { updateQueuePositions(); }
+        } catch (Exception e) { if (!"cancelled".equals(session.getStatus())) fail(session, "生图失败，请稍后重试", e); }
+        finally { taskFutures.remove(session.getTaskId()); updateQueuePositions(); }
     }
 
     private void fail(ImageGenerationSession session, String safeMessage, Exception error) {
@@ -196,6 +219,17 @@ public class ImageGenerationService {
         if (user == null || (!user.isRoot() && session.getUserId() != user.id())) throw new AuthException(403, "无权访问该任务");
         return session;
     }
+    public void cancel(String taskId, AuthUser user) {
+        ImageGenerationSession session = requireOwned(taskId, user);
+        synchronized (session) {
+            if (!Set.of("queued", "generating").contains(session.getStatus())) throw new IllegalStateException("当前任务无法取消");
+            session.setStatus("cancelled"); session.setProgressStage("cancelled"); session.setErrorMessage("已由用户取消"); session.setCompletedAt(System.currentTimeMillis());
+            refund(session, "生图任务已取消退回额度");
+            try { persist(session); } catch (IOException e) { throw new IllegalStateException("保存取消状态失败"); }
+        }
+        Future<?> future = taskFutures.remove(taskId); if (future != null) future.cancel(true);
+        send(session); completeEmitters(taskId); updateQueuePositions();
+    }
     public List<ImageGenerationSession> recent(AuthUser user) {
         if (user != null && user.isRoot()) {
             return sessions.values().stream().sorted(Comparator.comparingLong(ImageGenerationSession::getCreatedAt).reversed())
@@ -205,6 +239,7 @@ public class ImageGenerationService {
                 .sorted(Comparator.comparingLong(ImageGenerationSession::getCreatedAt).reversed())
                 .limit(runtime.imageMaxHistory()).collect(Collectors.toList());
     }
+    public long latestTaskUpdateAt() { return sessions.values().stream().mapToLong(ImageGenerationSession::getUpdatedAt).max().orElse(0L); }
     public void delete(String taskId, AuthUser user) {
         ImageGenerationSession session = requireOwned(taskId, user);
         if (!TERMINAL.contains(session.getStatus())) throw new IllegalStateException("运行中的任务不能删除");
@@ -222,6 +257,7 @@ public class ImageGenerationService {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("taskId", session.getTaskId()); data.put("userId", session.getUserId()); data.put("mode", session.getMode()); data.put("prompt", session.getPrompt());
         data.put("size", session.getSize()); data.put("quality", session.getQuality()); data.put("parentTaskId", session.getParentTaskId());
+        data.put("referenceCount", session.getReferenceContentTypes().size());
         data.put("status", session.getStatus()); data.put("stage", session.getProgressStage()); data.put("queuePosition", session.getQueuePosition());
         data.put("error", session.getErrorMessage()); data.put("createdAt", session.getCreatedAt()); data.put("updatedAt", session.getUpdatedAt());
         data.put("creditCost", session.getCreditCost()); data.put("creditRefunded", session.isCreditRefunded());

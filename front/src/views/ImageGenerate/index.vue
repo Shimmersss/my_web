@@ -1,7 +1,7 @@
 <template>
   <main class="image-studio">
     <header class="studio-heading">
-      <div><p>CODEX IMAGE STUDIO</p><h1>Codex 生图</h1><span>一句话生成，或沿着参考图继续迭代。</span></div>
+      <div><p>GPT IMAGE STUDIO</p><h1>GPT 生图</h1><span>一句话生成，或沿着一组参考图继续迭代。</span></div>
       <div class="credit-pill">{{ auth.isRoot ? 'root 免费 · 全站只读审计' : `${auth.credits} 积分` }}</div>
     </header>
 
@@ -23,9 +23,11 @@
             <button @click="clearReference">移除</button>
           </div>
           <label v-else class="upload-drop">
-            <input type="file" accept="image/png,image/jpeg" @change="selectFile" />
-            <img v-if="localReferenceUrl" :src="localReferenceUrl" alt="上传的参考图" />
-            <template v-else><strong>上传一张参考图</strong><span>PNG / JPEG，最大 20 MB、1600 万像素</span></template>
+            <input type="file" multiple accept="image/png,image/jpeg" @change="selectFiles" />
+            <div v-if="localReferences.length" class="reference-previews">
+              <figure v-for="(item, index) in localReferences" :key="item.url"><img :src="item.url" :alt="`参考图 ${index + 1}`" /><button type="button" @click.prevent="removeReference(index)">×</button><figcaption>参考 {{ index + 1 }}</figcaption></figure>
+            </div>
+            <template v-else><strong>上传 1–4 张参考图</strong><span>PNG / JPEG，每张最大 20 MB、1600 万像素；总计最多 40 MB</span></template>
           </label>
         </div>
 
@@ -51,6 +53,7 @@
           <div class="orbit"><i></i></div>
           <h2>{{ current.status === 'queued' ? '正在排队' : '正在生成' }}</h2>
           <p>{{ current.status === 'queued' && current.queuePosition ? `前方还有 ${Math.max(0, current.queuePosition - 1)} 个任务` : '通常需要几十秒，请保持页面开启' }}</p>
+          <n-button v-if="isOwnTask(current)" type="error" secondary @click="cancelCurrent">取消本次任务</n-button>
         </div>
         <div v-else class="result-empty">
           <div class="canvas-mark">✦</div><h2>画布等待灵感</h2><p>生成结果会显示在这里，并自动进入你的历史记录。</p>
@@ -69,6 +72,18 @@
       </div>
       <p v-else class="empty-history">还没有历史作品，从第一张开始吧。</p>
     </section>
+
+    <section class="history-section presentation-gallery">
+      <div class="history-heading"><div><p>PRESENTATION VISUALS</p><h2>PPT / HTML 演示生图</h2><small>每账号保留 {{ presentationRetention.maxPerUser || 20 }} 张；{{ auth.isRoot ? 'root 可审计全站素材' : '仅显示本人素材' }}</small></div><n-button quaternary :loading="loadingPresentationAssets" @click="loadPresentationAssets">刷新</n-button></div>
+      <div v-if="presentationAssets.length" class="history-grid">
+        <article v-for="asset in presentationAssets" :key="asset.assetId" class="history-card">
+          <div class="thumb"><img :src="presentationPreviewUrl(asset.assetId)" :alt="asset.slideTitle || '演示生图'" /></div>
+          <div class="card-copy"><small>{{ asset.outputFormat?.toUpperCase() }} · 第 {{ asset.slideIndex }} 页<template v-if="auth.isRoot && Number(asset.userId) !== Number(auth.user?.id)"> · 用户 #{{ asset.userId }}</template></small><p>{{ asset.slideTitle || '演示视觉素材' }}</p><a :href="presentationResultUrl(asset.assetId)" download>下载 PNG</a></div>
+          <button v-if="Number(asset.userId) === Number(auth.user?.id)" class="delete-button" title="删除" @click="removePresentationAsset(asset)">×</button>
+        </article>
+      </div>
+      <p v-else class="empty-history">尚无已交付演示的 GPT 图片。</p>
+    </section>
   </main>
 </template>
 
@@ -77,20 +92,24 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { NButton, NInput, NSelect, useMessage } from 'naive-ui'
 import { useAuthStore } from '@/stores/auth'
 import {
-  createImageGenerationTask, deleteImageGenerationTask, getRecentImageGenerations,
-  imageGenerationPreviewUrl, imageGenerationResultUrl, imageGenerationStreamUrl
+  createImageGenerationTask, deleteImageGenerationTask, cancelImageGenerationTask, getRecentImageGenerations,
+  imageGenerationPreviewUrl, imageGenerationResultUrl, imageGenerationStreamUrl,
+  deletePresentationImageAsset, getPresentationImageAssets, presentationImagePreviewUrl, presentationImageResultUrl
 } from '@/api'
 
 const auth = useAuthStore()
 const message = useMessage()
-const form = reactive({ prompt: '', mode: 'GENERATE', size: '1024x1024', quality: 'medium', referenceFile: null, parentTaskId: '' })
+const form = reactive({ prompt: '', mode: 'GENERATE', size: '1024x1024', quality: 'medium', referenceFiles: [], parentTaskId: '' })
 const current = ref(null)
 const history = ref([])
 const costs = ref({})
 const submitting = ref(false)
 const loadingHistory = ref(false)
 const error = ref('')
-const localReferenceUrl = ref('')
+const presentationAssets = ref([])
+const presentationRetention = ref({ maxPerUser: 20, maxTotal: 100 })
+const loadingPresentationAssets = ref(false)
+const localReferences = ref([])
 let eventSource = null
 
 const fallbackCosts = { low: 2, medium: 4, high: 8 }
@@ -101,19 +120,25 @@ const sizeOptions = [
 ]
 const qualityOptions = computed(() => ['low', 'medium', 'high'].map(value => ({ label: `${value} · ${auth.isRoot ? '免费' : (costs.value[value] ?? fallbackCosts[value]) + ' 积分'}`, value })))
 const parentTask = computed(() => history.value.find(task => task.taskId === form.parentTaskId))
-const canSubmit = computed(() => form.prompt.trim() && (form.mode === 'GENERATE' || form.referenceFile || form.parentTaskId))
+const canSubmit = computed(() => form.prompt.trim() && (form.mode === 'GENERATE' || form.referenceFiles.length || form.parentTaskId))
 
-onMounted(async () => { await auth.refresh().catch(() => {}); await loadHistory() })
+onMounted(async () => { await auth.refresh().catch(() => {}); await Promise.all([loadHistory(), loadPresentationAssets()]) })
 onBeforeUnmount(() => { closeStream(); revokeLocalPreview() })
 
 function setMode(mode) { form.mode = mode; clearReference(); error.value = '' }
-function selectFile(event) {
-  const file = event.target.files?.[0] || null
-  revokeLocalPreview(); form.referenceFile = file; form.parentTaskId = ''
-  if (file) localReferenceUrl.value = URL.createObjectURL(file)
+function selectFiles(event) {
+  const files = Array.from(event.target.files || [])
+  const combined = [...form.referenceFiles, ...files].slice(0, 4)
+  if (files.length + form.referenceFiles.length > 4) message.warning('一次最多上传 4 张参考图')
+  const total = combined.reduce((sum, file) => sum + file.size, 0)
+  if (total > 40 * 1024 * 1024) { message.error('参考图总大小不能超过 40 MB'); event.target.value = ''; return }
+  revokeLocalPreview(); form.referenceFiles = combined; form.parentTaskId = ''
+  localReferences.value = combined.map(file => ({ file, url: URL.createObjectURL(file) }))
+  event.target.value = ''
 }
-function clearReference() { form.referenceFile = null; form.parentTaskId = ''; revokeLocalPreview() }
-function revokeLocalPreview() { if (localReferenceUrl.value) URL.revokeObjectURL(localReferenceUrl.value); localReferenceUrl.value = '' }
+function removeReference(index) { const files = form.referenceFiles.filter((_, itemIndex) => itemIndex !== index); revokeLocalPreview(); form.referenceFiles = files; localReferences.value = files.map(file => ({ file, url: URL.createObjectURL(file) })) }
+function clearReference() { form.referenceFiles = []; form.parentTaskId = ''; revokeLocalPreview() }
+function revokeLocalPreview() { localReferences.value.forEach(item => URL.revokeObjectURL(item.url)); localReferences.value = [] }
 
 async function submit() {
   if (!canSubmit.value || submitting.value) return
@@ -157,12 +182,22 @@ async function loadHistory() {
   } catch (e) { if (auth.isLoggedIn) error.value = e.message || '历史记录加载失败' }
   finally { loadingHistory.value = false }
 }
+async function loadPresentationAssets() {
+  loadingPresentationAssets.value = true
+  try { const response = await getPresentationImageAssets(); presentationAssets.value = response.data?.assets || []; presentationRetention.value = response.data?.retention || presentationRetention.value }
+  catch (e) { if (auth.isLoggedIn) error.value = e.message || '演示生图素材加载失败' }
+  finally { loadingPresentationAssets.value = false }
+}
+function presentationPreviewUrl(assetId) { return `${presentationImagePreviewUrl(assetId)}?v=${Date.now()}` }
+function presentationResultUrl(assetId) { return presentationImageResultUrl(assetId) }
+async function removePresentationAsset(asset) { if (!window.confirm('删除此演示生图素材？已交付演示不会受影响。')) return; try { await deletePresentationImageAsset(asset.assetId); presentationAssets.value = presentationAssets.value.filter(item => item.assetId !== asset.assetId) } catch (e) { message.error(e.message || '删除失败') } }
 function selectTask(task) { current.value = task; error.value = task.status === 'failed' ? task.error : '' }
 function isOwnTask(task) { return Number(task?.userId) === Number(auth.user?.id) }
-function continueEdit(task) { form.mode = 'EDIT'; form.parentTaskId = task.taskId; form.referenceFile = null; form.prompt = ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
-function regenerate(task) { form.mode = task.mode; form.prompt = task.prompt; form.size = task.size; form.quality = task.quality; form.referenceFile = null; form.parentTaskId = task.mode === 'EDIT' ? (task.parentTaskId || task.taskId) : ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
-function download(task) { const anchor = document.createElement('a'); anchor.href = resultUrl(task.taskId); anchor.download = `codex-image-${task.taskId}.png`; anchor.click() }
+function continueEdit(task) { form.mode = 'EDIT'; form.parentTaskId = task.taskId; form.referenceFiles = []; revokeLocalPreview(); form.prompt = ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
+function regenerate(task) { form.mode = task.mode; form.prompt = task.prompt; form.size = task.size; form.quality = task.quality; form.referenceFiles = []; revokeLocalPreview(); form.parentTaskId = task.mode === 'EDIT' ? (task.parentTaskId || task.taskId) : ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
+function download(task) { const anchor = document.createElement('a'); anchor.href = resultUrl(task.taskId); anchor.download = `gpt-image-${task.taskId}.png`; anchor.click() }
 async function remove(task) { if (!window.confirm('删除这条创作记录和图片？')) return; try { await deleteImageGenerationTask(task.taskId); history.value = history.value.filter(item => item.taskId !== task.taskId); if (current.value?.taskId === task.taskId) current.value = null } catch (e) { message.error(e.message || '删除失败') } }
+async function cancelCurrent() { if (!current.value || !window.confirm('取消本次生图？未完成任务的额度将退回。')) return; try { const res = await cancelImageGenerationTask(current.value.taskId); if (res.code !== 200) throw new Error(res.message || '取消失败'); if (typeof res.data?.credits !== 'undefined') auth.updateCredits(res.data.credits); current.value = { ...current.value, status: 'cancelled' }; eventSource?.close(); eventSource = null; message.success('生图任务已取消'); loadHistory() } catch (e) { message.error(e.message || '取消失败') } }
 function resultUrl(taskId) { return `${imageGenerationResultUrl(taskId)}?v=${encodeURIComponent(history.value.find(t => t.taskId === taskId)?.updatedAt || '')}` }
 function previewUrl(taskId) { return `${imageGenerationPreviewUrl(taskId)}?v=${encodeURIComponent(history.value.find(t => t.taskId === taskId)?.updatedAt || '')}` }
 function shortPrompt(prompt) { return prompt?.length > 72 ? `${prompt.slice(0, 72)}…` : prompt }
@@ -183,7 +218,7 @@ function statusText(status) { return ({ queued: '排队中', generating: '生成
 .mode-tabs button { min-height:40px; border:0; background:transparent; color:#746d61; cursor:pointer; font-weight:700; }
 .mode-tabs button.active { color:#25251f; background:#fffdf7; box-shadow:0 3px 12px rgba(56,43,25,.08); }
 .field { display:grid; gap:9px; margin-bottom:18px; }.field>span { font-size:13px; font-weight:700; }.option-row { display:grid; grid-template-columns:1fr 1fr; gap:12px; }.compact { min-width:0; }
-.reference-box { margin:-4px 0 18px; }.upload-drop { min-height:150px; border:1px dashed #baaa92; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; overflow:hidden; cursor:pointer; color:#6e675b; }.upload-drop input { position:absolute; opacity:0; pointer-events:none; }.upload-drop img { width:100%; height:190px; object-fit:contain; background:#ded7cc; }.upload-drop span { font-size:12px; }
+.reference-box { margin:-4px 0 18px; }.upload-drop { min-height:150px; border:1px dashed #baaa92; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; overflow:hidden; cursor:pointer; color:#6e675b; }.upload-drop input { position:absolute; opacity:0; pointer-events:none; }.upload-drop img { width:100%; height:190px; object-fit:contain; background:#ded7cc; }.upload-drop span { font-size:12px; }.reference-previews{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;width:100%;padding:8px;box-sizing:border-box}.reference-previews figure{position:relative;margin:0;min-width:0}.reference-previews img{width:100%;height:92px;object-fit:cover;background:#ded7cc}.reference-previews button{position:absolute;right:2px;top:2px;border:0;border-radius:50%;background:#25251f;color:#fff;width:22px;height:22px;cursor:pointer}.reference-previews figcaption{font-size:11px;text-align:center;padding-top:3px}
 .selected-parent { display:grid; grid-template-columns:78px 1fr auto; align-items:center; gap:12px; padding:10px; border:1px solid #d3c7b5; }.selected-parent img { width:78px; height:70px; object-fit:cover; }.selected-parent div { min-width:0; display:grid; gap:5px; }.selected-parent span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; font-size:12px; color:#756e62; }.selected-parent button { border:0; background:none; color:#a54a38; cursor:pointer; }
 .cost-line { display:flex; justify-content:space-between; margin:-2px 0 18px; color:#776f63; font-size:12px; }.cost-line strong { color:#9f4935; }.safe-error { padding:10px 12px; margin:14px 0 0; color:#9a382b; background:#f3dfd8; font-size:13px; }
 .result-panel { min-height:620px; display:grid; place-items:center; overflow:hidden; background:linear-gradient(135deg,rgba(255,255,255,.35),rgba(229,218,201,.62)); }.result-ready { width:100%; height:100%; min-height:620px; display:flex; flex-direction:column; }.result-ready>img { width:100%; height:560px; object-fit:contain; padding:20px; box-sizing:border-box; }.result-actions { display:flex; justify-content:center; flex-wrap:wrap; gap:10px; padding:16px; border-top:1px solid #d8cebd; }

@@ -13,6 +13,7 @@ A full-stack personal workbench that brings together a Zotero library browser, P
 - **PDF/图片翻译 / PDF and image translation**：上传 PDF 后选择页码范围、字体族和速度模式，由后端排队调用 BabelDOC 生成保留版式的纯中文 / 双语 PDF；PNG/JPG 等常见图片使用视觉模型生成中文译图和双语译图。
 - **PPT 生成 / Materials to PPT**：PPTX 与 HTML 的作者层统一使用隔离 Codex CLI；PPTX 输出 PPTD 后由固定导出器交付，HTML 只允许 Codex 输出受限 JSON 计划，再由固定 reveal.js 渲染器按 13 类语义布局、主题节奏和四档安全动效交付。可选智能推荐或精确指定 3–30 页（包含封面与结束页）；PPTX 的 GPT Image 2 可在后台上限内选择数量，单任务可配置为 1–10 张，预扣、生成和失败退款始终使用同一个数量。模板与样式预览会持续展开，方便比较。两条链路均可复用受控的 Tavily、Wikimedia Commons 与 Openverse 搜图，并保留视觉来源与复用权利状态；真实逐页渲染与确定性质量门仍会阻断破损产物。
 - **GitHub 项目展示 / GitHub showcase**：前端只访问站内接口，后端代理 GitHub API 和 README raw 内容，避免浏览器直连外部接口。
+- **留言板与站内通知 / Guestbook and notifications**：访客可阅读公开留言；注册用户可发布主留言、单层回复和点赞。回复、点赞会生成站内通知，作者可删除自己的内容，root 可在后台统一管理。
 
 ## 截图 / Screenshots
 

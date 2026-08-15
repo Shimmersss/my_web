@@ -22,9 +22,11 @@ public class ImageGenerationController {
     private final AuthService auth;
     private final QuotaService quota;
     private final RuntimeConfigService runtime;
+    private final PresentationImageGalleryService presentationGallery;
 
-    public ImageGenerationController(ImageGenerationService service, AuthService auth, QuotaService quota, RuntimeConfigService runtime) {
-        this.service = service; this.auth = auth; this.quota = quota; this.runtime = runtime;
+    public ImageGenerationController(ImageGenerationService service, AuthService auth, QuotaService quota, RuntimeConfigService runtime,
+                                     PresentationImageGalleryService presentationGallery) {
+        this.service = service; this.auth = auth; this.quota = quota; this.runtime = runtime; this.presentationGallery = presentationGallery;
     }
 
     @PostMapping("/tasks")
@@ -34,10 +36,11 @@ public class ImageGenerationController {
                                     @RequestParam(defaultValue = "medium") String quality,
                                     @RequestParam(required = false) String parentTaskId,
                                     @RequestParam(required = false) MultipartFile referenceFile,
+                                    @RequestParam(required = false) List<MultipartFile> referenceFiles,
                                     HttpServletRequest request) {
         try {
             AuthUser user = requireAccess(request); auth.requireCsrf(request);
-            ImageGenerationSession session = service.create(prompt, mode, size, quality, parentTaskId, referenceFile, user);
+            ImageGenerationSession session = service.create(prompt, mode, size, quality, parentTaskId, referenceFile, referenceFiles, user);
             return ok(Map.of("task", service.summary(session), "credits", quota.balance(user.id())));
         } catch (AuthException e) { return error(e.getStatus(), e.getMessage()); }
         catch (IllegalArgumentException e) { return error(400, e.getMessage()); }
@@ -57,6 +60,14 @@ public class ImageGenerationController {
         catch (IllegalArgumentException e) { return error(404, e.getMessage()); }
     }
 
+    @PostMapping("/tasks/{taskId}/cancel")
+    public ResponseEntity<?> cancel(@PathVariable String taskId, HttpServletRequest request) {
+        try { AuthUser user = requireAccess(request); auth.requireCsrf(request); service.cancel(taskId, user); return ok(Map.of("cancelled", true, "credits", quota.balance(user.id()))); }
+        catch (AuthException e) { return error(e.getStatus(), e.getMessage()); }
+        catch (IllegalArgumentException e) { return error(404, e.getMessage()); }
+        catch (IllegalStateException e) { return error(409, e.getMessage()); }
+    }
+
     @GetMapping("/recent")
     public ResponseEntity<?> recent(HttpServletRequest request) {
         try {
@@ -73,7 +84,7 @@ public class ImageGenerationController {
             ImageGenerationSession session = service.requireReadable(taskId, requireAccess(request));
             if (!"completed".equals(session.getStatus()) || !Files.isRegularFile(session.getResultPath())) throw new IllegalArgumentException("图片尚未生成");
             return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.IMAGE_PNG)
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=codex-image-" + taskId + ".png")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=gpt-image-" + taskId + ".png")
                     .body(new FileSystemResource(session.getResultPath()));
         } catch (AuthException e) { return error(e.getStatus(), e.getMessage()); }
         catch (IllegalArgumentException e) { return error(404, e.getMessage()); }
@@ -96,6 +107,36 @@ public class ImageGenerationController {
         catch (AuthException e) { return error(e.getStatus(), e.getMessage()); }
         catch (IllegalArgumentException e) { return error(404, e.getMessage()); }
         catch (IllegalStateException e) { return error(409, e.getMessage()); }
+    }
+
+    @GetMapping("/presentation-assets")
+    public ResponseEntity<?> presentationAssets(HttpServletRequest request) {
+        try { return ok(Map.of("assets", presentationGallery.recent(requireAccess(request)), "retention", runtime.presentationImageRetentionSettings())); }
+        catch (AuthException e) { return error(e.getStatus(), e.getMessage()); }
+    }
+
+    @GetMapping("/presentation-assets/{assetId}/preview")
+    public ResponseEntity<?> presentationPreview(@PathVariable String assetId, HttpServletRequest request) {
+        try { return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.IMAGE_JPEG)
+                .body(new FileSystemResource(presentationGallery.file(assetId, true, requireAccess(request)))); }
+        catch (AuthException e) { return error(e.getStatus(), e.getMessage()); }
+        catch (IllegalArgumentException e) { return error(404, e.getMessage()); }
+    }
+
+    @GetMapping("/presentation-assets/{assetId}/result")
+    public ResponseEntity<?> presentationResult(@PathVariable String assetId, HttpServletRequest request) {
+        try { return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.IMAGE_PNG)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=gpt-presentation-" + assetId + ".png")
+                .body(new FileSystemResource(presentationGallery.file(assetId, false, requireAccess(request)))); }
+        catch (AuthException e) { return error(e.getStatus(), e.getMessage()); }
+        catch (IllegalArgumentException e) { return error(404, e.getMessage()); }
+    }
+
+    @DeleteMapping("/presentation-assets/{assetId}")
+    public ResponseEntity<?> deletePresentationAsset(@PathVariable String assetId, HttpServletRequest request) {
+        try { AuthUser user = requireAccess(request); auth.requireCsrf(request); presentationGallery.delete(assetId, user); return ok(Map.of("deleted", true)); }
+        catch (AuthException e) { return error(e.getStatus(), e.getMessage()); }
+        catch (IllegalArgumentException e) { return error(404, e.getMessage()); }
     }
 
     private AuthUser requireAccess(HttpServletRequest request) {

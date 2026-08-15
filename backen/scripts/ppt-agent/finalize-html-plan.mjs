@@ -26,7 +26,7 @@ const LAYOUT_ALIASES = new Map([
 function plain(value, limit) {
   const text = String(value ?? '')
     .replace(/[*_`#]+/g, '')
-    .replace(/\s*\[(?:(?:S|WEB|U)\d+)(?:\s*[,，;；]\s*(?:S|WEB|U)\d+)*\]/gi, '')
+    .replace(/\s*\[(?:(?:S|WEB|U|GPT)\d+)(?:\s*[,，;；]\s*(?:S|WEB|U|GPT)\d+)*\]/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
   return text.slice(0, limit);
@@ -62,6 +62,17 @@ async function acceptedImage(file) {
 
 async function taskAssets(taskDir) {
   const images = [];
+  const generatedDir = path.join(taskDir, 'generated-images');
+  try {
+    const manifest = JSON.parse(await fs.readFile(path.join(generatedDir, 'generated-image-manifest.json'), 'utf8'));
+    for (const item of (Array.isArray(manifest.images) ? manifest.images : []).slice(0, 10)) {
+      const id = String(item.id || ''); const name = String(item.fileName || '');
+      if (!/^GPT\d{2}$/.test(id) || !/^gpt-\d+\.png$/i.test(name)) continue;
+      const file = path.resolve(generatedDir, name);
+      if (!inside(generatedDir, file) || !(await acceptedImage(file))) continue;
+      images.push({ id, fileName: name, path: file, origin: 'generated', slideId: String(item.slideId || ''), slideTitle: plain(item.slideTitle, 80) });
+    }
+  } catch { /* generated visuals are optional */ }
   const uploadedDir = path.join(taskDir, 'images');
   try {
     const names = (await fs.readdir(uploadedDir)).filter(name => /\.(?:png|jpe?g|gif)$/i.test(name))
@@ -124,6 +135,11 @@ function normalizePlan(candidate, assets, visualMode) {
       .map(item => plain(item, 120)).filter(Boolean).slice(0, 6);
     const requestedImageId = imageIds.has(String(raw?.imageId || '')) ? String(raw.imageId) : '';
     const imageId = ['image-hero', 'split', 'evidence', 'gallery'].includes(layout) ? requestedImageId : '';
+    const requestedSlideId = plain(raw?.slideId || '', 24);
+    const asset = assets.images.find(item => item.id === imageId);
+    if (imageId.startsWith('GPT') && (!asset?.slideId || asset.slideId !== requestedSlideId)) {
+      throw new Error('GPT 生图只能用于其绑定页面');
+    }
     const slide = {
       type,
       layout,
@@ -133,6 +149,7 @@ function normalizePlan(candidate, assets, visualMode) {
       headline: plain(raw?.headline, 180),
       bullets,
       imageId,
+      slideId: requestedSlideId || `slide-${String(index + 1).padStart(2, '0')}`,
       sourceIds: (Array.isArray(raw?.sourceIds) ? raw.sourceIds : []).map(String).filter(id => sourceIds.has(id)).slice(0, 8),
       notes: plain(raw?.notes, 600)
     };
@@ -149,6 +166,9 @@ function normalizePlan(candidate, assets, visualMode) {
   if (strict && !slides.slice(1, -1).some(slide => slide.imageId.startsWith('WEB'))) {
     throw new Error('严格配图模式要求至少一页使用已校验的网络视觉素材');
   }
+  const generatedUse = new Map();
+  slides.forEach(slide => { if (slide.imageId.startsWith('GPT')) generatedUse.set(slide.imageId, (generatedUse.get(slide.imageId) || 0) + 1); });
+  if ([...generatedUse.values()].some(count => count !== 1)) throw new Error('每张 GPT 生图必须只使用一次');
   return {
     title: plain(candidate.title || slides[0].title || '演示文稿', 120),
     audience: plain(candidate.audience, 160),

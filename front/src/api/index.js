@@ -16,6 +16,9 @@ export function getZoteroItems(refresh = false) {
 export function getZoteroCollections(refresh = false) {
   return get('/zotero/collections', refresh ? { refresh: true } : {})
 }
+export function submitZoteroAttachmentForTranslation(attachmentKey, fileName = '') {
+  return post(`/translate/from-zotero/${encodeURIComponent(attachmentKey)}${fileName ? `?fileName=${encodeURIComponent(fileName)}` : ''}`, {})
+}
 
 // ==================== GitHub 开源项目 API ====================
 
@@ -26,6 +29,7 @@ export function getGithubProjects() {
 export function getGithubRankings() {
   return get('/github-projects/rankings')
 }
+export function getHomeDailyStatus() { return get('/home/daily-status') }
 
 export function loginGithubProjectsAdmin(key) {
   return post('/github-projects/login', { key })
@@ -75,6 +79,64 @@ export function getSiteSettings() {
   return get('/auth/site-settings')
 }
 
+// ==================== 留言板与站内通知 API ====================
+
+export function getGuestbookMessages(page = 1) {
+  return get('/guestbook/messages', { page })
+}
+
+export function getGuestbookReplies(messageId, page = 1) {
+  return get(`/guestbook/messages/${encodeURIComponent(messageId)}/replies`, { page })
+}
+
+export function getGuestbookContext(entryId) {
+  return get(`/guestbook/entries/${encodeURIComponent(entryId)}/context`)
+}
+
+export function createGuestbookMessage(content) {
+  return post('/guestbook/messages', { content })
+}
+
+export function createGuestbookReply(messageId, content) {
+  return post(`/guestbook/messages/${encodeURIComponent(messageId)}/replies`, { content })
+}
+
+export function likeGuestbookEntry(entryId) {
+  return put(`/guestbook/entries/${encodeURIComponent(entryId)}/like`, {})
+}
+
+export function unlikeGuestbookEntry(entryId) {
+  return requestWithOptions(`/guestbook/entries/${encodeURIComponent(entryId)}/like`, { method: 'DELETE' })
+}
+
+export function deleteGuestbookEntry(entryId) {
+  return requestWithOptions(`/guestbook/entries/${encodeURIComponent(entryId)}`, { method: 'DELETE' })
+}
+
+export function getNotifications(page = 1) {
+  return get('/notifications', { page })
+}
+
+export function getUnreadNotificationCount() {
+  return get('/notifications/unread-count')
+}
+
+export function markNotificationRead(notificationId) {
+  return requestWithOptions(`/notifications/${encodeURIComponent(notificationId)}/read`, { method: 'PATCH' })
+}
+
+export function markAllNotificationsRead() {
+  return post('/notifications/read-all', {})
+}
+
+export function getAdminGuestbookEntries(type = 'all', page = 1) {
+  return get('/admin/guestbook/entries', { type, page })
+}
+
+export function deleteAdminGuestbookEntry(entryId) {
+  return requestWithOptions(`/admin/guestbook/entries/${encodeURIComponent(entryId)}`, { method: 'DELETE' })
+}
+
 export function getAdminAccounts() {
   return get('/admin/accounts')
 }
@@ -92,7 +154,7 @@ export function updateQuotaSettings({ translationCreditPerPage, pptCreditPerTask
   return put('/admin/accounts/settings', { translationCreditPerPage, pptCreditPerTask, imageLowCredits, imageMediumCredits, imageHighCredits, dailyCheckinEnabled, dailyCheckinMinCredits: dailyCheckinMinCredits ?? fallback, dailyCheckinMaxCredits: dailyCheckinMaxCredits ?? fallback })
 }
 
-// ==================== Codex 生图 API ====================
+// ==================== GPT 生图 API ====================
 
 export async function createImageGenerationTask(payload) {
   const form = new FormData()
@@ -101,7 +163,9 @@ export async function createImageGenerationTask(payload) {
   form.append('size', payload.size)
   form.append('quality', payload.quality)
   if (payload.parentTaskId) form.append('parentTaskId', payload.parentTaskId)
-  if (payload.referenceFile) form.append('referenceFile', payload.referenceFile)
+  for (const file of payload.referenceFiles || []) form.append('referenceFiles', file)
+  // Keep a single-file client compatible with the old server contract.
+  if (!payload.referenceFiles?.length && payload.referenceFile) form.append('referenceFile', payload.referenceFile)
   const csrf = localStorage.getItem('csrfToken')
   const response = await fetch(apiUrl('/image-generate/tasks'), {
     method: 'POST', credentials: /^https?:\/\//i.test(apiUrl('')) ? 'include' : 'same-origin',
@@ -118,6 +182,11 @@ export function imageGenerationResultUrl(taskId) { return apiUrl(`/image-generat
 export function imageGenerationPreviewUrl(taskId) { return apiUrl(`/image-generate/preview/${encodeURIComponent(taskId)}`) }
 export function imageGenerationStreamUrl(taskId) { return apiUrl(`/image-generate/stream/${encodeURIComponent(taskId)}`) }
 export function deleteImageGenerationTask(taskId) { return requestWithOptions(`/image-generate/tasks/${encodeURIComponent(taskId)}`, { method: 'DELETE' }) }
+export function cancelImageGenerationTask(taskId) { return post(`/image-generate/tasks/${encodeURIComponent(taskId)}/cancel`, {}) }
+export function getPresentationImageAssets() { return get('/image-generate/presentation-assets') }
+export function presentationImagePreviewUrl(assetId) { return apiUrl(`/image-generate/presentation-assets/${encodeURIComponent(assetId)}/preview`) }
+export function presentationImageResultUrl(assetId) { return apiUrl(`/image-generate/presentation-assets/${encodeURIComponent(assetId)}/result`) }
+export function deletePresentationImageAsset(assetId) { return requestWithOptions(`/image-generate/presentation-assets/${encodeURIComponent(assetId)}`, { method: 'DELETE' }) }
 
 export function updateAdminApiSettings(settings) {
   return put('/admin/accounts/api-settings', settings)
@@ -194,6 +263,7 @@ export async function startTranslation(taskId, startPage, endPage, fontFamily = 
   })
   return res.json()
 }
+export function cancelTranslation(taskId) { return post(`/translate/cancel/${encodeURIComponent(taskId)}`, {}) }
 
 /**
  * 获取翻译任务状态（断线重连用）
@@ -360,6 +430,8 @@ export function getPptGenerationStatus(taskId, accessToken) {
     headers: pptTaskHeaders(accessToken)
   })
 }
+
+export function cancelPptGenerationTask(taskId) { return post(`/ppt-generate/tasks/${encodeURIComponent(taskId)}/cancel`, {}) }
 
 export async function revisePptGenerationTask(taskId, accessToken, { prompt = '', idempotencyKey } = {}) {
   const csrfToken = localStorage.getItem('csrfToken')

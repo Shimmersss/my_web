@@ -146,17 +146,18 @@
                   </div>
 
                   <div class="pub-actions">
-                    <n-button
-                      v-for="att in viewableAttachments(item)"
-                      :key="att.key"
-                      size="small"
-                      type="primary"
-                      ghost
-                      @click="togglePdf(item.key, att)"
-                    >
-                      <template #icon><n-icon><DocumentTextOutline /></n-icon></template>
-                      {{ attachmentButtonLabel(item.key, att) }}
-                    </n-button>
+                    <template v-for="att in viewableAttachments(item)" :key="att.key">
+                      <n-button
+                        size="small"
+                        type="primary"
+                        ghost
+                        @click="togglePdf(item.key, att)"
+                      >
+                        <template #icon><n-icon><DocumentTextOutline /></n-icon></template>
+                        {{ attachmentButtonLabel(item.key, att) }}
+                      </n-button>
+                      <n-button v-if="auth.isRoot && att.isPdf" size="small" type="warning" ghost :loading="translationSubmitting === att.key" @click="submitToTranslation(att)">提交翻译</n-button>
+                    </template>
                     <n-dropdown
                       :options="exportOptions"
                       trigger="click"
@@ -231,11 +232,16 @@ import {
   ChevronBackOutline,
   ChevronForwardOutline
 } from '@vicons/ionicons5'
-import { getZoteroItems, getZoteroCollections } from '@/api'
+import { getZoteroItems, getZoteroCollections, submitZoteroAttachmentForTranslation } from '@/api'
+import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 
 const message = useMessage()
+const auth = useAuthStore()
+const router = useRouter()
+const translationSubmitting = ref('')
 
 const items = ref([])
 const collectionsRaw = ref([])
@@ -516,6 +522,18 @@ function itemMatchesSearch(item, query) {
 
 function hasPdf(item) {
   return (item.attachments || []).some(a => a.isPdf)
+}
+
+async function submitToTranslation(att) {
+  if (!auth.isRoot || !att?.key || translationSubmitting.value) return
+  translationSubmitting.value = att.key
+  try {
+    const result = await submitZoteroAttachmentForTranslation(att.key, att.filename || att.title || 'zotero-attachment.pdf')
+    if (!result.data?.taskId) throw new Error('翻译预览任务创建失败')
+    message.success('已导入翻译配置，请选择页码和参数')
+    router.push({ path: '/translate', query: { taskId: result.data.taskId, source: 'zotero' } })
+  } catch (e) { message.error(e.message || '提交翻译失败') }
+  finally { translationSubmitting.value = '' }
 }
 
 function viewableAttachments(item) {

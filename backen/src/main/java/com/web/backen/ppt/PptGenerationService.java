@@ -4,8 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.web.backen.auth.AuthUser;
+import com.web.backen.auth.AuthException;
 import com.web.backen.auth.QuotaService;
 import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.imagegen.PresentationImageGalleryService;
 import com.web.backen.config.PptGenerationConfig;
 import com.web.backen.translate.LlmService;
 import jakarta.annotation.PostConstruct;
@@ -74,6 +76,7 @@ public class PptGenerationService {
     private final SecureRandom secureRandom = new SecureRandom();
     private final PptxQualityGate qualityGate = new PptxQualityGate();
     private final ThreadPoolExecutor executor;
+    private PresentationImageGalleryService presentationImageGallery;
     private Path storageDir;
 
     public PptGenerationService(PptGenerationConfig config, PptInputExtractor inputExtractor,
@@ -129,6 +132,11 @@ public class PptGenerationService {
     public void shutdown() {
         executor.shutdownNow();
         inputExtractor.shutdown();
+    }
+
+    @Autowired(required = false)
+    void setPresentationImageGallery(PresentationImageGalleryService presentationImageGallery) {
+        this.presentationImageGallery = presentationImageGallery;
     }
 
     public List<Map<String, Object>> templates() {
@@ -296,6 +304,12 @@ public class PptGenerationService {
             throw new IllegalArgumentException("请输入提示词，或上传一份资料");
         }
         if (cleanPrompt.isBlank()) cleanPrompt = AUTO_PROMPT;
+        int validatedPageCount = normalizeRequestedPageCount(requestedPageCount);
+        String validatedImageMode = normalizeImageGenerationMode(imageGenerationMode, normalizedOutputFormat);
+        int validatedImageCount = normalizeRequestedImageGenerationCount(requestedImageGenerationCount, validatedImageMode, normalizedOutputFormat);
+        if (validatedPageCount > 0 && validatedImageCount > Math.max(0, validatedPageCount - 2)) {
+            throw new IllegalArgumentException("生图数量不能超过封面和结束页之外的内容页数量");
+        }
         String requestId = normalizeClientRequestId(clientRequestId);
         String claimKey = claimIdempotency(user, requestId);
         if (claimKey != null) {
@@ -318,10 +332,9 @@ public class PptGenerationService {
         session.setResearchMode(normalizeResearchMode(researchMode));
         session.setVisualMode(normalizeVisualMode(visualMode));
         session.setMotionMode(normalizeMotionMode(motionMode, normalizedOutputFormat));
-        session.setImageGenerationMode(normalizeImageGenerationMode(imageGenerationMode, normalizedOutputFormat));
-        session.setRequestedPageCount(normalizeRequestedPageCount(requestedPageCount));
-        session.setRequestedImageGenerationCount(normalizeRequestedImageGenerationCount(
-                requestedImageGenerationCount, session.getImageGenerationMode(), normalizedOutputFormat));
+        session.setImageGenerationMode(validatedImageMode);
+        session.setRequestedPageCount(validatedPageCount);
+        session.setRequestedImageGenerationCount(validatedImageCount);
         session.setFontFamily(normalizeFontFamily(fontFamily));
         session.setQuotaRequired(user != null && quotaService != null && !user.isRoot());
         session.setExtractionPercent(100);
@@ -474,7 +487,7 @@ public class PptGenerationService {
     }
 
     private int requestedImageGenerationCount(PptGenerationSession session) {
-        if (runtimeConfig == null || session == null || !"pptx".equals(session.getOutputFormat())) return 0;
+        if (runtimeConfig == null || session == null) return 0;
         return PptImageGenerationService.requestedImageCount(session.getImageGenerationMode(),
                 runtimeConfig.imageGenerationMaxImages(), session.getRequestedImageGenerationCount());
     }
@@ -492,6 +505,7 @@ public class PptGenerationService {
     }
 
     private void runGenerationTask(PptGenerationSession session) {
+        if ("cancelled".equals(session.getStatus())) return;
         session.setStatus("generating");
         session.setQueuePosition(0);
         saveAndProgress(session, 5, "planning", "正在启动演示 Agent");
@@ -507,16 +521,21 @@ public class PptGenerationService {
                     sourceText == null ? "" : sourceText, StandardCharsets.UTF_8);
             agentRunner.run(session, storageDir, (event, data) -> handleAgentEvent(session, event, data));
             verifyAgentArtifacts(session);
+            if ("cancelled".equals(session.getStatus())) return;
             session.setStatus("completed");
             session.setProgress(100);
             session.setProgressStage("completed");
             session.setCompletedAt(System.currentTimeMillis());
             saveMetadata(session);
+            if (presentationImageGallery != null) {
+                try { presentationImageGallery.publish(session); }
+                catch (Exception galleryError) { log.warn("演示生图图库发布失败: taskId={}", session.getTaskId(), galleryError); }
+            }
             emit(session, "done", Map.of("taskId", session.getTaskId(), "qaValid", session.isQaValid(),
                     "sourceCount", session.getSourceCount()));
             completeEmitters(session.getTaskId());
         } catch (Exception e) {
-            failTask(session, e);
+            if (!"cancelled".equals(session.getStatus())) failTask(session, e);
         } finally {
             cleanupHistory();
         }
@@ -776,11 +795,27 @@ public class PptGenerationService {
 
     public List<PptGenerationSession> getRecentSessions(AuthUser user, String accessTokens) {
         Set<String> allowed = parseAccessTokens(accessTokens);
-        if (user != null && user.isRoot()) return recent().toList();
-        return terminalSessions()
+        Stream<PptGenerationSession> terminal = terminalSessions()
                 .filter(session -> (user != null && session.getUserId() == user.id())
-                        || allowed.contains(session.getAccessToken()))
-                .limit(maxPerUserHistory()).toList();
+                        || allowed.contains(session.getAccessToken()));
+        Stream<PptGenerationSession> active = activeSessions()
+                .filter(session -> (user != null && (user.isRoot() || session.getUserId() == user.id()))
+                        || allowed.contains(session.getAccessToken()));
+        if (user != null && user.isRoot()) {
+            return Stream.concat(active, terminalSessions().limit(maxTotalHistory()))
+                    .sorted(Comparator.comparingLong(PptGenerationSession::getUpdatedAt).reversed()).toList();
+        }
+        return Stream.concat(active, terminal.limit(maxPerUserHistory()))
+                .sorted(Comparator.comparingLong(PptGenerationSession::getUpdatedAt).reversed()).toList();
+    }
+
+    public Map<String, Object> recentMetadata(AuthUser user) {
+        return Map.of("scope", user != null && user.isRoot() ? "all" : "own",
+                "retention", Map.of("maxPerUser", maxPerUserHistory(), "maxTotal", maxTotalHistory()));
+    }
+
+    public long latestTaskUpdateAt() {
+        return sessions.values().stream().mapToLong(PptGenerationSession::getUpdatedAt).max().orElse(0L);
     }
 
     private Stream<PptGenerationSession> recent() {
@@ -790,8 +825,14 @@ public class PptGenerationService {
     private Stream<PptGenerationSession> terminalSessions() {
         updateQueuePositions();
         return sessions.values().stream()
-                .filter(session -> Set.of("completed", "error").contains(session.getStatus()))
+                .filter(session -> Set.of("completed", "error", "cancelled").contains(session.getStatus()))
                 .sorted(Comparator.comparingLong(PptGenerationSession::getCreatedAt).reversed());
+    }
+
+    private Stream<PptGenerationSession> activeSessions() {
+        updateQueuePositions();
+        return sessions.values().stream()
+                .filter(session -> !Set.of("completed", "error", "cancelled").contains(session.getStatus()));
     }
 
     private int maxPerUserHistory() {
@@ -921,9 +962,7 @@ public class PptGenerationService {
         if (!Set.of("off", "supplement", "prefer").contains(value)) {
             throw new IllegalArgumentException("AI 生图模式只能是 off、supplement 或 prefer");
         }
-        // HTML Codex plans use the controlled visual-search prefetcher; paid Images API
-        // generation remains a PPTX-only option until its HTML credit/UI contract exists.
-        return "pptx".equals(outputFormat) ? value : "off";
+        return value;
     }
 
     private int normalizeRequestedPageCount(Integer requestedPageCount) {
@@ -935,7 +974,7 @@ public class PptGenerationService {
     }
 
     private int normalizeRequestedImageGenerationCount(Integer requestedCount, String mode, String outputFormat) {
-        if (!"pptx".equals(outputFormat) || "off".equals(mode) || requestedCount == null || requestedCount == 0) return 0;
+        if ("off".equals(mode) || requestedCount == null || requestedCount == 0) return 0;
         if (requestedCount < 1 || requestedCount > MAX_AI_IMAGES_PER_TASK) {
             throw new IllegalArgumentException("AI 生图数量请设置在 1 到 " + MAX_AI_IMAGES_PER_TASK + " 张之间");
         }
@@ -1028,6 +1067,21 @@ public class PptGenerationService {
         completeEmitters(session.getTaskId());
     }
 
+    public void cancel(String taskId, AuthUser user) {
+        PptGenerationSession session = getSession(taskId);
+        if (!canAccess(session, user)) throw new AuthException(403, "无权访问该任务");
+        boolean wasGenerating;
+        synchronized (session) {
+            if (!Set.of("queued", "generating").contains(session.getStatus())) throw new IllegalStateException("当前任务无法取消");
+            wasGenerating = "generating".equals(session.getStatus());
+            session.setStatus("cancelled"); session.setProgressStage("cancelled"); session.setErrorMessage("已由用户取消"); session.setCompletedAt(System.currentTimeMillis());
+            try { refundIfNeeded(session, "PPT 任务已取消退回额度"); } catch (Exception e) { session.setRefundPending(true); session.setRefundError("退款待重试"); }
+            saveMetadata(session);
+        }
+        if (wasGenerating && agentRunner != null) agentRunner.cancelActiveTask();
+        emit(session, "cancelled", Map.of("message", "任务已取消")); completeEmitters(taskId); updateQueuePositions(); cleanupHistory();
+    }
+
     private void handleCreationFailure(PptGenerationSession session, String claimKey,
                                        Exception cause, String refundReason) {
         boolean keep = persistCreationFailure(session, cause, refundReason);
@@ -1082,7 +1136,7 @@ public class PptGenerationService {
         data.put("iteration", session.getAgentIteration());
         data.put("message", session.getErrorMessage() == null ? "" : session.getErrorMessage());
         if ("completed".equals(session.getStatus())) send(emitter, "done", data);
-        else if ("error".equals(session.getStatus())) send(emitter, "task-error", data);
+        else if ("error".equals(session.getStatus()) || "cancelled".equals(session.getStatus())) send(emitter, "task-error", data);
         else send(emitter, "progress", data);
     }
 
@@ -1139,7 +1193,7 @@ public class PptGenerationService {
                     }
                     if ("creating".equals(session.getStatus())) {
                         reconcileCreatingSession(session);
-                    } else if (!Set.of("completed", "error").contains(session.getStatus())) {
+                    } else if (!Set.of("completed", "error", "cancelled").contains(session.getStatus())) {
                         session.setStatus("queued");
                         session.setProgressStage("queued");
                         session.setErrorMessage(null);
@@ -1237,7 +1291,7 @@ public class PptGenerationService {
 
     public void cleanupHistory() {
         List<PptGenerationSession> terminal = sessions.values().stream()
-                .filter(session -> Set.of("completed", "error").contains(session.getStatus()))
+                .filter(session -> Set.of("completed", "error", "cancelled").contains(session.getStatus()))
                 .filter(session -> !session.isRefundPending())
                 .sorted(Comparator.comparingLong(PptGenerationSession::getCreatedAt).reversed()).toList();
         Map<Long, Integer> perUserCounts = new LinkedHashMap<>();
@@ -1353,6 +1407,7 @@ public class PptGenerationService {
             case "revising" -> "Agent 返修";
             case "completed" -> "演示生成完成";
             case "error" -> "演示生成失败";
+            case "cancelled" -> "任务已取消";
             default -> "处理中";
         };
     }

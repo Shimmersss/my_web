@@ -2,6 +2,7 @@ package com.web.backen.translate;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthUser;
+import com.web.backen.auth.AuthException;
 import com.web.backen.auth.QuotaService;
 import com.web.backen.auth.RuntimeConfigService;
 import com.web.backen.config.TranslationConfig;
@@ -30,6 +31,8 @@ import java.util.stream.Stream;
 public class TranslationService {
 
     private static final Logger log = LoggerFactory.getLogger(TranslationService.class);
+    private static final int STABLE_LONG_DOCUMENT_CHUNK_PAGES = 1;
+    private static final int STABLE_LONG_DOCUMENT_MIN_PAGES = 50;
     private final PdfParseService pdfParseService;
     private final BabelDocService babelDocService;
     private final TranslationConfig config;
@@ -39,6 +42,7 @@ public class TranslationService {
     private final RuntimeConfigService runtimeConfig;
     private final ConcurrentHashMap<String, TranslationSession> sessions = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<SseEmitter>> emitters = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Future<?>> taskFutures = new ConcurrentHashMap<>();
     private final ThreadPoolExecutor executor;
     private Path storageDir;
 
@@ -167,7 +171,7 @@ public class TranslationService {
             if (user != null && !user.isRoot() && session.getUserId() != user.id()) {
                 throw new IllegalArgumentException("任务不存在");
             }
-            if (Set.of("queued", "translating", "completed").contains(session.getStatus())) {
+            if (Set.of("queued", "translating", "completed", "cancelled").contains(session.getStatus())) {
                 return session;
             }
             int effectiveStart = Math.max(1, startPage);
@@ -212,7 +216,7 @@ public class TranslationService {
         }
 
         try {
-            executor.execute(() -> runTranslation(session));
+            taskFutures.put(session.getTaskId(), executor.submit(() -> runTranslation(session)));
         } catch (RejectedExecutionException e) {
             refundIfNeeded(session, "翻译队列已满自动退回额度");
             session.setStatus("preview");
@@ -234,6 +238,10 @@ public class TranslationService {
     public TranslationSession getSession(String taskId) {
         updateQueuePositions();
         return sessions.get(taskId);
+    }
+
+    public long latestTaskUpdateAt() {
+        return sessions.values().stream().mapToLong(TranslationSession::getUpdatedAt).max().orElse(0L);
     }
 
     private void assertDeploymentNotLocked() {
@@ -357,6 +365,7 @@ public class TranslationService {
     }
 
     private void runTranslation(TranslationSession session) {
+        if ("cancelled".equals(session.getStatus())) return;
         session.setStatus("translating");
         session.setProgressStage("starting");
         session.setQueuePosition(0);
@@ -369,16 +378,37 @@ public class TranslationService {
 
         while (true) {
             try {
+                // A pressure-triggered process has just been terminated.  Waiting here is
+                // essential: translatePdf otherwise starts its first pending chunk before
+                // its between-chunk recovery gate has a chance to run.
+                if (!session.isImageInput() && session.isResourceDowngraded()) {
+                    emit(session, "progress", Map.of(
+                            "progress", session.getProgress(),
+                            "stage", "resource-recovery",
+                            "stageLabel", stageLabel("resource-recovery"),
+                            "current", 0,
+                            "total", 0,
+                            "qps", session.getQps()));
+                    babelDocService.awaitResourceRecovery();
+                }
                 if (session.isImageInput()) {
                     imageTranslationService.translateImage(
                             session.getInputImagePath(), session.getTaskDir(), session.getFileName(), session.getFontFamily(),
                             progress -> sendProgress(session, progress));
                 } else {
-                    babelDocService.translatePdf(
-                            session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
-                            session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
-                            progress -> sendProgress(session, progress));
+                    int pages = session.getEndPage() - session.getStartPage() + 1;
+                    if (session.getQps() <= stableQps() && pages >= STABLE_LONG_DOCUMENT_MIN_PAGES) {
+                        babelDocService.translatePdf(session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
+                                session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
+                                session.getRequestedQps(), STABLE_LONG_DOCUMENT_CHUNK_PAGES,
+                                progress -> sendProgress(session, progress));
+                    } else {
+                        babelDocService.translatePdf(session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
+                                session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
+                                progress -> sendProgress(session, progress));
+                    }
                 }
+                if ("cancelled".equals(session.getStatus())) break;
                 session.setProgress(100);
                 session.setProgressStage("completed");
                 session.setCompletedAt(System.currentTimeMillis());
@@ -388,29 +418,46 @@ public class TranslationService {
                 completeEmitters(session.getTaskId());
                 break;
             } catch (BabelDocService.ResourcePressureException e) {
+                if ("cancelled".equals(session.getStatus())) break;
                 if (downgradeForResourcePressure(session, e)) {
                     continue;
                 }
                 failTranslation(session, e);
                 break;
             } catch (Exception e) {
+                if ("cancelled".equals(session.getStatus())) break;
                 failTranslation(session, e);
                 break;
             } finally {
+                if (!"translating".equals(session.getStatus())) taskFutures.remove(session.getTaskId());
                 cleanupHistory();
                 updateQueuePositions();
             }
         }
     }
 
+    public void cancel(String taskId, AuthUser user) {
+        TranslationSession session = getSession(taskId);
+        if (!canAccess(session, user)) throw new AuthException(403, "无权访问该任务");
+        synchronized (session) {
+            if (!Set.of("queued", "translating").contains(session.getStatus())) throw new IllegalStateException("当前任务无法取消");
+            session.setStatus("cancelled"); session.setProgressStage("cancelled"); session.setErrorMessage("已由用户取消"); session.setCompletedAt(System.currentTimeMillis());
+            try { refundIfNeeded(session, "翻译任务已取消退回额度"); } catch (RuntimeException e) { session.setRefundPending(true); session.setRefundError("退款待重试"); }
+            saveMetadata(session);
+        }
+        Future<?> future = taskFutures.remove(taskId); if (future != null) future.cancel(true);
+        emit(session, "cancelled", Map.of("message", "任务已取消")); completeEmitters(taskId); updateQueuePositions(); cleanupHistory();
+    }
+
     private boolean downgradeForResourcePressure(TranslationSession session, BabelDocService.ResourcePressureException e) {
         int stableQps = stableQps();
-        if (session.getQps() <= stableQps || session.getResourceDowngradeCount() > 0) {
+        int failedQps = e.getQps() > 0 ? e.getQps() : session.getQps();
+        if (failedQps <= stableQps) {
             return false;
         }
 
         log.warn("翻译任务触发资源保护，自动降级重试: taskId={}, qps={} -> {}, reason={}",
-                session.getTaskId(), session.getQps(), stableQps, e.getMessage());
+                session.getTaskId(), failedQps, stableQps, e.getMessage());
         session.setResourceDowngraded(true);
         session.setResourceDowngradeReason(e.getMessage());
         session.setResourceDowngradeCount(session.getResourceDowngradeCount() + 1);
@@ -503,7 +550,7 @@ public class TranslationService {
         String status = session.getStatus();
         if ("completed".equals(status)) {
             sendAndComplete(emitter, "done", Map.of("taskId", session.getTaskId()));
-        } else if ("error".equals(status)) {
+        } else if ("error".equals(status) || "cancelled".equals(status)) {
             sendAndComplete(emitter, "task-error", Map.of("message",
                     session.getErrorMessage() == null ? "翻译失败" : session.getErrorMessage()));
         } else if ("queued".equals(status)) {
@@ -728,7 +775,7 @@ public class TranslationService {
         cleanupSessionsAfter(previews);
 
         List<TranslationSession> terminal = sessions.values().stream()
-                .filter(session -> Set.of("completed", "error").contains(session.getStatus()))
+                .filter(session -> Set.of("completed", "error", "cancelled").contains(session.getStatus()))
                 .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt).reversed())
                 .toList();
         cleanupSessionsAfter(terminal);
@@ -828,6 +875,7 @@ public class TranslationService {
             case "image-render" -> "正在把译文覆盖回图片";
             case "image-export" -> "正在生成译文图像和 PDF";
             case "resource-downgrade" -> "内存压力较高，已切换稳定模式重试";
+            case "resource-recovery" -> "正在等待服务器内存恢复";
             case "chunk-wait" -> "正在释放内存，准备下一批";
             case "chunk-completed" -> "已完成一批页面";
             case "merge" -> "正在合并翻译结果";
@@ -845,6 +893,7 @@ public class TranslationService {
             case "Save PDF" -> "保存 PDF";
             case "completed" -> "翻译完成";
             case "error" -> "翻译失败";
+            case "cancelled" -> "任务已取消";
             default -> stage == null || stage.isBlank() ? "处理中" : stage;
         };
     }

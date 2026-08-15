@@ -1,11 +1,12 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { claimDailyCheckin, getCurrentUser, getSiteSettings, loginAccount, logoutAccount, registerAccount } from '@/api'
+import { claimDailyCheckin, getCurrentUser, getSiteSettings, getUnreadNotificationCount, loginAccount, logoutAccount, registerAccount } from '@/api'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const loading = ref(false)
-  const visibility = ref({ Publications: 'PUBLIC', Translate: 'USER', Contact: 'USER', ImageGenerate: 'USER', News: 'PUBLIC' })
+  const visibility = ref({ Publications: 'PUBLIC', Translate: 'USER', Contact: 'USER', ImageGenerate: 'USER', News: 'PUBLIC', Guestbook: 'PUBLIC' })
+  const unreadNotifications = ref(0)
   const authPrompt = ref('')
   const pendingPath = ref('')
 
@@ -28,6 +29,7 @@ export const useAuthStore = defineStore('auth', () => {
   function applyUser(data) {
     if (!data || typeof data !== 'object') {
       clearPptTaskSession()
+      unreadNotifications.value = 0
       user.value = null
       return
     }
@@ -46,6 +48,7 @@ export const useAuthStore = defineStore('auth', () => {
         const site = await getSiteSettings()
         visibility.value = { ...visibility.value, ...(site.data?.visibility || {}) }
       } catch {}
+      if (user.value) await refreshUnreadNotifications().catch(() => {})
       return user.value
     } finally {
       loading.value = false
@@ -55,6 +58,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function login(username, password) {
     const res = await loginAccount(username, password)
     applyUser(res.data)
+    await refreshUnreadNotifications().catch(() => {})
     return user.value
   }
 
@@ -69,6 +73,7 @@ export const useAuthStore = defineStore('auth', () => {
       localStorage.removeItem('csrfToken')
       clearPptTaskSession()
       user.value = null
+      unreadNotifications.value = 0
     }
   }
 
@@ -90,10 +95,17 @@ export const useAuthStore = defineStore('auth', () => {
     return level === 'PUBLIC' || (level === 'USER' && isLoggedIn.value) || (level === 'ROOT' && isRoot.value)
   }
 
+  async function refreshUnreadNotifications() {
+    if (!user.value) { unreadNotifications.value = 0; return 0 }
+    const response = await getUnreadNotificationCount()
+    unreadNotifications.value = Number(response.data?.count || 0)
+    return unreadNotifications.value
+  }
+
   function requestLogin(path) { pendingPath.value = path || '/'; authPrompt.value = 'login' }
   function requestPermissionDenied() { pendingPath.value = ''; authPrompt.value = 'forbidden' }
   function clearAuthPrompt() { authPrompt.value = '' }
   function consumePendingPath() { const path = pendingPath.value; pendingPath.value = ''; authPrompt.value = ''; return path }
 
-  return { user, loading, isLoggedIn, isRoot, credits, dailyCheckin, visibility, authPrompt, canView, requestLogin, requestPermissionDenied, clearAuthPrompt, consumePendingPath, refresh, login, register, logout, updateCredits, checkIn }
+  return { user, loading, isLoggedIn, isRoot, credits, dailyCheckin, visibility, unreadNotifications, authPrompt, canView, requestLogin, requestPermissionDenied, clearAuthPrompt, consumePendingPath, refresh, refreshUnreadNotifications, login, register, logout, updateCredits, checkIn }
 })

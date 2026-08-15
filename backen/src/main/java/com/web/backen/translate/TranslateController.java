@@ -4,6 +4,7 @@ import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthService;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.QuotaService;
+import com.web.backen.zotero.ZoteroService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,11 +32,42 @@ public class TranslateController {
     private final TranslationService translationService;
     private final AuthService authService;
     private final QuotaService quotaService;
+    private final ZoteroService zoteroService;
 
-    public TranslateController(TranslationService translationService, AuthService authService, QuotaService quotaService) {
+    public TranslateController(TranslationService translationService, AuthService authService, QuotaService quotaService,
+                               ZoteroService zoteroService) {
         this.translationService = translationService;
         this.authService = authService;
         this.quotaService = quotaService;
+        this.zoteroService = zoteroService;
+    }
+
+    /** Root-only server-side handoff so a Zotero PDF never transits the browser before translation preview. */
+    @PostMapping("/from-zotero/{attachmentKey}")
+    public ResponseEntity<?> fromZotero(@PathVariable String attachmentKey,
+                                        @RequestParam(required = false, defaultValue = "zotero-attachment.pdf") String fileName,
+                                        HttpServletRequest request) {
+        try {
+            authService.requireCsrf(request);
+            AuthUser user = authService.requireRoot(request);
+            if (attachmentKey == null || !attachmentKey.matches("[A-Za-z0-9]{8}")) return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "附件标识无效"));
+            String safeName = java.nio.file.Path.of(fileName == null ? "zotero-attachment.pdf" : fileName).getFileName().toString().replaceAll("[^A-Za-z0-9._() -]", "_");
+            if (!safeName.toLowerCase(java.util.Locale.ROOT).endsWith(".pdf")) safeName += ".pdf";
+            ZoteroService.ProxiedFile file = zoteroService.fetchItemFile(attachmentKey);
+            if (file.contentLength() > 50L * 1024 * 1024) { try { file.body().close(); } catch (Exception ignored) { } return ResponseEntity.badRequest().body(Map.of("code", 400, "message", "文件大小超过 50MB 限制")); }
+            TranslationSession session = translationService.createSessionPreview(safeName, file.contentType().toString(), new LimitedInputStream(file.body(), 50L * 1024 * 1024), user.id());
+            return ResponseEntity.ok(Map.of("code", 200, "data", Map.of("taskId", session.getTaskId(), "fileName", session.getFileName(), "inputKind", session.getInputKind(), "totalPages", session.getTotalPages(), "textQualitySuspicious", session.isTextQualitySuspicious(), "textQualityWarning", session.getTextQualityWarning() == null ? "" : session.getTextQualityWarning())));
+        } catch (AuthException e) { return authError(e); }
+        catch (IllegalArgumentException e) { return ResponseEntity.badRequest().body(Map.of("code", 400, "message", e.getMessage())); }
+        catch (Exception e) { log.error("Zotero 文献提交翻译失败: attachment={}", attachmentKey, e); return ResponseEntity.status(502).body(Map.of("code", 502, "message", "附件暂时无法读取或解析")); }
+    }
+
+    private static final class LimitedInputStream extends java.io.FilterInputStream {
+        private final long limit; private long read;
+        private LimitedInputStream(java.io.InputStream input, long limit) { super(input); this.limit = limit; }
+        @Override public int read() throws java.io.IOException { int value = super.read(); if (value >= 0) count(1); return value; }
+        @Override public int read(byte[] bytes, int off, int len) throws java.io.IOException { int count = super.read(bytes, off, len); if (count > 0) count(count); return count; }
+        private void count(int amount) throws java.io.IOException { read += amount; if (read > limit) throw new java.io.IOException("文件大小超过 50MB 限制"); }
     }
 
     /**
@@ -135,6 +167,14 @@ public class TranslateController {
             log.error("开始翻译失败: taskId={}", taskId, e);
             return ResponseEntity.internalServerError().body(Map.of("code", 500, "message", "处理失败: " + e.getMessage()));
         }
+    }
+
+    @PostMapping("/cancel/{taskId}")
+    public ResponseEntity<?> cancel(@PathVariable String taskId, HttpServletRequest request) {
+        try { authService.requireCsrf(request); AuthUser user = authService.requireUser(request); translationService.cancel(taskId, user); return ResponseEntity.ok(Map.of("code", 200, "data", Map.of("cancelled", true, "credits", quotaService.balance(user.id())))); }
+        catch (AuthException e) { return authError(e); }
+        catch (IllegalArgumentException e) { return ResponseEntity.status(404).body(Map.of("code", 404, "message", e.getMessage())); }
+        catch (IllegalStateException e) { return ResponseEntity.status(409).body(Map.of("code", 409, "message", e.getMessage())); }
     }
 
     /**

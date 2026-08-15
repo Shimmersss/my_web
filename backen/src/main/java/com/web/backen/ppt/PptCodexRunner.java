@@ -109,7 +109,13 @@ public class PptCodexRunner {
                         config.getCodexMaxProjectFiles(), config.getCodexMaxProjectBytes());
             }
             Files.writeString(input.resolve("request.txt"), session.getPrompt(), StandardCharsets.UTF_8);
-            imageGeneration.generate(session, input.resolve("generated-images"), events);
+            Path generatedImages = input.resolve("generated-images");
+            imageGeneration.generate(session, generatedImages, events);
+            if (Files.isDirectory(generatedImages)) {
+                copyTree(generatedImages, session.getTaskDir().resolve("generated-images"),
+                        config.getCodexMaxProjectFiles(), config.getCodexMaxProjectBytes());
+            }
+            copyIfPresent(session.getTaskDir().resolve("presentation-plan.json"), input.resolve("presentation-plan.json"));
 
             String providerBaseUrl = runtime.codexPptProviderBaseUrl();
             AuthSource auth = prepareAuth(codex, codexHome, apiKey);
@@ -218,6 +224,13 @@ public class PptCodexRunner {
             }
             copyIfPresent(session.getTaskDir().resolve("previous-agent-plan.json"), input.resolve("previous-agent-plan.json"));
             Files.writeString(input.resolve("request.txt"), session.getPrompt(), StandardCharsets.UTF_8);
+            Path generatedImages = input.resolve("generated-images");
+            imageGeneration.generate(session, generatedImages, events);
+            if (Files.isDirectory(generatedImages)) {
+                copyTree(generatedImages, session.getTaskDir().resolve("generated-images"),
+                        config.getCodexMaxProjectFiles(), config.getCodexMaxProjectBytes());
+            }
+            copyIfPresent(session.getTaskDir().resolve("presentation-plan.json"), input.resolve("presentation-plan.json"));
             objectMapper.writerWithDefaultPrettyPrinter().writeValue(input.resolve("assets.json").toFile(), htmlAssets(session));
 
             String providerBaseUrl = runtime.codexPptProviderBaseUrl();
@@ -271,6 +284,20 @@ public class PptCodexRunner {
 
     private Map<String, Object> htmlAssets(PptGenerationSession session) throws IOException {
         List<Map<String, Object>> assets = new ArrayList<>();
+        Path generatedManifest = session.getTaskDir().resolve("generated-images/generated-image-manifest.json");
+        if (Files.isRegularFile(generatedManifest) && Files.size(generatedManifest) <= 512L * 1024) {
+            JsonNode images = objectMapper.readTree(generatedManifest.toFile()).path("images");
+            if (images.isArray()) for (JsonNode image : images) {
+                String id = image.path("id").asText("");
+                String fileName = image.path("fileName").asText("");
+                if (!id.matches("GPT\\d{2}") || !fileName.matches("gpt-\\d+\\.png")) continue;
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("id", id); item.put("fileName", fileName); item.put("origin", "generated");
+                item.put("slideId", image.path("slideId").asText(""));
+                item.put("slideTitle", image.path("slideTitle").asText(""));
+                item.put("rightsStatus", "generated"); assets.add(item);
+            }
+        }
         if (Files.isDirectory(session.getImagesDir())) {
             try (Stream<Path> stream = Files.list(session.getImagesDir())) {
                 List<Path> uploaded = stream.filter(Files::isRegularFile)
@@ -322,6 +349,7 @@ public class PptCodexRunner {
                 Theme: %s. Requested font: %s. Motion mode: %s. Visual mode: %s. Research mode: %s.
                 %s
                 Assets in ./input/assets.json are the only allowed imageId values. Uxx items are user uploads.
+                GPTxx items are slide-bound server-generated visuals: use each only on its declared slideId and never cite it.
                 WEBxx items are server-validated search thumbnails; their rightsStatus may be unverified, so
                 never call them licensed. Use an image only when its title/description is clearly topical.
                 In strict visual mode, at least one non-cover/non-closing page must use a WEBxx image.
@@ -332,7 +360,7 @@ public class PptCodexRunner {
                    "layout":"cover|section|statement|image-hero|split|evidence|stats|process|comparison|timeline|quote|gallery|closing",
                    "tone":"base|light|deep","section":"...","title":"...","headline":"...",
                    "bullets":["..."],"items":[{"label":"...","value":"...","detail":"..."}],
-                   "imageId":"U01|WEB01|","sourceIds":["WEB01"],"notes":"..."}
+                   "slideId":"slide-01","imageId":"U01|WEB01|GPT01|","sourceIds":["WEB01"],"notes":"..."}
                 ]}
                 Produce 3-30 pages. First page must be cover and last page closing. Use stats only for real
                 numbers, process/timeline only for ordered relations, comparison only for genuine sides,
@@ -791,10 +819,16 @@ public class PptCodexRunner {
                 throw new CodexProcessException(exitCode, outputLog.toString());
             }
             return outputLog.toString();
+        } catch (InterruptedException interrupted) {
+            terminate(process);
+            throw interrupted;
         } finally {
             active.remove(process);
         }
     }
+
+    /** PPT generation is single-worker, so cancelling the active task may safely terminate its child process tree. */
+    public void cancelActiveProcesses() { active.forEach(this::terminate); }
 
     /**
      * Codex agent shell calls resolve `codex-linux-sandbox` from PATH. The
@@ -899,8 +933,9 @@ public class PptCodexRunner {
                 The user request is in ./input/request.txt. Any extracted source text, validated upload and extracted figures are under ./input/.
                 Selected design key: %s. Requested font: %s. Research mode: %s. AI image mode: %s.
                 If ./input/generated-images/ exists, its PNGs were generated by the server with a separately configured
-                Images API. In supplement mode, use them only for fitting missing visual slots after stronger uploaded or
-                source-grounded material. In prefer mode, use them as the first visual option where semantically suitable.
+                Images API. Read ./input/presentation-plan.json before authoring. Each GPT image has a slideId binding;
+                use every GPT image exactly once and only on its bound slideId. In supplement mode, use them only for fitting
+                missing visual slots after stronger uploaded or source-grounded material. In prefer mode, use them as the first visual option where semantically suitable.
                 They are not factual sources: never display a source URL/citation for them and never add text to them.
                 If ./input/web-images/ exists, it contains server-downloaded, validation-passed search candidates plus
                 image-assets.json. Prefer topical uploaded/extracted figures and explicitly licensed assets. Search-indexed

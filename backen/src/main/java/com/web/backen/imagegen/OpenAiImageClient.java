@@ -56,11 +56,19 @@ public class OpenAiImageClient {
 
     public byte[] edit(String prompt, String size, String quality, Path reference, String contentType)
             throws IOException, InterruptedException {
+        return edit(prompt, size, quality, List.of(reference), List.of(contentType));
+    }
+
+    public byte[] edit(String prompt, String size, String quality, List<Path> references, List<String> contentTypes)
+            throws IOException, InterruptedException {
         ensureConfigured();
+        if (references == null || references.isEmpty() || references.size() > 4 || contentTypes == null || contentTypes.size() != references.size()) {
+            throw new IllegalArgumentException("参考图数量需为 1–4 张");
+        }
         String boundary = "----WebImage" + UUID.randomUUID().toString().replace("-", "");
-        byte[] body = multipart(boundary, prompt, size, quality, reference, contentType);
+        HttpRequest.BodyPublisher body = multipartPublisher(boundary, prompt, size, quality, references, contentTypes);
         HttpRequest request = request(runtime.imageEditEndpoint(), "multipart/form-data; boundary=" + boundary,
-                HttpRequest.BodyPublishers.ofByteArray(body));
+                body);
         return execute(request);
     }
 
@@ -99,27 +107,32 @@ public class OpenAiImageClient {
         return result;
     }
 
-    private byte[] multipart(String boundary, String prompt, String size, String quality,
-                             Path reference, String contentType) throws IOException {
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        field(out, boundary, "model", runtime.imageGenerationModel());
-        field(out, boundary, "prompt", prompt);
-        field(out, boundary, "size", size);
-        field(out, boundary, "quality", quality);
-        field(out, boundary, "output_format", "png");
-        field(out, boundary, "n", "1");
-        out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"image[]\"; filename=\"reference"
-                + ("image/jpeg".equals(contentType) ? ".jpg" : ".png") + "\"\r\nContent-Type: " + contentType
-                + "\r\n\r\n").getBytes(StandardCharsets.UTF_8));
-        Files.copy(reference, out);
-        out.write("\r\n".getBytes(StandardCharsets.UTF_8));
-        out.write(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8));
-        return out.toByteArray();
+    private HttpRequest.BodyPublisher multipartPublisher(String boundary, String prompt, String size, String quality,
+                                                          List<Path> references, List<String> contentTypes) throws IOException {
+        List<HttpRequest.BodyPublisher> parts = new java.util.ArrayList<>();
+        field(parts, boundary, "model", runtime.imageGenerationModel());
+        field(parts, boundary, "prompt", prompt);
+        field(parts, boundary, "size", size);
+        field(parts, boundary, "quality", quality);
+        field(parts, boundary, "output_format", "png");
+        field(parts, boundary, "n", "1");
+        for (int index = 0; index < references.size(); index++) {
+            Path reference = references.get(index);
+            String contentType = contentTypes.get(index);
+            if (!Files.isRegularFile(reference)) throw new IOException("参考图文件不存在");
+            parts.add(HttpRequest.BodyPublishers.ofByteArray(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"image[]\"; filename=\"reference-"
+                    + (index + 1) + ("image/jpeg".equals(contentType) ? ".jpg" : ".png") + "\"\r\nContent-Type: " + contentType
+                    + "\r\n\r\n").getBytes(StandardCharsets.UTF_8)));
+            parts.add(HttpRequest.BodyPublishers.ofFile(reference));
+            parts.add(HttpRequest.BodyPublishers.ofByteArray("\r\n".getBytes(StandardCharsets.UTF_8)));
+        }
+        parts.add(HttpRequest.BodyPublishers.ofByteArray(("--" + boundary + "--\r\n").getBytes(StandardCharsets.UTF_8)));
+        return HttpRequest.BodyPublishers.concat(parts.toArray(HttpRequest.BodyPublisher[]::new));
     }
 
-    private void field(ByteArrayOutputStream out, String boundary, String name, String value) throws IOException {
-        out.write(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name
-                + "\"\r\n\r\n" + value + "\r\n").getBytes(StandardCharsets.UTF_8));
+    private void field(List<HttpRequest.BodyPublisher> parts, String boundary, String name, String value) {
+        parts.add(HttpRequest.BodyPublishers.ofByteArray(("--" + boundary + "\r\nContent-Disposition: form-data; name=\"" + name
+                + "\"\r\n\r\n" + value + "\r\n").getBytes(StandardCharsets.UTF_8)));
     }
 
     private byte[] readLimited(InputStream input, long limit) throws IOException {

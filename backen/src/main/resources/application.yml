@@ -1,4 +1,7 @@
 server:
+  # The public entry point is Nginx/ESA/Tunnel. Keep the application socket
+  # loopback-only so port 8080 cannot become an origin-bypass path.
+  address: ${SERVER_ADDRESS:127.0.0.1}
   port: 8080
 
 spring:

@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict'
 import { readFile, stat } from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 const root = path.resolve(process.argv[2] || 'dist')
 const read = file => readFile(path.join(root, file))
+const scriptDir = path.dirname(fileURLToPath(import.meta.url))
+const signingFingerprintFile = path.resolve(scriptDir, '../../android/internal-signing-cert.sha256')
 
 function pngDimensions(buffer) {
   assert.equal(buffer.subarray(1, 4).toString('ascii'), 'PNG', 'file must be a PNG')
@@ -38,8 +41,19 @@ for (const forbidden of ['/api', '/pptd-editor', 'event-stream']) {
 }
 
 const assetLinks = JSON.parse(await read('.well-known/assetlinks.json'))
-assert.equal(assetLinks[0].target.package_name, 'help.shimmer.app')
-assert.match(assetLinks[0].target.sha256_cert_fingerprints[0], /^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/)
+assert.ok(Array.isArray(assetLinks), 'Digital Asset Links must be a JSON array')
+assert.equal(assetLinks.length, 1, 'Digital Asset Links must contain exactly one authorization')
+const [assetLink] = assetLinks
+const expectedSigningFingerprint = (await readFile(signingFingerprintFile, 'utf8')).trim()
+assert.match(expectedSigningFingerprint, /^(?:[0-9A-F]{2}:){31}[0-9A-F]{2}$/)
+assert.deepEqual(assetLink, {
+  relation: ['delegate_permission/common.handle_all_urls'],
+  target: {
+    namespace: 'android_app',
+    package_name: 'help.shimmer.app',
+    sha256_cert_fingerprints: [expectedSigningFingerprint]
+  }
+})
 assert.ok((await stat(path.join(root, 'offline.html'))).size > 300)
 
 console.log('[pwa-check] manifest, icons, offline policy and Digital Asset Links verified')

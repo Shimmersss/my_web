@@ -13,11 +13,21 @@ PACKAGE_ROOT="$RELEASE_DIR/web-homepage"
 NPM_CACHE_DIR="$RELEASE_DIR/npm-cache"
 
 if [[ -f "$LOCAL_CONFIG" ]]; then
+  if local_config_mode="$(stat -f '%Lp' "$LOCAL_CONFIG" 2>/dev/null)"; then
+    :
+  else
+    local_config_mode="$(stat -c '%a' "$LOCAL_CONFIG" 2>/dev/null || true)"
+  fi
+  if [[ "$local_config_mode" != "600" ]]; then
+    printf '[x] %s must have mode 0600 (current: %s). Run: chmod 600 %q\n' \
+      "$LOCAL_CONFIG" "${local_config_mode:-unknown}" "$LOCAL_CONFIG" >&2
+    exit 1
+  fi
   # shellcheck disable=SC1090
   source "$LOCAL_CONFIG"
 fi
 
-DEPLOY_HOST="${DEPLOY_HOST:-115.28.129.221}"
+DEPLOY_HOST="${DEPLOY_HOST:-}"
 DEPLOY_USER="${DEPLOY_USER:-admin}"
 DEPLOY_PORT="${DEPLOY_PORT:-22}"
 DEPLOY_IDENTITY_FILE="${DEPLOY_IDENTITY_FILE:-}"
@@ -107,8 +117,11 @@ done
 [[ "$VERIFY_INTERVAL" =~ ^[0-9]+$ ]] || die "VERIFY_INTERVAL must be a number"
 [[ "$REMOTE_RELEASE_KEEP" =~ ^[0-9]+$ ]] || die "REMOTE_RELEASE_KEEP must be a number"
 (( REMOTE_RELEASE_KEEP >= 1 )) || die "REMOTE_RELEASE_KEEP must be at least 1"
+if [[ "$BUILD_ONLY" != "1" ]]; then
+  [[ -n "$DEPLOY_HOST" ]] || die "DEPLOY_HOST is required. Put it in the ignored 0600 .deploy.local file or export it in the shell."
+fi
 
-TARGET="$DEPLOY_USER@$DEPLOY_HOST"
+TARGET="$DEPLOY_USER@${DEPLOY_HOST:-build-only.invalid}"
 SSH_OPTIONS=(-p "$DEPLOY_PORT")
 SCP_OPTIONS=(-P "$DEPLOY_PORT")
 
@@ -186,6 +199,7 @@ if [[ ! -f "$ENV_FILE" ]]; then
   warn "Fill ROOT_PASSWORD, database credentials, API keys, then rerun deployment."
   exit 2
 fi
+chmod 600 "$ENV_FILE"
 
 set -a
 # shellcheck disable=SC1090
@@ -343,6 +357,8 @@ Environment=HOME=/home/admin
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=DEPLOYMENT_LOCK_PATH=$DEPLOYMENT_LOCK
 Environment=PPT_GENERATION_CHROME_COMMAND=$PPT_CHROME_COMMAND
+Environment=SERVER_ADDRESS=127.0.0.1
+Environment=AUTH_COOKIE_SECURE=true
 Environment="JAVA_TOOL_OPTIONS=-Xms128m -Xmx768m -XX:+UseG1GC"
 ExecStart=/usr/bin/env java -jar $INSTALL_DIR/backen/backen.jar
 Restart=always
@@ -391,13 +407,15 @@ server {
     index index.html;
     client_max_body_size 64m;
 
-    location ~ ^/api/(translate/stream|ppt-generate/stream|zotero/file)/ {
+    location ~ ^/api/(translate/stream|ppt-generate/stream|image-generate/stream|zotero/file)/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_buffering off;
         proxy_request_buffering off;
         proxy_cache off;
         proxy_read_timeout 21600s;
+        add_header X-Accel-Buffering no always;
+        add_header Cache-Control "no-store" always;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -530,7 +548,11 @@ build_release() {
   ok "Release package created: $ARCHIVE"
 }
 
-info "Deployment target: $TARGET:$REMOTE_DIR"
+if [[ "$BUILD_ONLY" == "1" ]]; then
+  info "Build-only mode: no deployment target required"
+else
+  info "Deployment target: $TARGET:$REMOTE_DIR"
+fi
 info "Server config will be preserved: $CONFIG_DIR/web.env"
 [[ -n "$DEPLOY_IDENTITY_FILE" ]] && info "SSH private key: $DEPLOY_IDENTITY_FILE"
 

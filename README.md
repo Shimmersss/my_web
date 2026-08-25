@@ -142,13 +142,13 @@ The production target is modest: **2 CPU cores / 4 GB RAM**. Long-running work u
 
 For practical deployment steps, see [DEPLOYMENT.md](DEPLOYMENT.md).
 
-这个公开分支把部署凭证、本地发布产物和一次性部署辅助脚本排除在 Git 外。仓库仍包含构建前端和后端所需的应用源码，但不发布旧的 `deploy/` 脚本。
+这个公开分支把部署凭证、主机地址和本地发布产物排除在 Git 外。仓库包含经过安全加固的发布脚本，但它不会提供默认生产主机；实际目标只能来自权限为 `0600` 的本地 `.deploy.local` 或当前 shell 环境。
 
-This public branch keeps deployment credentials, local release outputs and one-off deployment helpers out of Git. The repository still contains the application source needed to build the frontend and backend, but it does not publish the previous `deploy/` scripts.
+This public branch keeps deployment credentials, host addresses and local release outputs out of Git. It includes a hardened deployment script, but that script has no default production host; the target must come from a mode-`0600` local `.deploy.local` file or the current shell environment.
 
-部署到服务器时，请用 npm 构建前端、用 Maven 打包 Spring Boot 后端，并从服务器环境或根目录 `.env.local` 提供运行密钥。主机、SSH 和远端路径参数必须留在仓库外。
+部署到服务器时，请用 npm 构建前端、用 Maven 打包 Spring Boot 后端，并从服务器环境或根目录 `.env.local` 提供运行密钥。复制 `.deploy.local.example` 为 `.deploy.local` 后执行 `chmod 600 .deploy.local`；优先填写只能通过 VPN/私网访问的 SSH alias，主机、SSH 和远端路径参数必须留在仓库外。
 
-For server deployment, build the frontend with npm, package the Spring Boot backend with Maven, and provide runtime secrets from the server environment or a local root `.env.local` file. Host, SSH and remote path values must stay outside the repository.
+For server deployment, build the frontend with npm, package the Spring Boot backend with Maven, and provide runtime secrets from the server environment or a local root `.env.local` file. Copy `.deploy.local.example` to `.deploy.local`, run `chmod 600 .deploy.local`, and prefer an SSH alias reachable only through a VPN/private network. Host, SSH and remote path values must stay outside the repository.
 
 ## Git 管理 / Git Hygiene
 

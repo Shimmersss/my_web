@@ -45,6 +45,8 @@ ZOTERO_USER_ID=...
 ADMIN_KEY=...
 ROOT_USERNAME=root
 ROOT_PASSWORD=replace-with-a-strong-password
+AUTH_COOKIE_SECURE=true
+SERVER_ADDRESS=127.0.0.1
 
 # MySQL. Local project.sh will start the Homebrew `mysql` service when these are set;
 # leave them unset for explicit local H2 mode.
@@ -278,6 +280,10 @@ WantedBy=multi-user.target
 
 The service working directory remains `/opt/web-homepage/backen`; the explicit
 `PPT_GENERATION_CODEX_HTML_SKILL_ROOT` and vendor paths are resolved from there.
+Production must also set `SERVER_ADDRESS=127.0.0.1` and
+`AUTH_COOKIE_SECURE=true`; the tracked
+`deploy/web-backen-origin-hardening.conf` can be installed as a systemd drop-in
+when those values are not already enforced by the main unit.
 
 Install and restart:
 
@@ -319,7 +325,7 @@ Serve `front-dist/` as static files and proxy `/api/` to Spring Boot.
 
 Important points:
 
-- Keep `/api/translate/stream/` and `/api/ppt-generate/stream/` unbuffered for SSE.
+- Keep `/api/translate/stream/`, `/api/ppt-generate/stream/` and `/api/image-generate/stream/` unbuffered for SSE.
 - Keep `/api/zotero/file/` unbuffered so PDF attachment progress reflects real bytes.
 - Allow large uploads for PDF/image/PPTX inputs.
 
@@ -348,12 +354,15 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    location ~ ^/api/(translate/stream|ppt-generate/stream|zotero/file)/ {
+    location ~ ^/api/(translate/stream|ppt-generate/stream|image-generate/stream|zotero/file)/ {
         proxy_pass http://127.0.0.1:8080;
         proxy_http_version 1.1;
         proxy_buffering off;
+        proxy_request_buffering off;
         proxy_cache off;
         proxy_read_timeout 21600s;
+        add_header X-Accel-Buffering no always;
+        add_header Cache-Control "no-store" always;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -368,6 +377,46 @@ Validate and reload:
 sudo nginx -t
 sudo systemctl reload nginx
 ```
+
+## Origin Protection
+
+The public DNS name must terminate at an edge proxy, not at the application
+host. DNS proxying alone is insufficient because historical DNS and public Git
+history may retain an old origin address.
+
+Use one of these supported topologies:
+
+- For an Alibaba Cloud mainland origin, prefer ESA/WAF origin protection. Put
+  every public hostname on the edge service, allow only the current ESA/WAF
+  back-to-origin IPv4 and IPv6 ranges on ports 80/443, and deny all other
+  Internet sources in the ECS security group.
+- For an outbound-only origin, use a named Cloudflare Tunnel and bind the local
+  service to loopback/private interfaces. Close public 80/443 completely. Do
+  not use a Quick Tunnel in production because this application depends on SSE.
+- If using ordinary Cloudflare proxying, combine proxied DNS with origin ACLs,
+  Full (strict) TLS and account-specific Authenticated Origin Pulls. An Origin
+  CA certificate or a secret header alone does not block direct traffic.
+
+Before tightening an ACL, preserve cloud-console access and a time-limited SSH
+path from a trusted address. Add edge allow rules first, verify the public site,
+then add the deny rule. Do the same for IPv6. Never trust forwarded client-IP
+headers until the TCP peer has already been restricted to the chosen edge's
+official back-to-origin ranges.
+
+After the edge and ACL are healthy, rotate or remove the previously exposed
+public address. Keep deployment addressing only in the ignored mode-`0600`
+`.deploy.local`; prefer a private/VPN SSH alias. Validate the final state from
+an external network:
+
+```bash
+PUBLIC_HOST=example.com \
+ORIGIN_ADDRESS=known-old-origin-address \
+./deploy/verify-origin-lockdown.sh
+```
+
+The public request must succeed and the pinned origin request using the correct
+Host/SNI must fail at the network or origin-authentication layer. A `404` from a
+default virtual host is not sufficient.
 
 ## Health Checks
 
@@ -419,6 +468,28 @@ Frontend works but API calls fail:
 - Confirm Spring Boot is healthy.
 - Confirm Vite-only proxy assumptions were not used in production.
 
-Deploy script missing:
+Deploy target missing:
 
-- The current working tree may not include the old one-click deploy scripts. Use the manual build and service steps in this document unless deployment scripts are restored and reviewed.
+- Copy `.deploy.local.example` to the ignored `.deploy.local`, set a private or
+  VPN-only SSH alias as `DEPLOY_HOST`, and run `chmod 600 .deploy.local`.
+- The deployment script intentionally has no default production host and will
+  refuse an insecurely permissioned `.deploy.local`.
+
+## Routine Production Deployment
+
+Keep `.deploy.local` outside Git with mode `0600`, and leave
+`FORCE_NGINX_CONFIG=0` so the existing Certbot/TLS site and retired vhosts are
+preserved. From the repository root, deploy a reviewed clean commit with:
+
+```bash
+chmod 600 .deploy.local
+REQUIRE_CLEAN=1 RUN_TESTS=1 ./deploy/deploy-server-improved.sh
+```
+
+The script runs the backend and frontend test/build gates, creates and uploads a
+timestamped release, backs up the current server tree, installs the package,
+waits for the loopback backend health check, verifies Nginx and the public URL,
+and attempts rollback if installation or local verification fails. Do not set
+`FORCE_NGINX_CONFIG=1` for a routine release. OpenClaw was retired separately at
+the service, firewall, and Nginx layers; normal application deployment must not
+re-enable any of them.

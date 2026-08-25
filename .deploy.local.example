@@ -1,0 +1,14 @@
+# Copy this file to .deploy.local and set its mode to 0600.
+# Prefer an SSH alias reachable through a VPN/private network. Never commit a
+# production origin IP or a DNS-only hostname that resolves to it.
+DEPLOY_HOST=web-origin-via-vpn
+DEPLOY_USER=admin
+DEPLOY_PORT=22
+# DEPLOY_IDENTITY_FILE=/absolute/path/to/private-key
+
+DOMAIN=shimmer.help
+PUBLIC_URL=https://shimmer.help/
+
+# Preserve the hand-maintained production TLS/Nginx site by default. In
+# particular, routine application releases must not recreate retired vhosts.
+FORCE_NGINX_CONFIG=0

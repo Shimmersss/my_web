@@ -17,6 +17,8 @@ outputs/
 deploy/*
 !deploy/
 !deploy/deploy-server-improved.sh
+!deploy/verify-origin-lockdown.sh
+!deploy/web-backen-origin-hardening.conf
 
 # IDE
 .idea/
@@ -34,7 +36,7 @@ front/public/pptd-editor/
 .env.local
 .env.*.local
 .deploy.local
-.deploy.local.example
+!.deploy.local.example
 # os
 .DS_Store
 Thumbs.db

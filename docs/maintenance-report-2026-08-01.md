@@ -36,7 +36,7 @@
 
 ## 生产发布
 
-本轮自动部署尚未完成。2026-08-01 只读 SSH 检查在本机建立连接前被 Codex managed sandbox 拒绝：`ssh: connect to host 115.28.129.221 port 22: Operation not permitted`；尝试改用 Computer Use 时，运行时又明确禁止控制 `com.apple.Terminal`。因此没有执行上传、停服、安装或生产变更，也没有修改 DNS/Sites。
+本轮自动部署尚未完成。2026-08-01 对仓库外配置的生产主机执行只读 SSH 检查时，连接在建立前被 Codex managed sandbox 拒绝；尝试改用 Computer Use 时，运行时又明确禁止控制 `com.apple.Terminal`。因此没有执行上传、停服、安装或生产变更，也没有修改 DNS/Sites。生产主机地址不得写入公开维护记录。
 
 最近一次已确认的线上版本仍是 2026-07-31 17:43 的 Agent 初版：release `/home/admin/.web-homepage-releases/web-homepage-20260731-174300.tar.gz`，backup `/home/admin/.web-homepage-releases/web-homepage-backup-20260731-174300.tar.gz`。恢复 SSH 通道后，应从仓库根目录运行 `./deploy/deploy-server-improved.sh`；安装器会先检查活跃任务，随后在服务器执行 stable LibreOffice/CJK 门禁。部署后还必须完成 6 套 PPTX + 12 套 HTML 视觉 smoke、真实 PPTX/HTML Agent 任务、`systemctl`/health/domain/proxy/memory 检查，再把新 release/backup 写回本报告。
 

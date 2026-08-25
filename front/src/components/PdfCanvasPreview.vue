@@ -19,8 +19,9 @@
 
 <script setup>
 import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist'
-import PdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?worker'
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs'
+import PdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker'
+import { createPdfRenderCoordinator } from '@/utils/pdfRenderCoordinator'
 
 if (!GlobalWorkerOptions.workerPort) {
   GlobalWorkerOptions.workerPort = new PdfWorker()
@@ -41,27 +42,37 @@ const pageNumber = ref(1)
 const pageCount = ref(0)
 
 let pdfDocument = null
-let renderTask = null
 let loadGeneration = 0
 let resizeObserver = null
 let resizeTimer = null
+const renderCoordinator = createPdfRenderCoordinator()
 
 async function destroyDocument() {
-  renderTask?.cancel()
-  renderTask = null
-  if (pdfDocument) {
-    await pdfDocument.destroy()
-    pdfDocument = null
-  }
+  await renderCoordinator.invalidate()
+  const document = pdfDocument
+  pdfDocument = null
+  if (document) await document.destroy()
 }
 
 async function renderPage() {
   if (!pdfDocument || !canvasRef.value || !shellRef.value) return
-  const generation = loadGeneration
-  const page = await pdfDocument.getPage(pageNumber.value)
-  if (generation !== loadGeneration) return
+  const document = pdfDocument
+  const documentGeneration = loadGeneration
+  const requestedPage = pageNumber.value
+  const renderToken = await renderCoordinator.prepare()
+  if (
+    !renderCoordinator.isCurrent(renderToken) ||
+    documentGeneration !== loadGeneration ||
+    document !== pdfDocument
+  ) return
 
-  renderTask?.cancel()
+  const page = await document.getPage(requestedPage)
+  if (
+    !renderCoordinator.isCurrent(renderToken) ||
+    documentGeneration !== loadGeneration ||
+    document !== pdfDocument
+  ) return
+
   const baseViewport = page.getViewport({ scale: 1 })
   const availableWidth = Math.max(240, Math.min(shellRef.value.clientWidth - 24, 1100))
   const cssScale = availableWidth / baseViewport.width
@@ -75,14 +86,9 @@ async function renderPage() {
   canvas.style.width = `${Math.ceil(viewport.width / outputScale)}px`
   canvas.style.height = `${Math.ceil(viewport.height / outputScale)}px`
 
-  renderTask = page.render({ canvasContext: context, viewport })
-  try {
-    await renderTask.promise
-  } catch (renderError) {
-    if (renderError?.name !== 'RenderingCancelledException') throw renderError
-  } finally {
-    renderTask = null
-  }
+  const task = page.render({ canvasContext: context, viewport })
+  if (!renderCoordinator.attach(renderToken, task)) return
+  await renderCoordinator.wait(renderToken, task)
 }
 
 async function showPage(nextPage) {
@@ -112,6 +118,7 @@ async function loadDocument(file) {
     }
     pdfDocument = document
     pageCount.value = document.numPages
+    loading.value = false
     await nextTick()
     await renderPage()
   } catch {

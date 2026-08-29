@@ -131,6 +131,10 @@ class AuthQuotaServiceTest {
         assertEquals(3, settings.get("imageLowCredits"));
         assertEquals(6, settings.get("imageMediumCredits"));
         assertEquals(9, settings.get("imageHighCredits"));
+        assertEquals(2, settings.get("matchmakingCreditPerReport"));
+
+        services.quota().updateSettings(2, 15, false, 4, 4, 3, 6, 9, 7);
+        assertEquals(7, services.quota().settings().get("matchmakingCreditPerReport"));
     }
 
     @Test

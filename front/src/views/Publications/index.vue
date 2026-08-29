@@ -237,6 +237,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
+import { requestAndroidTextSave } from '@/utils/androidBridge'
 
 const message = useMessage()
 const auth = useAuthStore()
@@ -686,11 +687,16 @@ async function doExport(itemKey, opt) {
       await navigator.clipboard.writeText(stripped)
       message.success('APA 引用已复制到剪贴板')
     } else {
+      const filename = `${itemKey}.${opt === 'bibtex' ? 'bib' : 'ris'}`
+      if (requestAndroidTextSave({ text, filename })) {
+        message.success(`${opt.toUpperCase()} 已交给系统保存`)
+        return
+      }
       const blob = new Blob([text], { type: 'text/plain;charset=utf-8' })
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${itemKey}.${opt === 'bibtex' ? 'bib' : 'ris'}`
+      a.download = filename
       document.body.appendChild(a)
       a.click()
       a.remove()

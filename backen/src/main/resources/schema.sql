@@ -102,3 +102,33 @@ CREATE TABLE IF NOT EXISTS guestbook_notifications (
     FOREIGN KEY (actor_id) REFERENCES users(id),
     FOREIGN KEY (entry_id) REFERENCES guestbook_entries(id) ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS matchmaking_profiles (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    payload TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS matchmaking_reports (
+    id VARCHAR(36) PRIMARY KEY,
+    profile_id VARCHAR(36) NOT NULL,
+    user_id BIGINT NOT NULL,
+    report_payload TEXT NOT NULL,
+    source_version VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    FOREIGN KEY (profile_id) REFERENCES matchmaking_profiles(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS matchmaking_daily_usage (
+    user_id BIGINT NOT NULL,
+    usage_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, usage_date),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);

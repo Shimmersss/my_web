@@ -1,7 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
+import { isAndroidMobileWeb } from '@/utils/androidBridge'
 
 const routes = [
+  {
+    path: '/download-app',
+    name: 'DownloadApp',
+    component: () => import('@/views/DownloadApp/index.vue'),
+    meta: { title: '下载 App', mobileWebOnly: true, requiresLogin: true }
+  },
   {
     path: '/',
     name: 'Home',
@@ -31,6 +38,12 @@ const routes = [
     name: 'ImageGenerate',
     component: () => import('@/views/ImageGenerate/index.vue'),
     meta: { title: 'GPT 生图', visibility: 'ImageGenerate' }
+  },
+  {
+    path: '/matchmaking-report',
+    name: 'MatchmakingReport',
+    component: () => import('@/views/MatchmakingReport/index.vue'),
+    meta: { title: '婚恋条件报告', visibility: 'Matchmaking' }
   },
   {
     path: '/publications',
@@ -67,6 +80,15 @@ const router = createRouter({
 
 router.beforeEach(async (to, from, next) => {
   document.title = `${to.meta.title} - 研究工具台`
+  if (to.meta.requiresLogin || to.meta.mobileWebOnly) {
+    const auth = useAuthStore()
+    if (!auth.user) await auth.refresh().catch(() => {})
+    if (!auth.isLoggedIn) {
+      auth.requestLogin(to.fullPath)
+      return next('/')
+    }
+    if (to.meta.mobileWebOnly && !isAndroidMobileWeb()) return next('/')
+  }
   const visibility = to.meta.visibility
   if (visibility && visibility !== 'Admin') {
     const auth = useAuthStore()

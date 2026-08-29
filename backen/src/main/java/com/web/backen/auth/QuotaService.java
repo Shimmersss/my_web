@@ -25,6 +25,7 @@ public class QuotaService {
     public void initializeDefaults() {
         ensureSetting("translation.credit_per_page", "1");
         ensureSetting("ppt.credit_per_task", "10");
+        ensureSetting("matchmaking.credit_per_report", "2");
         ensureSetting("daily_checkin.enabled", "true");
         ensureSetting("daily_checkin.credits", "2");
         ensureSetting("daily_checkin.min_credits", String.valueOf(dailyCheckinCredits()));
@@ -42,6 +43,10 @@ public class QuotaService {
         return intSetting("ppt.credit_per_task", 10);
     }
 
+    public int matchmakingCreditPerReport() {
+        return intSetting("matchmaking.credit_per_report", 2);
+    }
+
     public int imageCredit(String quality) {
         return switch (quality == null ? "medium" : quality.toLowerCase()) {
             case "low" -> intSetting("image.credit.low", 2);
@@ -54,6 +59,7 @@ public class QuotaService {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("translationCreditPerPage", translationCreditPerPage());
         result.put("pptCreditPerTask", pptCreditPerTask());
+        result.put("matchmakingCreditPerReport", matchmakingCreditPerReport());
         result.put("imageLowCredits", imageCredit("low"));
         result.put("imageMediumCredits", imageCredit("medium"));
         result.put("imageHighCredits", imageCredit("high"));
@@ -236,12 +242,13 @@ public class QuotaService {
     public void updateSettings(int translationCreditPerPage, int pptCreditPerTask, boolean dailyCheckinEnabled, int dailyCheckinMinCredits, int dailyCheckinMaxCredits) {
         updateSettings(translationCreditPerPage, pptCreditPerTask, dailyCheckinEnabled,
                 dailyCheckinMinCredits, dailyCheckinMaxCredits,
-                imageCredit("low"), imageCredit("medium"), imageCredit("high"));
+                imageCredit("low"), imageCredit("medium"), imageCredit("high"), matchmakingCreditPerReport());
     }
 
     public void updateSettings(int translationCreditPerPage, int pptCreditPerTask, boolean dailyCheckinEnabled,
                                int dailyCheckinMinCredits, int dailyCheckinMaxCredits,
-                               int imageLowCredits, int imageMediumCredits, int imageHighCredits) {
+                               int imageLowCredits, int imageMediumCredits, int imageHighCredits,
+                               int matchmakingCreditPerReport) {
         setSetting("translation.credit_per_page", String.valueOf(Math.max(1, translationCreditPerPage)));
         setSetting("ppt.credit_per_task", String.valueOf(Math.max(1, pptCreditPerTask)));
         setSetting("daily_checkin.enabled", String.valueOf(dailyCheckinEnabled));
@@ -253,6 +260,16 @@ public class QuotaService {
         setSetting("image.credit.low", String.valueOf(Math.max(1, imageLowCredits)));
         setSetting("image.credit.medium", String.valueOf(Math.max(1, imageMediumCredits)));
         setSetting("image.credit.high", String.valueOf(Math.max(1, imageHighCredits)));
+        setSetting("matchmaking.credit_per_report", String.valueOf(Math.max(1, matchmakingCreditPerReport)));
+    }
+
+    /** Compatibility for existing callers that predate the matchmaking program. */
+    public void updateSettings(int translationCreditPerPage, int pptCreditPerTask, boolean dailyCheckinEnabled,
+                               int dailyCheckinMinCredits, int dailyCheckinMaxCredits,
+                               int imageLowCredits, int imageMediumCredits, int imageHighCredits) {
+        updateSettings(translationCreditPerPage, pptCreditPerTask, dailyCheckinEnabled,
+                dailyCheckinMinCredits, dailyCheckinMaxCredits, imageLowCredits, imageMediumCredits, imageHighCredits,
+                matchmakingCreditPerReport());
     }
 
     /** Compatibility for callers that still provide a fixed daily reward. */

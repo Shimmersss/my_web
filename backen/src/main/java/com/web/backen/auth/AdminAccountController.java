@@ -101,7 +101,8 @@ public class AdminAccountController {
                     intValue(body.get("dailyCheckinMaxCredits"), intValue(body.get("dailyCheckinCredits"), 2)),
                     intValue(body.get("imageLowCredits"), quotaService.imageCredit("low")),
                     intValue(body.get("imageMediumCredits"), quotaService.imageCredit("medium")),
-                    intValue(body.get("imageHighCredits"), quotaService.imageCredit("high")));
+                    intValue(body.get("imageHighCredits"), quotaService.imageCredit("high")),
+                    intValue(body.get("matchmakingCreditPerReport"), quotaService.matchmakingCreditPerReport()));
             return ResponseEntity.ok(Map.of("code", 200, "data", quotaService.settings(), "message", "success"));
         } catch (AuthException e) {
             return error(e);
@@ -148,6 +149,11 @@ public class AdminAccountController {
                         secret(config.get("apiKey"), runtimeConfigService.llmKey()),
                         text(config, "model", runtimeConfigService.llmModel()),
                         text(config, "protocol", runtimeConfigService.llmProtocol()));
+                case "matchmaking" -> llmService.testConnection(
+                        text(config, "baseUrl", runtimeConfigService.matchmakingLlmUrl()),
+                        secret(config.get("apiKey"), runtimeConfigService.matchmakingLlmKey()),
+                        text(config, "model", runtimeConfigService.matchmakingLlmModel()),
+                        text(config, "protocol", runtimeConfigService.matchmakingLlmProtocol()));
                 case "babeldoc" -> llmService.testConnection(
                         text(config, "baseUrl", runtimeConfigService.babelUrl()),
                         secret(config.get("apiKey"), runtimeConfigService.babelKey()),

@@ -6,10 +6,11 @@
   "scripts": {
     "dev": "vite",
     "prepare:pptd-editor": "node scripts/prepare-pptd-editor.mjs",
-    "build": "npm run prepare:pptd-editor && node ../backen/scripts/check_html_template_previews.mjs && vite build && npm run check:pwa && npm run test:pwa-check && npm run check:pdf-preview -- --dist dist",
+    "build": "npm run prepare:pptd-editor && node ../backen/scripts/check_html_template_previews.mjs && npm run check:android-webview && vite build && npm run check:pwa && npm run test:pwa-check && npm run check:pdf-preview -- --dist dist",
     "check:pwa": "node scripts/check-pwa.mjs dist",
     "test:pwa-check": "node scripts/check-pwa-test.mjs dist",
     "check:pdf-preview": "node scripts/check-pdf-preview.mjs",
+    "check:android-webview": "node scripts/check-android-webview.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

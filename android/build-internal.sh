@@ -5,11 +5,11 @@ ANDROID_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$ANDROID_DIR/.." && pwd)"
 CERT_FINGERPRINT_FILE="$ANDROID_DIR/internal-signing-cert.sha256"
 EXPECTED_PACKAGE_NAME="help.shimmer.app"
-EXPECTED_VERSION_CODE="2"
-EXPECTED_VERSION_NAME="0.1.1-internal"
-EXPECTED_MIN_SDK="21"
+EXPECTED_VERSION_CODE="9"
+EXPECTED_VERSION_NAME="0.3.4-internal"
+EXPECTED_MIN_SDK="26"
 EXPECTED_TARGET_SDK="35"
-OUTPUT_NAME="shimmer-internal-0.1.1.apk"
+OUTPUT_NAME="shimmer-internal-0.3.4.apk"
 
 normalize_sha256_fingerprint() {
   local digest="$1"
@@ -97,6 +97,84 @@ verify_apk_metadata() {
   }
 }
 
+verify_apk_container_contract() {
+  local apk="$1"
+  local aapt="$2"
+  local manifest
+
+  manifest="$("$aapt" dump xmltree "$apk" AndroidManifest.xml)" || {
+    echo "Unable to inspect APK manifest with aapt" >&2
+    return 1
+  }
+  grep -q 'help.shimmer.app.LauncherActivity' <<<"$manifest" || {
+    echo "APK does not use the first-party LauncherActivity" >&2
+    return 1
+  }
+  grep -q 'android.permission.INTERNET' <<<"$manifest" || {
+    echo "APK is missing the INTERNET permission" >&2
+    return 1
+  }
+  grep -q 'android.permission.REQUEST_INSTALL_PACKAGES' <<<"$manifest" || {
+    echo "APK is missing the package-install permission required by the updater" >&2
+    return 1
+  }
+  if ! grep -q 'androidx.core.content.FileProvider' <<<"$manifest" \
+      || ! grep -Eq 'android:grantUriPermissions.*(0xffffffff|0x1|true)' <<<"$manifest"; then
+    echo "APK is missing the private update FileProvider" >&2
+    return 1
+  fi
+  grep -Eq 'android:usesCleartextTraffic.*(0x0|false)' <<<"$manifest" || {
+    echo "APK does not explicitly disable cleartext traffic" >&2
+    return 1
+  }
+  if grep -Eq 'android:debuggable.*(0xffffffff|0x1|true)' <<<"$manifest"; then
+    echo "Release APK is debuggable" >&2
+    return 1
+  fi
+  if ! grep -q 'android.intent.action.VIEW' <<<"$manifest" \
+      || ! grep -q 'android.intent.category.BROWSABLE' <<<"$manifest" \
+      || ! grep -q 'android:scheme.*https' <<<"$manifest" \
+      || ! grep -q 'android:host.*shimmer.help' <<<"$manifest"; then
+    echo "APK is missing the verified shimmer.help HTTPS App Link" >&2
+    return 1
+  fi
+  if grep -q 'com.google.androidbrowserhelper' <<<"$manifest"; then
+    echo "APK still contains Android Browser Helper activities" >&2
+    return 1
+  fi
+  if grep -Eq 'android\.webkit\.WebView|androidx\.webkit' <<<"$manifest"; then
+    echo "APK unexpectedly references the system WebView container" >&2
+    return 1
+  fi
+}
+
+verify_apk_gecko_payload() {
+  local apk="$1"
+  local entries size_bytes
+
+  entries="$(unzip -Z1 "$apk")" || {
+    echo "Unable to inspect APK payload" >&2
+    return 1
+  }
+  size_bytes="$(wc -c < "$apk" | tr -d '[:space:]')"
+  [[ "$size_bytes" =~ ^[0-9]+$ ]] && (( size_bytes >= 50 * 1024 * 1024 )) || {
+    echo "APK is too small to contain the bundled Gecko runtime: ${size_bytes:-unknown} bytes" >&2
+    return 1
+  }
+  grep -q '^assets/shimmer_bridge/manifest.json$' <<<"$entries" || {
+    echo "APK is missing the built-in Gecko bridge extension" >&2
+    return 1
+  }
+  grep -q '^lib/arm64-v8a/libxul\.so$' <<<"$entries" || {
+    echo "APK is missing the bundled Gecko runtime for ABI arm64-v8a" >&2
+    return 1
+  }
+  if grep -Eq '^lib/(armeabi-v7a|x86|x86_64)/libxul\.so$' <<<"$entries"; then
+    echo "APK unexpectedly contains duplicate Gecko runtimes for non-release ABIs" >&2
+    return 1
+  fi
+}
+
 sha256_file() {
   local file="$1"
   if command -v shasum >/dev/null 2>&1; then
@@ -128,6 +206,8 @@ publish_verified_apk() {
   cp "$source_apk" "$candidate" || return 1
   verify_apk_signing "$candidate" "$apksigner" "$expected_fingerprint" || return 1
   verify_apk_metadata "$candidate" "$aapt" || return 1
+  verify_apk_container_contract "$candidate" "$aapt" || return 1
+  verify_apk_gecko_payload "$candidate" || return 1
   artifact_sha256="$(sha256_file "$candidate")" || return 1
   printf '%s  %s\n' "$artifact_sha256" "$(basename "$output_apk")" > "$marker_candidate" || return 1
 

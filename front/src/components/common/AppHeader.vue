@@ -85,20 +85,28 @@
     </n-drawer>
 
     <n-modal v-model:show="authModalOpen" preset="dialog" :title="authMode === 'login' ? '账号登录' : '邀请码注册'">
-      <div class="auth-form">
-        <n-input v-model:value="authForm.username" placeholder="用户名" />
-        <n-input v-model:value="authForm.password" type="password" show-password-on="click" placeholder="密码" @keyup.enter="submitAuth" />
-        <n-input v-if="authMode === 'register'" v-model:value="authForm.inviteCode" placeholder="邀请码" @keyup.enter="submitAuth" />
+      <form class="auth-form" autocomplete="on" @submit.prevent="submitAuth">
+        <n-input v-model:value="authForm.username" :input-props="usernameInputProps" placeholder="用户名" />
+        <n-input v-model:value="authForm.password" type="password" :input-props="passwordInputProps" placeholder="密码" />
+        <n-input v-if="authMode === 'register'" v-model:value="authForm.inviteCode" :input-props="inviteInputProps" placeholder="邀请码" />
         <n-alert v-if="authError" type="error" :title="authError" />
         <div class="auth-actions">
-          <n-button text @click="toggleAuthMode">
+          <n-button attr-type="button" text @click="toggleAuthMode">
             {{ authMode === 'login' ? '使用邀请码注册' : '已有账号登录' }}
           </n-button>
-          <n-button type="primary" :loading="authSubmitting" @click="submitAuth">
+          <n-button attr-type="submit" type="primary" :loading="authSubmitting">
             {{ authMode === 'login' ? '登录' : '注册' }}
           </n-button>
         </div>
-      </div>
+      </form>
+    </n-modal>
+
+    <n-modal v-model:show="downloadReminderOpen" preset="dialog" title="下载 Shimmer App">
+      <p class="download-reminder-copy">App 内置独立 Gecko 浏览器内核，文件上传、下载和长任务体验更稳定。</p>
+      <template #action>
+        <n-button @click="downloadReminderOpen = false">稍后</n-button>
+        <n-button type="primary" @click="openDownloadPage">查看下载</n-button>
+      </template>
     </n-modal>
   </header>
 </template>
@@ -116,6 +124,7 @@ import {
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
 import NotificationPanel from './NotificationPanel.vue'
+import { isAndroidMobileWeb } from '@/utils/androidBridge'
 
 const router = useRouter()
 const route = useRoute()
@@ -128,11 +137,37 @@ const authModalOpen = ref(false)
 const authMode = ref('login')
 const authSubmitting = ref(false)
 const authError = ref('')
+const downloadReminderOpen = ref(false)
 const authForm = reactive({
   username: '',
   password: '',
   inviteCode: ''
 })
+const usernameInputProps = {
+  id: 'shimmer-login-username',
+  name: 'username',
+  autocomplete: 'username',
+  autocapitalize: 'none',
+  spellcheck: false,
+  enterkeyhint: 'next',
+  'aria-label': '用户名'
+}
+const passwordInputProps = computed(() => ({
+  id: 'shimmer-login-password',
+  name: 'password',
+  autocomplete: authMode.value === 'login' ? 'current-password' : 'new-password',
+  enterkeyhint: authMode.value === 'login' ? 'go' : 'next',
+  'aria-label': '密码'
+}))
+const inviteInputProps = {
+  id: 'shimmer-register-invite',
+  name: 'inviteCode',
+  autocomplete: 'off',
+  autocapitalize: 'none',
+  spellcheck: false,
+  enterkeyhint: 'go',
+  'aria-label': '邀请码'
+}
 
 const isDark = computed(() => themeStore.isDark)
 const activeKey = computed(() => route.name)
@@ -149,6 +184,27 @@ watch(() => auth.authPrompt, prompt => {
     auth.clearAuthPrompt()
   }
 })
+
+function shanghaiDate() {
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date())
+}
+
+function maybeShowDownloadReminder(userId) {
+  if (!userId || !isAndroidMobileWeb()) return
+  const key = `shimmer-app-download-reminder:${userId}`
+  const today = shanghaiDate()
+  try {
+    if (localStorage.getItem(key) === today) return
+    localStorage.setItem(key, today)
+  } catch {
+    // Private browsing may disable storage; still allow the current reminder.
+  }
+  downloadReminderOpen.value = true
+}
+
+watch(() => auth.user?.id || null, userId => maybeShowDownloadReminder(userId), { immediate: true })
 
 const allMenuOptions = computed(() => [
   {
@@ -172,6 +228,11 @@ const allMenuOptions = computed(() => [
     onClick: () => navigateTo('/image-generate')
   },
   {
+    label: '婚恋条件报告',
+    key: 'Matchmaking',
+    onClick: () => navigateTo('/matchmaking-report')
+  },
+  {
     label: 'GitHub 项目',
     key: 'News',
     onClick: () => navigateTo('/news')
@@ -181,6 +242,11 @@ const allMenuOptions = computed(() => [
     key: 'Guestbook',
     onClick: () => navigateTo('/guestbook')
   },
+  ...(auth.isLoggedIn && isAndroidMobileWeb() ? [{
+    label: '下载 App',
+    key: 'DownloadApp',
+    onClick: () => navigateTo('/download-app')
+  }] : []),
   ...(auth.isRoot ? [{
     label: '后台',
     key: 'Admin',
@@ -199,6 +265,11 @@ const navigateTo = (path) => {
 
 const toggleTheme = () => {
   themeStore.toggleTheme()
+}
+
+function openDownloadPage() {
+  downloadReminderOpen.value = false
+  navigateTo('/download-app')
 }
 
 function openLogin() {

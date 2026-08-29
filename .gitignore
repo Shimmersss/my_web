@@ -17,6 +17,7 @@ outputs/
 deploy/*
 !deploy/
 !deploy/deploy-server-improved.sh
+!deploy/publish-android-update.sh
 !deploy/verify-origin-lockdown.sh
 !deploy/web-backen-origin-hardening.conf
 

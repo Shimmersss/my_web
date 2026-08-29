@@ -1,0 +1,22 @@
+{
+  "manifest_version": 2,
+  "name": "Shimmer Native Bridge",
+  "version": "1.0",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "shimmer-bridge@shimmer.help"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://shimmer.help/*"],
+      "js": ["bridge.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "permissions": [
+    "nativeMessaging",
+    "nativeMessagingFromContent",
+    "geckoViewAddons"
+  ]
+}

@@ -66,7 +66,7 @@ public class LlmService {
         String resolvedProtocol = runtimeConfig.resolveLlmProtocol(baseUrl, protocol);
         String endpoint = runtimeConfig.llmEndpoint(baseUrl, protocol);
         Map<String, Object> requestBody = textRequest(resolvedProtocol, model.trim(),
-                "Reply with exactly OK.", "Return only the requested short confirmation.", 8);
+                "Reply with exactly OK.", "Return only the requested short confirmation.", 256);
         String responseJson = llmRestClient.post()
                 .uri(endpoint)
                 .headers(headers -> applyHeaders(headers, apiKey, resolvedProtocol))
@@ -148,15 +148,23 @@ public class LlmService {
     }
 
     public String completeWithModel(String model, String systemPrompt, String userPrompt, int maxTokens) {
-        if (runtimeConfig.llmKey().isBlank()) {
-            throw new IllegalStateException("LLM API Key 未配置，请在 .env.local 中设置 LLM_API_KEY");
+        return completeWithConfig(runtimeConfig.llmUrl(), runtimeConfig.llmKey(), model, runtimeConfig.llmProtocol(), systemPrompt, userPrompt, maxTokens);
+    }
+
+    /** Executes a server-side text request with an isolated provider configuration. */
+    public String completeWithConfig(String baseUrl, String apiKey, String model, String protocol,
+                                     String systemPrompt, String userPrompt, int maxTokens) {
+        if (apiKey == null || apiKey.isBlank()) {
+            throw new IllegalStateException("LLM API Key 未配置，请在后台配置中填写");
         }
         if (userPrompt == null || userPrompt.isBlank()) {
             throw new IllegalArgumentException("用户提示词不能为空");
         }
+        String selectedBaseUrl = baseUrl == null || baseUrl.isBlank() ? runtimeConfig.llmUrl() : baseUrl;
+        String selectedProtocol = runtimeConfig.resolveLlmProtocol(selectedBaseUrl, protocol);
+        String selectedModel = model == null || model.isBlank() ? runtimeConfig.llmModel() : model;
 
-        Map<String, Object> requestBody = textRequest(
-                model == null || model.isBlank() ? runtimeConfig.llmModel() : model,
+        Map<String, Object> requestBody = textRequest(selectedProtocol, selectedModel,
                 systemPrompt == null || systemPrompt.isBlank() ? "You are a helpful assistant." : systemPrompt,
                 userPrompt, Math.max(1024, maxTokens));
 
@@ -165,8 +173,8 @@ public class LlmService {
         for (int attempt = 0; attempt <= maxRetries; attempt++) {
             try {
                 String responseJson = llmRestClient.post()
-                        .uri(runtimeConfig.llmEndpoint())
-                        .headers(headers -> applyHeaders(headers))
+                        .uri(runtimeConfig.llmEndpoint(selectedBaseUrl, selectedProtocol))
+                        .headers(headers -> applyHeaders(headers, apiKey, selectedProtocol))
                         .body(requestBody)
                         .retrieve()
                         .body(String.class);

@@ -32,6 +32,10 @@ public class RuntimeConfigService {
     private static final String LLM_KEY = "api.llm.key";
     private static final String LLM_MODEL = "api.llm.model";
     private static final String LLM_PROTOCOL = "api.llm.protocol";
+    private static final String MATCHMAKING_LLM_URL = "matchmaking.llm.url";
+    private static final String MATCHMAKING_LLM_KEY = "matchmaking.llm.key";
+    private static final String MATCHMAKING_LLM_MODEL = "matchmaking.llm.model";
+    private static final String MATCHMAKING_LLM_PROTOCOL = "matchmaking.llm.protocol";
     private static final String BABEL_URL = "api.babeldoc.url";
     private static final String BABEL_KEY = "api.babeldoc.key";
     private static final String BABEL_MODEL = "api.babeldoc.model";
@@ -69,7 +73,7 @@ public class RuntimeConfigService {
     private static final String GITHUB_RANKING_AI_ENABLED = "github.ranking.ai.enabled";
     private static final Map<String, String> VISIBILITY_DEFAULTS = Map.of(
             "Publications", "PUBLIC", "Translate", "USER", "Contact", "USER",
-            "ImageGenerate", "USER", "News", "PUBLIC", "Guestbook", "PUBLIC");
+            "ImageGenerate", "USER", "News", "PUBLIC", "Guestbook", "PUBLIC", "Matchmaking", "USER");
     private static final String VISIBILITY_POLICY_VERSION = "visibility.policy.version";
 
     private final JdbcTemplate jdbc;
@@ -101,14 +105,14 @@ public class RuntimeConfigService {
     /** 将上一轮错误的一刀切登录策略恢复为原有默认值；之后完全由 root 后台配置。 */
     @PostConstruct
     public void migrateVisibilityDefaults() {
-        if ("5".equals(value(VISIBILITY_POLICY_VERSION, ""))) return;
+        if ("6".equals(value(VISIBILITY_POLICY_VERSION, ""))) return;
         VISIBILITY_DEFAULTS.forEach((feature, level) -> {
             String key = "visibility." + feature;
             if (jdbc.queryForList("SELECT setting_value FROM app_settings WHERE setting_key=?", String.class, key).isEmpty()) {
                 save(key, level);
             }
         });
-        save(VISIBILITY_POLICY_VERSION, "5");
+        save(VISIBILITY_POLICY_VERSION, "6");
     }
 
     public String llmUrl() { return value(LLM_URL, llm.getApiUrl()); }
@@ -136,6 +140,13 @@ public class RuntimeConfigService {
         if (base.endsWith("/chat/completions")) return base;
         return base.endsWith("/v1") ? base + "/chat/completions" : base + "/v1/chat/completions";
     }
+    /** 婚恋报告默认继承通用 Mimo 配置；后台填写后只影响该节目。 */
+    public String matchmakingLlmUrl() { return value(MATCHMAKING_LLM_URL, llmUrl()); }
+    public String matchmakingLlmKey() { return value(MATCHMAKING_LLM_KEY, llmKey()); }
+    public String matchmakingLlmModel() { return value(MATCHMAKING_LLM_MODEL, llmModel()); }
+    public String matchmakingLlmProtocol() { return normalizeProtocol(value(MATCHMAKING_LLM_PROTOCOL, llmProtocol())); }
+    public String resolvedMatchmakingLlmProtocol() { return resolveLlmProtocol(matchmakingLlmUrl(), matchmakingLlmProtocol()); }
+    public String matchmakingLlmEndpoint() { return llmEndpoint(matchmakingLlmUrl(), matchmakingLlmProtocol()); }
     public String babelUrl() { return value(BABEL_URL, babeldoc.getOpenaiBaseUrl()); }
     public String babelKey() { return value(BABEL_KEY, babeldoc.getOpenaiApiKey()); }
     public String babelModel() { return value(BABEL_MODEL, babeldoc.getOpenaiModel()); }
@@ -266,6 +277,7 @@ public class RuntimeConfigService {
     public Map<String, Object> publicSettings() {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("llm", provider("LLM / 通用生成", llmUrl(), llmModel(), llmKey(), llmProtocol(), resolvedLlmProtocol()));
+        data.put("matchmaking", provider("婚恋报告 / Mimo", matchmakingLlmUrl(), matchmakingLlmModel(), matchmakingLlmKey(), matchmakingLlmProtocol(), resolvedMatchmakingLlmProtocol()));
         data.put("babeldoc", provider("BabelDOC / PDF 翻译", babelUrl(), babelModel(), babelKey(), "openai", "OPENAI"));
         data.put("zotero", new LinkedHashMap<>(Map.of(
                 "name", "Zotero 文献库", "baseUrl", zoteroUrl(), "userId", zoteroUser(),
@@ -305,12 +317,20 @@ public class RuntimeConfigService {
     @Transactional
     public void update(Map<String, Object> body) {
         Map<String, Object> llmBody = map(body.get("llm"));
+        Map<String, Object> matchmakingBody = map(body.get("matchmaking"));
         Map<String, Object> babelBody = map(body.get("babeldoc"));
         Map<String, Object> zoteroBody = map(body.get("zotero"));
         save(LLM_URL, url(string(llmBody, "baseUrl"), llmUrl()));
         save(LLM_MODEL, text(string(llmBody, "model"), llmModel()));
         save(LLM_PROTOCOL, normalizeProtocol(string(llmBody, "protocol").isBlank() ? llmProtocol() : string(llmBody, "protocol")));
         saveSecret(LLM_KEY, llmBody.get("apiKey"), llmKey());
+        if (!matchmakingBody.isEmpty()) {
+            save(MATCHMAKING_LLM_URL, url(string(matchmakingBody, "baseUrl"), matchmakingLlmUrl()));
+            save(MATCHMAKING_LLM_MODEL, text(string(matchmakingBody, "model"), matchmakingLlmModel()));
+            save(MATCHMAKING_LLM_PROTOCOL, normalizeProtocol(string(matchmakingBody, "protocol").isBlank()
+                    ? matchmakingLlmProtocol() : string(matchmakingBody, "protocol")));
+            saveSecret(MATCHMAKING_LLM_KEY, matchmakingBody.get("apiKey"), matchmakingLlmKey());
+        }
         save(BABEL_URL, url(string(babelBody, "baseUrl"), babelUrl()));
         save(BABEL_MODEL, text(string(babelBody, "model"), babelModel()));
         saveSecret(BABEL_KEY, babelBody.get("apiKey"), babelKey());

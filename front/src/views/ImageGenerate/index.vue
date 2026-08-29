@@ -78,7 +78,7 @@
       <div v-if="presentationAssets.length" class="history-grid">
         <article v-for="asset in presentationAssets" :key="asset.assetId" class="history-card">
           <div class="thumb"><img :src="presentationPreviewUrl(asset.assetId)" :alt="asset.slideTitle || '演示生图'" /></div>
-          <div class="card-copy"><small>{{ asset.outputFormat?.toUpperCase() }} · 第 {{ asset.slideIndex }} 页<template v-if="auth.isRoot && Number(asset.userId) !== Number(auth.user?.id)"> · 用户 #{{ asset.userId }}</template></small><p>{{ asset.slideTitle || '演示视觉素材' }}</p><a :href="presentationResultUrl(asset.assetId)" download>下载 PNG</a></div>
+          <div class="card-copy"><small>{{ asset.outputFormat?.toUpperCase() }} · 第 {{ asset.slideIndex }} 页<template v-if="auth.isRoot && Number(asset.userId) !== Number(auth.user?.id)"> · 用户 #{{ asset.userId }}</template></small><p>{{ asset.slideTitle || '演示视觉素材' }}</p><a :href="presentationResultUrl(asset.assetId)" download @click.prevent="downloadPresentationAsset(asset)">下载 PNG</a></div>
           <button v-if="Number(asset.userId) === Number(auth.user?.id)" class="delete-button" title="删除" @click="removePresentationAsset(asset)">×</button>
         </article>
       </div>
@@ -91,6 +91,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { NButton, NInput, NSelect, useMessage } from 'naive-ui'
 import { useAuthStore } from '@/stores/auth'
+import { downloadUrl } from '@/utils/androidBridge'
 import {
   createImageGenerationTask, deleteImageGenerationTask, cancelImageGenerationTask, getRecentImageGenerations,
   imageGenerationPreviewUrl, imageGenerationResultUrl, imageGenerationStreamUrl,
@@ -195,7 +196,8 @@ function selectTask(task) { current.value = task; error.value = task.status === 
 function isOwnTask(task) { return Number(task?.userId) === Number(auth.user?.id) }
 function continueEdit(task) { form.mode = 'EDIT'; form.parentTaskId = task.taskId; form.referenceFiles = []; revokeLocalPreview(); form.prompt = ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
 function regenerate(task) { form.mode = task.mode; form.prompt = task.prompt; form.size = task.size; form.quality = task.quality; form.referenceFiles = []; revokeLocalPreview(); form.parentTaskId = task.mode === 'EDIT' ? (task.parentTaskId || task.taskId) : ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
-function download(task) { const anchor = document.createElement('a'); anchor.href = resultUrl(task.taskId); anchor.download = `gpt-image-${task.taskId}.png`; anchor.click() }
+function download(task) { downloadUrl(resultUrl(task.taskId), `gpt-image-${task.taskId}.png`, 'image/png') }
+function downloadPresentationAsset(asset) { downloadUrl(presentationResultUrl(asset.assetId), `presentation-image-${asset.assetId}.png`, 'image/png') }
 async function remove(task) { if (!window.confirm('删除这条创作记录和图片？')) return; try { await deleteImageGenerationTask(task.taskId); history.value = history.value.filter(item => item.taskId !== task.taskId); if (current.value?.taskId === task.taskId) current.value = null } catch (e) { message.error(e.message || '删除失败') } }
 async function cancelCurrent() { if (!current.value || !window.confirm('取消本次生图？未完成任务的额度将退回。')) return; try { const res = await cancelImageGenerationTask(current.value.taskId); if (res.code !== 200) throw new Error(res.message || '取消失败'); if (typeof res.data?.credits !== 'undefined') auth.updateCredits(res.data.credits); current.value = { ...current.value, status: 'cancelled' }; eventSource?.close(); eventSource = null; message.success('生图任务已取消'); loadHistory() } catch (e) { message.error(e.message || '取消失败') } }
 function resultUrl(taskId) { return `${imageGenerationResultUrl(taskId)}?v=${encodeURIComponent(history.value.find(t => t.taskId === taskId)?.updatedAt || '')}` }

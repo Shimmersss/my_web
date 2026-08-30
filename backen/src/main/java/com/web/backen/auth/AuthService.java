@@ -56,12 +56,7 @@ public class AuthService {
         if (!user.enabled() || hash == null || !passwordEncoder.matches(password == null ? "" : password, hash)) {
             throw new AuthException(401, "用户名或密码错误");
         }
-        String token = randomToken();
-        String csrf = randomToken();
-        Instant expiresAt = Instant.now().plus(Duration.ofDays(Math.max(1, config.getSessionDays())));
-        jdbc.update("INSERT INTO user_sessions (user_id, token_hash, csrf_token, expires_at) VALUES (?, ?, ?, ?)",
-                user.id(), sha256(token), csrf, Timestamp.from(expiresAt));
-        return new AuthSession(token, csrf, expiresAt, refreshUser(user.id()));
+        return createSessionForUser(user.id());
     }
 
     @Transactional
@@ -119,6 +114,14 @@ public class AuthService {
     }
 
     public AuthUser requireUser(HttpServletRequest request) {
+        AuthUser user = requireSessionUser(request);
+        if (user.isMatchmakingTrial()) {
+            throw new AuthException(403, "该内测身份只能使用婚恋报告");
+        }
+        return user;
+    }
+
+    public AuthUser requireSessionUser(HttpServletRequest request) {
         return currentUser(request).orElseThrow(() -> new AuthException(401, "请先登录"));
     }
 
@@ -173,6 +176,28 @@ public class AuthService {
                         rs.getString("role"),
                         rs.getInt("credits"),
                         rs.getBoolean("enabled")), id);
+    }
+
+    @Transactional
+    public AuthUser createInternalTrialUser(String username) {
+        String cleanUsername = normalizeUsername(username);
+        String unusablePassword = randomToken() + randomToken();
+        jdbc.update("INSERT INTO users (username, password_hash, role, credits, enabled) VALUES (?, ?, 'MATCHMAKING_TRIAL', 0, TRUE)",
+                cleanUsername, passwordEncoder.encode(unusablePassword));
+        Long userId = jdbc.queryForObject("SELECT id FROM users WHERE username=?", Long.class, cleanUsername);
+        return refreshUser(userId);
+    }
+
+    @Transactional
+    public AuthSession createSessionForUser(long userId) {
+        AuthUser user = refreshUser(userId);
+        if (!user.enabled()) throw new AuthException(401, "请先登录");
+        String token = randomToken();
+        String csrf = randomToken();
+        Instant expiresAt = Instant.now().plus(Duration.ofDays(Math.max(1, config.getSessionDays())));
+        jdbc.update("INSERT INTO user_sessions (user_id, token_hash, csrf_token, expires_at) VALUES (?, ?, ?, ?)",
+                user.id(), sha256(token), csrf, Timestamp.from(expiresAt));
+        return new AuthSession(token, csrf, expiresAt, user);
     }
 
     private Optional<AuthUser> findByUsername(String username) {

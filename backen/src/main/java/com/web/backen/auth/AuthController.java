@@ -1,5 +1,6 @@
 package com.web.backen.auth;
 
+import com.web.backen.matchmaking.MatchmakingTrialService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
@@ -14,11 +15,15 @@ public class AuthController {
     private final AuthService authService;
     private final QuotaService quotaService;
     private final RuntimeConfigService runtimeConfigService;
+    private final MatchmakingTrialService matchmakingTrialService;
 
-    public AuthController(AuthService authService, QuotaService quotaService, RuntimeConfigService runtimeConfigService) {
+    public AuthController(AuthService authService, QuotaService quotaService,
+                          RuntimeConfigService runtimeConfigService,
+                          MatchmakingTrialService matchmakingTrialService) {
         this.authService = authService;
         this.quotaService = quotaService;
         this.runtimeConfigService = runtimeConfigService;
+        this.matchmakingTrialService = matchmakingTrialService;
     }
 
     @GetMapping("/me")
@@ -96,7 +101,13 @@ public class AuthController {
         data.put("role", user.role());
         data.put("credits", user.credits());
         data.put("root", user.isRoot());
-        data.put("dailyCheckin", quotaService.dailyCheckinStatus(user.id()));
+        data.put("matchmakingTrial", user.isMatchmakingTrial());
+        if (user.isMatchmakingTrial()) {
+            data.put("username", "婚恋内测");
+            data.put("trialAccess", matchmakingTrialService.requireEnabled(user.id()));
+        } else {
+            data.put("dailyCheckin", quotaService.dailyCheckinStatus(user.id()));
+        }
         return data;
     }
 

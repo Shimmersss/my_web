@@ -4,4 +4,8 @@ public record AuthUser(long id, String username, String role, int credits, boole
     public boolean isRoot() {
         return "ROOT".equalsIgnoreCase(role);
     }
+
+    public boolean isMatchmakingTrial() {
+        return "MATCHMAKING_TRIAL".equalsIgnoreCase(role);
+    }
 }

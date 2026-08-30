@@ -1,6 +1,7 @@
 package com.web.backen.matchmaking;
 
 import com.web.backen.auth.AuthException;
+import com.web.backen.auth.AuthService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -33,16 +34,22 @@ public class MatchmakingTrialService {
     private static final Duration DEFAULT_VALIDITY = Duration.ofDays(7);
 
     private final JdbcTemplate jdbc;
+    private final AuthService authService;
     private final Clock clock;
     private final SecureRandom random;
 
     @Autowired
-    public MatchmakingTrialService(JdbcTemplate jdbc) {
-        this(jdbc, Clock.systemUTC(), new SecureRandom());
+    public MatchmakingTrialService(JdbcTemplate jdbc, AuthService authService) {
+        this(jdbc, authService, Clock.systemUTC(), new SecureRandom());
     }
 
     MatchmakingTrialService(JdbcTemplate jdbc, Clock clock, SecureRandom random) {
+        this(jdbc, null, clock, random);
+    }
+
+    MatchmakingTrialService(JdbcTemplate jdbc, AuthService authService, Clock clock, SecureRandom random) {
         this.jdbc = jdbc;
+        this.authService = authService;
         this.clock = clock;
         this.random = random;
     }
@@ -121,6 +128,41 @@ public class MatchmakingTrialService {
         return access;
     }
 
+    @Transactional
+    public Redemption redeem(String rawCode) {
+        if (authService == null) throw new IllegalStateException("AuthService is required for trial redemption");
+        List<Map<String, Object>> records = jdbc.query("""
+                SELECT id, code_suffix, guest_user_id, status, active_task_id, report_id,
+                       enabled, expires_at, redeemed_at, completed_at, created_by, created_at, updated_at
+                FROM matchmaking_trial_codes
+                WHERE code_hash=?
+                FOR UPDATE
+                """, (rs, rowNum) -> summary(rs), hash(rawCode));
+        if (records.isEmpty()) throw invalidCode();
+        Map<String, Object> record = records.get(0);
+        if (!Boolean.TRUE.equals(record.get("enabled"))) throw invalidCode();
+
+        Long userId = (Long) record.get("guestUserId");
+        if (userId == null) {
+            Timestamp expiresAt = (Timestamp) record.get("expiresAt");
+            if (!clock.instant().isBefore(expiresAt.toInstant())) throw invalidCode();
+            userId = createTrialUser().id();
+            int bound = jdbc.update("""
+                    UPDATE matchmaking_trial_codes
+                    SET guest_user_id=?, status=?, redeemed_at=?, updated_at=CURRENT_TIMESTAMP
+                    WHERE id=? AND guest_user_id IS NULL AND enabled=TRUE
+                    """, userId, STATUS_CLAIMED, Timestamp.from(clock.instant()), record.get("id"));
+            if (bound == 0) throw invalidCode();
+        }
+
+        AuthService.AuthSession session = authService.createSessionForUser(userId);
+        return new Redemption(session, accessForUser(userId));
+    }
+
+    public Map<String, Object> requireEnabled(long userId) {
+        return accessForUser(userId);
+    }
+
     private Map<String, Object> summary(ResultSet rs) throws SQLException {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", rs.getLong("id"));
@@ -155,6 +197,19 @@ public class MatchmakingTrialService {
         return code.toString();
     }
 
+    private com.web.backen.auth.AuthUser createTrialUser() {
+        for (int attempt = 0; attempt < 5; attempt++) {
+            StringBuilder username = new StringBuilder("trial_");
+            for (int i = 0; i < 12; i++) username.append((char) ('a' + random.nextInt(26)));
+            try {
+                return authService.createInternalTrialUser(username.toString());
+            } catch (org.springframework.dao.DuplicateKeyException ignored) {
+                // Try a new opaque username if the random value collides.
+            }
+        }
+        throw new IllegalStateException("Unable to allocate trial user");
+    }
+
     private Timestamp parseExpiry(String value) {
         if (value == null || value.isBlank()) return Timestamp.from(clock.instant().plus(DEFAULT_VALIDITY));
         try {
@@ -177,4 +232,6 @@ public class MatchmakingTrialService {
     private AuthException invalidCode() {
         return new AuthException(400, "内测邀请码无效、已过期或已撤销");
     }
+
+    public record Redemption(AuthService.AuthSession session, Map<String, Object> access) {}
 }

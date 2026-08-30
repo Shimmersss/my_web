@@ -129,6 +129,25 @@ CREATE TABLE IF NOT EXISTS matchmaking_reports (
     FOREIGN KEY (user_id) REFERENCES users(id)
 );
 
+CREATE TABLE IF NOT EXISTS matchmaking_trial_codes (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    code_hash VARCHAR(64) NOT NULL UNIQUE,
+    code_suffix VARCHAR(4) NOT NULL,
+    guest_user_id BIGINT NULL UNIQUE,
+    status VARCHAR(20) NOT NULL DEFAULT 'UNUSED',
+    active_task_id VARCHAR(36) NULL,
+    report_id VARCHAR(36) NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    expires_at TIMESTAMP NOT NULL,
+    redeemed_at TIMESTAMP NULL,
+    completed_at TIMESTAMP NULL,
+    created_by BIGINT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (guest_user_id) REFERENCES users(id),
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
 CREATE TABLE IF NOT EXISTS matchmaking_daily_usage (
     user_id BIGINT NOT NULL,
     usage_date DATE NOT NULL,

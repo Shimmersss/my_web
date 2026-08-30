@@ -1,0 +1,179 @@
+package com.web.backen.matchmaking;
+
+import com.web.backen.auth.AuthException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+@Service
+public class MatchmakingTrialService {
+    public static final String STATUS_UNUSED = "UNUSED";
+    public static final String STATUS_CLAIMED = "CLAIMED";
+    public static final String STATUS_RUNNING = "RUNNING";
+    public static final String STATUS_RETRYABLE = "RETRYABLE";
+    public static final String STATUS_COMPLETED = "COMPLETED";
+
+    private static final char[] CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".toCharArray();
+    private static final Duration DEFAULT_VALIDITY = Duration.ofDays(7);
+
+    private final JdbcTemplate jdbc;
+    private final Clock clock;
+    private final SecureRandom random;
+
+    @Autowired
+    public MatchmakingTrialService(JdbcTemplate jdbc) {
+        this(jdbc, Clock.systemUTC(), new SecureRandom());
+    }
+
+    MatchmakingTrialService(JdbcTemplate jdbc, Clock clock, SecureRandom random) {
+        this.jdbc = jdbc;
+        this.clock = clock;
+        this.random = random;
+    }
+
+    @Transactional
+    public Map<String, Object> createCode(long rootId, String expiresAt) {
+        String code = generateCode();
+        Timestamp expiry = parseExpiry(expiresAt);
+        jdbc.update("""
+                INSERT INTO matchmaking_trial_codes
+                    (code_hash, code_suffix, status, enabled, expires_at, created_by)
+                VALUES (?, ?, ?, TRUE, ?, ?)
+                """, hash(code), code.substring(code.length() - 4), STATUS_UNUSED, expiry, rootId);
+
+        Map<String, Object> created = new LinkedHashMap<>();
+        created.put("code", code);
+        created.put("codeSuffix", code.substring(code.length() - 4));
+        created.put("status", STATUS_UNUSED);
+        created.put("enabled", true);
+        created.put("expiresAt", expiry);
+        return created;
+    }
+
+    public List<Map<String, Object>> codes() {
+        return jdbc.query("""
+                SELECT id, code_suffix, guest_user_id, status, active_task_id, report_id,
+                       enabled, expires_at, redeemed_at, completed_at, created_by, created_at, updated_at
+                FROM matchmaking_trial_codes
+                ORDER BY id DESC
+                """, (rs, rowNum) -> summary(rs));
+    }
+
+    @Transactional
+    public void updateCode(long id, boolean enabled, String expiresAt) {
+        Timestamp expiry = parseExpiry(expiresAt);
+        int updated = jdbc.update("""
+                UPDATE matchmaking_trial_codes
+                SET enabled=?, expires_at=?, updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+                """, enabled, expiry, id);
+        if (updated == 0) throw new AuthException(404, "内测邀请码不存在");
+    }
+
+    public Map<String, Object> redeemRecord(String rawCode) {
+        List<Map<String, Object>> records = jdbc.query("""
+                SELECT id, code_suffix, guest_user_id, status, active_task_id, report_id,
+                       enabled, expires_at, redeemed_at, completed_at, created_by, created_at, updated_at
+                FROM matchmaking_trial_codes
+                WHERE code_hash=?
+                """, (rs, rowNum) -> summary(rs), hash(rawCode));
+        if (records.isEmpty()) throw invalidCode();
+        Map<String, Object> record = records.get(0);
+        Timestamp expiresAt = (Timestamp) record.get("expiresAt");
+        boolean firstRedemptionExpired = record.get("guestUserId") == null
+                && !clock.instant().isBefore(expiresAt.toInstant());
+        if (!Boolean.TRUE.equals(record.get("enabled")) || firstRedemptionExpired) throw invalidCode();
+        return record;
+    }
+
+    public Map<String, Object> accessForUser(long userId) {
+        List<Map<String, Object>> records = jdbc.query("""
+                SELECT id, code_suffix, guest_user_id, status, active_task_id, report_id,
+                       enabled, expires_at, redeemed_at, completed_at, created_by, created_at, updated_at
+                FROM matchmaking_trial_codes
+                WHERE guest_user_id=?
+                """, (rs, rowNum) -> summary(rs), userId);
+        if (records.isEmpty()) throw invalidCode();
+        Map<String, Object> record = records.get(0);
+        String status = String.valueOf(record.get("status"));
+        String reportId = record.get("reportId") == null ? "" : String.valueOf(record.get("reportId"));
+        Map<String, Object> access = new LinkedHashMap<>(record);
+        access.put("reportId", reportId);
+        access.put("canGenerate", STATUS_CLAIMED.equals(status) || STATUS_RETRYABLE.equals(status));
+        access.put("reportAvailable", !reportId.isBlank() && reportExists(reportId));
+        return access;
+    }
+
+    private Map<String, Object> summary(ResultSet rs) throws SQLException {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("id", rs.getLong("id"));
+        result.put("codeSuffix", rs.getString("code_suffix"));
+        result.put("guestUserId", nullableLong(rs, "guest_user_id"));
+        result.put("status", rs.getString("status"));
+        result.put("activeTaskId", rs.getString("active_task_id"));
+        result.put("reportId", rs.getString("report_id"));
+        result.put("enabled", rs.getBoolean("enabled"));
+        result.put("expiresAt", rs.getTimestamp("expires_at"));
+        result.put("redeemedAt", rs.getTimestamp("redeemed_at"));
+        result.put("completedAt", rs.getTimestamp("completed_at"));
+        result.put("createdBy", rs.getLong("created_by"));
+        result.put("createdAt", rs.getTimestamp("created_at"));
+        result.put("updatedAt", rs.getTimestamp("updated_at"));
+        return result;
+    }
+
+    private Long nullableLong(ResultSet rs, String column) throws SQLException {
+        long value = rs.getLong(column);
+        return rs.wasNull() ? null : value;
+    }
+
+    private boolean reportExists(String reportId) {
+        Integer count = jdbc.queryForObject("SELECT COUNT(*) FROM matchmaking_reports WHERE id=?", Integer.class, reportId);
+        return count != null && count > 0;
+    }
+
+    private String generateCode() {
+        StringBuilder code = new StringBuilder("MM-");
+        for (int i = 0; i < 24; i++) code.append(CODE_ALPHABET[random.nextInt(CODE_ALPHABET.length)]);
+        return code.toString();
+    }
+
+    private Timestamp parseExpiry(String value) {
+        if (value == null || value.isBlank()) return Timestamp.from(clock.instant().plus(DEFAULT_VALIDITY));
+        try {
+            return Timestamp.from(Instant.parse(value.trim()));
+        } catch (Exception e) {
+            throw new AuthException(400, "过期时间格式无效");
+        }
+    }
+
+    private String hash(String rawCode) {
+        String normalized = rawCode == null ? "" : rawCode.trim().toUpperCase(Locale.ROOT);
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256")
+                    .digest(normalized.getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 unavailable", e);
+        }
+    }
+
+    private AuthException invalidCode() {
+        return new AuthException(400, "内测邀请码无效、已过期或已撤销");
+    }
+}

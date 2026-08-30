@@ -23,6 +23,30 @@ public class MatchmakingSchemaMigration {
         addColumnIfMissing("matchmaking_reports", "city", "VARCHAR(64) NULL");
         addColumnIfMissing("matchmaking_reports", "has_image", "BOOLEAN NULL");
         ensureReportPayloadCapacity();
+        ensureTrialCodesTable();
+    }
+
+    private void ensureTrialCodesTable() {
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS matchmaking_trial_codes (
+                    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+                    code_hash VARCHAR(64) NOT NULL UNIQUE,
+                    code_suffix VARCHAR(4) NOT NULL,
+                    guest_user_id BIGINT NULL UNIQUE,
+                    status VARCHAR(20) NOT NULL DEFAULT 'UNUSED',
+                    active_task_id VARCHAR(36) NULL,
+                    report_id VARCHAR(36) NULL,
+                    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                    expires_at TIMESTAMP NOT NULL,
+                    redeemed_at TIMESTAMP NULL,
+                    completed_at TIMESTAMP NULL,
+                    created_by BIGINT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (guest_user_id) REFERENCES users(id),
+                    FOREIGN KEY (created_by) REFERENCES users(id)
+                )
+                """);
     }
 
     /** v3.5 reports embed the AI partner illustration as base64; MySQL TEXT (64KB) is not enough. */

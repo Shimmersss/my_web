@@ -122,6 +122,22 @@ class MatchmakingTrialServiceTest {
     }
 
     @Test
+    void revokedCodeRejectsExistingBoundUserAccess() {
+        service.createCode(rootId, "");
+        jdbc.update("INSERT INTO users (username,password_hash,role,credits,enabled) VALUES ('revoked','x','MATCHMAKING_TRIAL',0,TRUE)");
+        long guestId = jdbc.queryForObject("SELECT id FROM users WHERE username='revoked'", Long.class);
+        jdbc.update("UPDATE matchmaking_trial_codes SET guest_user_id=?, status='CLAIMED'", guestId);
+        Map<String, Object> enabledAccess = service.accessForUser(guestId);
+        long codeId = ((Number) enabledAccess.get("id")).longValue();
+
+        assertEquals(true, enabledAccess.get("canGenerate"));
+        service.updateCode(codeId, false, NOW.plus(Duration.ofDays(7)).toString());
+        AuthException error = assertThrows(AuthException.class, () -> service.accessForUser(guestId));
+        assertEquals(400, error.getStatus());
+        assertEquals("内测邀请码无效、已过期或已撤销", error.getMessage());
+    }
+
+    @Test
     void boundCodeRemainsRecoverableAfterFirstRedemptionDeadline() {
         String code = String.valueOf(service.createCode(rootId, NOW.minusSeconds(1).toString()).get("code"));
         jdbc.update("INSERT INTO users (username,password_hash,role,credits,enabled) VALUES ('bound','x','MATCHMAKING_TRIAL',0,TRUE)");

@@ -111,6 +111,7 @@ public class MatchmakingTrialService {
                 """, (rs, rowNum) -> summary(rs), userId);
         if (records.isEmpty()) throw invalidCode();
         Map<String, Object> record = records.get(0);
+        if (!Boolean.TRUE.equals(record.get("enabled"))) throw invalidCode();
         String status = String.valueOf(record.get("status"));
         String reportId = record.get("reportId") == null ? "" : String.valueOf(record.get("reportId"));
         Map<String, Object> access = new LinkedHashMap<>(record);

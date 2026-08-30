@@ -443,6 +443,7 @@ git commit -m "feat: manage matchmaking trial codes in root admin"
 - Modify: `front/src/router/index.js`
 - Modify: `front/src/components/common/AppHeader.vue`
 - Create: `front/src/utils/routeAccess.js`
+- Create: `front/src/utils/matchmakingTrial.js`
 - Create: `front/scripts/check-matchmaking-trial.mjs`
 - Modify: `front/package.json`
 - Modify: `front/src/views/MatchmakingReport/index.vue`
@@ -459,7 +460,7 @@ git commit -m "feat: manage matchmaking trial codes in root admin"
 export function routeAccessDecision({ visibility, trialEntry, isLoggedIn, isRoot, isMatchmakingTrial })
 ```
 
-`check-matchmaking-trial.mjs` 使用 Node assert 覆盖：未登录可进入 `trialEntry`；未登录不能进入普通 USER 页面；trial 可进入 Matchmaking detail；trial 不能进入 Translate、Contact、ImageGenerate、Guestbook mutation 或 Admin；ROOT 行为不变。再读取 SFC 源码断言存在“开始一次内测”“已有账号，登录使用”“最长保留 30 天”。
+`check-matchmaking-trial.mjs` 使用 Node assert 覆盖：未登录可进入 `trialEntry`；未登录不能进入普通 USER 页面；trial 可进入 Matchmaking detail；trial 不能进入 Translate、Contact、ImageGenerate、Guestbook mutation 或 Admin；ROOT 行为不变。`matchmakingTrial.js` 导出 `trialWorkspaceState(access)`，用真实状态对象断言 CLAIMED/RETRYABLE 显示问卷、RUNNING 显示进度、COMPLETED+reportId 跳转报告、COMPLETED 无报告显示不可恢复状态。文案和真实点击不做源码字符串断言，由 Task 7 浏览器回归验证。
 
 - [ ] **Step 2: 运行门禁确认工具和文案不存在**
 
@@ -530,7 +531,7 @@ Commit:
 
 ```bash
 git add front/src/api/index.js front/src/stores/auth.js front/src/router/index.js \
-  front/src/components/common/AppHeader.vue front/src/utils/routeAccess.js \
+  front/src/components/common/AppHeader.vue front/src/utils/routeAccess.js front/src/utils/matchmakingTrial.js \
   front/src/views/MatchmakingReport/index.vue front/scripts/check-matchmaking-trial.mjs \
   front/package.json
 git commit -m "feat: add passwordless matchmaking trial entry"
@@ -553,7 +554,7 @@ git commit -m "feat: add passwordless matchmaking trial entry"
 
 - [ ] **Step 1: 扩展失败门禁覆盖后台唯一展示和状态文案**
 
-在脚本中解析 Admin SFC 并断言存在：`婚恋内测邀请码`、`完整邀请码仅显示这一次`、`默认 7 天`、`生成并复制`、`撤销访问`；解析 ReportView 断言 trial 删除提示含“删除后不能重新生成”。先运行确认失败。
+在 `matchmakingTrial.js` 增加 `trialCodeStatus(code, now)` 和 `trialDeleteWarning(isTrial)`，脚本以固定时间和状态对象断言：disabled=已撤销、过期 UNUSED=已过期、UNUSED/CLAIMED/RUNNING/RETRYABLE/COMPLETED 映射正确；trial 删除警告明确不可重新生成，正式用户返回原删除警告。后台实际标签、复制和报告确认框由 Task 7 浏览器回归验证。先运行确认函数不存在而失败。
 
 Run: `cd front && npm run check:matchmaking-trial`
 

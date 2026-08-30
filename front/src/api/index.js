@@ -105,6 +105,21 @@ export function getLatestMatchmakingReport() {
 export function createMatchmakingReport(profile) {
   return post("/matchmaking/reports", profile);
 }
+export function getMatchmakingTasks() {
+  return get("/matchmaking/tasks");
+}
+export function getMatchmakingTask(taskId) {
+  return get(`/matchmaking/tasks/${taskId}`);
+}
+export function getMatchmakingReports() {
+  return get("/matchmaking/reports");
+}
+export function getMatchmakingReport(reportId) {
+  return get(`/matchmaking/reports/${reportId}`);
+}
+export function deleteMatchmakingReport(reportId) {
+  return requestWithOptions(`/matchmaking/reports/${reportId}`, { method: "DELETE" });
+}
 export function deleteMatchmakingData() {
   return requestWithOptions("/matchmaking/data", { method: "DELETE" });
 }

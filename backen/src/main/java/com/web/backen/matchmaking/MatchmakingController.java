@@ -18,9 +18,23 @@ public class MatchmakingController {
     public MatchmakingController(MatchmakingService service, AuthService auth, RuntimeConfigService runtime, QuotaService quota) { this.service=service; this.auth=auth; this.runtime=runtime; this.quota=quota; }
     @GetMapping("/catalogue") public Map<String,Object> catalogue() { return ok(service.catalogue()); }
     @GetMapping("/status") public Map<String,Object> status(HttpServletRequest request) { return ok(service.status(access(request))); }
-    @GetMapping("/reports/latest") public Map<String,Object> latest(HttpServletRequest request) { return ok(service.latest(access(request))); }
     @PostMapping("/reports") public ResponseEntity<?> create(@RequestBody Map<String,Object> body, HttpServletRequest request) {
-        try { AuthUser user=access(request); auth.requireCsrf(request); Map<String,Object> report=new java.util.LinkedHashMap<>(service.create(user,body)); report.put("credits", quota.balance(user.id())); return ResponseEntity.ok(ok(report)); }
+        try { AuthUser user=access(request); auth.requireCsrf(request); return ResponseEntity.ok(ok(service.createTask(user,body))); }
+        catch(AuthException e) { return error(e); }
+    }
+    @GetMapping("/tasks") public Map<String,Object> tasks(HttpServletRequest request) { return ok(service.tasks(access(request))); }
+    @GetMapping("/tasks/{taskId}") public ResponseEntity<?> task(@PathVariable String taskId, HttpServletRequest request) {
+        try { return ResponseEntity.ok(ok(service.task(access(request), taskId))); }
+        catch(AuthException e) { return error(e); }
+    }
+    @GetMapping("/reports") public Map<String,Object> reports(HttpServletRequest request) { return ok(service.reportSummaries(access(request))); }
+    @GetMapping("/reports/latest") public Map<String,Object> latest(HttpServletRequest request) { return ok(service.latest(access(request))); }
+    @GetMapping("/reports/{reportId}") public ResponseEntity<?> report(@PathVariable String reportId, HttpServletRequest request) {
+        try { return ResponseEntity.ok(ok(service.report(access(request), reportId))); }
+        catch(AuthException e) { return error(e); }
+    }
+    @DeleteMapping("/reports/{reportId}") public ResponseEntity<?> deleteReport(@PathVariable String reportId, HttpServletRequest request) {
+        try { AuthUser user=access(request); auth.requireCsrf(request); return ResponseEntity.ok(ok(service.deleteReport(user, reportId))); }
         catch(AuthException e) { return error(e); }
     }
     @DeleteMapping("/data") public ResponseEntity<?> delete(HttpServletRequest request) {

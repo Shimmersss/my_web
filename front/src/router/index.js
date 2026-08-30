@@ -46,6 +46,12 @@ const routes = [
     meta: { title: '婚恋条件报告', visibility: 'Matchmaking' }
   },
   {
+    path: '/matchmaking-report/:reportId',
+    name: 'MatchmakingReportDetail',
+    component: () => import('@/views/MatchmakingReport/ReportView.vue'),
+    meta: { title: '婚恋定位报告', visibility: 'Matchmaking' }
+  },
+  {
     path: '/publications',
     name: 'Publications',
     component: () => import('@/views/Publications/index.vue'),

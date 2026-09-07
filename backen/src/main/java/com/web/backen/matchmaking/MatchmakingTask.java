@@ -4,29 +4,32 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-/** Async report generation task; persisted as JSON under the task dir so a restart can refund interrupted work. */
+/** SQL-backed task snapshot; request data is discarded after completion or compensation. */
 final class MatchmakingTask {
     final String id;
     final long userId;
     long transactionId;
     final int credits;
+    final boolean trial;
     final boolean includePartnerImage;
-    final Map<String, Object> request;
-    final String createdAt = Instant.now().toString();
+    Map<String, Object> request;
+    volatile boolean compensationPending;
+    String createdAt = Instant.now().toString();
     volatile String status = "queued"; // queued | running | done | error
     volatile String stage = "queued";  // queued | scoring | writing | illustrating | saving | done | error
     volatile String reportId = "";
     volatile String error = "";
     volatile String updatedAt = createdAt;
 
-    MatchmakingTask(String id, long userId, long transactionId, int credits, boolean includePartnerImage,
+    MatchmakingTask(String id, long userId, long transactionId, int credits, boolean trial, boolean includePartnerImage,
                     Map<String, Object> request) {
         this.id = id; this.userId = userId; this.transactionId = transactionId; this.credits = credits;
-        this.includePartnerImage = includePartnerImage; this.request = request;
+        this.trial = trial; this.includePartnerImage = includePartnerImage; this.request = request;
     }
 
     Map<String, Object> view() {
         Map<String, Object> view = new LinkedHashMap<>();
+        view.put("compensationPending", compensationPending);
         view.put("id", id); view.put("status", status); view.put("stage", stage);
         view.put("reportId", reportId); view.put("error", error); view.put("createdAt", createdAt);
         return view;
@@ -34,8 +37,9 @@ final class MatchmakingTask {
 
     Map<String, Object> snapshot() {
         Map<String, Object> snapshot = new LinkedHashMap<>();
+        snapshot.put("compensationPending", compensationPending);
         snapshot.put("id", id); snapshot.put("userId", userId); snapshot.put("transactionId", transactionId);
-        snapshot.put("credits", credits); snapshot.put("includePartnerImage", includePartnerImage);
+        snapshot.put("credits", credits); snapshot.put("trial", trial); snapshot.put("includePartnerImage", includePartnerImage);
         snapshot.put("request", request); snapshot.put("status", status); snapshot.put("stage", stage);
         snapshot.put("reportId", reportId); snapshot.put("error", error);
         snapshot.put("createdAt", createdAt); snapshot.put("updatedAt", updatedAt);
@@ -49,8 +53,11 @@ final class MatchmakingTask {
                 snapshot.get("userId") instanceof Number n ? n.longValue() : 0L,
                 snapshot.get("transactionId") instanceof Number n ? n.longValue() : 0L,
                 snapshot.get("credits") instanceof Number n ? n.intValue() : 0,
+                Boolean.TRUE.equals(snapshot.get("trial")),
                 Boolean.TRUE.equals(snapshot.get("includePartnerImage")),
                 snapshot.get("request") instanceof Map ? (Map<String, Object>) snapshot.get("request") : Map.of());
+        task.compensationPending = Boolean.TRUE.equals(snapshot.get("compensationPending"));
+        task.createdAt = String.valueOf(snapshot.getOrDefault("createdAt", task.createdAt));
         task.status = String.valueOf(snapshot.getOrDefault("status", "error"));
         task.stage = String.valueOf(snapshot.getOrDefault("stage", "error"));
         task.reportId = String.valueOf(snapshot.getOrDefault("reportId", ""));

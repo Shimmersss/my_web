@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { isAndroidMobileWeb } from '@/utils/androidBridge'
+import { routeAccessDecision } from '@/utils/routeAccess'
 
 const routes = [
   {
@@ -43,7 +44,7 @@ const routes = [
     path: '/matchmaking-report',
     name: 'MatchmakingReport',
     component: () => import('@/views/MatchmakingReport/index.vue'),
-    meta: { title: '婚恋条件报告', visibility: 'Matchmaking' }
+    meta: { title: '婚恋条件报告', visibility: 'Matchmaking', trialEntry: true }
   },
   {
     path: '/matchmaking-report/:reportId',
@@ -96,22 +97,23 @@ router.beforeEach(async (to, from, next) => {
     if (to.meta.mobileWebOnly && !isAndroidMobileWeb()) return next('/')
   }
   const visibility = to.meta.visibility
-  if (visibility && visibility !== 'Admin') {
+  if (visibility) {
     const auth = useAuthStore()
     if (!auth.user) await auth.refresh().catch(() => {})
     const level = auth.visibility[visibility] || 'PUBLIC'
-    if (level === 'USER' && !auth.isLoggedIn) {
+    const decision = routeAccessDecision({
+      visibility,
+      level,
+      trialEntry: Boolean(to.meta.trialEntry),
+      isLoggedIn: auth.isLoggedIn,
+      isRoot: auth.isRoot,
+      isMatchmakingTrial: auth.isMatchmakingTrial
+    })
+    if (decision === 'login') {
       auth.requestLogin(to.fullPath)
-      return next('/')
+      return next(visibility === 'Matchmaking' ? '/matchmaking-report' : '/')
     }
-    if (level === 'ROOT' && !auth.isRoot) {
-      auth.requestPermissionDenied()
-      return next('/')
-    }
-  } else if (visibility === 'Admin') {
-    const auth = useAuthStore()
-    if (!auth.user) await auth.refresh().catch(() => {})
-    if (!auth.isRoot) {
+    if (decision === 'forbidden') {
       auth.requestPermissionDenied()
       return next('/')
     }

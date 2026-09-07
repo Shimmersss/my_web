@@ -34,7 +34,7 @@ public class MimoMatchmakingReportAgent implements MatchmakingReportAgent {
             - marketReading 是对象，键必须且只能为 hardAssets、highlights、gaps、sensitivities，分别说明市场硬通货、亮点、短板和市场敏感点，每项一到两句；
             - faqPrep 是恰好 6 个对象的数组，每个对象键为 question、answer，覆盖介绍人和对方父母最可能问的问题，回答诚实、直接可用；
             - dimensionAnalysis 是恰好 5 个对象的数组，dimension 依次必须是 经济基础、学历职业、年龄外形、家庭支持、性格相处，每个对象键为 analysis（用 3–5 句结合该维得分依据详细分析当前情况与在本地市场的位置）和 actions（给出 2–3 条具体可执行做法，用分号分隔）；
-            - partnerPortrait 是对象，键必须且只能为 portrait（180–350 字的详细推荐伴侣画像：条件区间、生活方式、性格特征与相处场景）和 whyMatch（详细说明匹配点与需要磨合的地方）；
+            - partnerPortrait 是对象，键必须且只能为 portrait（180–350 字的详细推荐伴侣画像：条件区间、生活方式、性格特征与相处场景）和 whyMatch（详细说明匹配点与需要磨合的地方）；报告中的伴侣推荐（partnerPortrait）必须以理想伴侣问卷答案（性别、年龄段、气质、发型、场景）为基准，结合用户条件与性格类型展开；问卷留空的项才按用户条件自动推断；
             - channelStrategy 是对象，键必须且只能为 mainChannels（主攻渠道与具体打法）和 avoidPitfalls（避坑提醒）；
             - limitations 说明数据与边界局限，并提醒评分是市场供需参考、按公开规则计算、不代表个人价值。
             """;

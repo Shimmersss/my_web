@@ -54,9 +54,9 @@
           <div class="panel-heading">
             <div>
               <p class="section-kicker">02 / 快速入口</p>
-              <h2 id="workflow-title">研究工作流</h2>
+              <h2 id="workflow-title">站内工具</h2>
             </div>
-            <a href="/publications" @click.prevent="navigateTo('/publications')">打开文献库 <span aria-hidden="true">→</span></a>
+            <a href="/matchmaking-report" @click.prevent="navigateTo('/matchmaking-report')">打开婚恋报告 <span aria-hidden="true">→</span></a>
           </div>
 
           <nav class="workflow-list" aria-label="研究工作流入口">
@@ -110,24 +110,6 @@
             </a>
           </div>
           <div v-else class="featured-repo repo-loading">排行榜正在整理或等待首次同步…</div>
-          <!-- kept only as a resilient fallback for old cached API payloads -->
-          <div v-if="false && featuredProject" class="featured-repo">
-            <div class="repo-title">
-              <n-icon size="22"><LogoGithub /></n-icon>
-              <div>
-                <strong>{{ featuredProject.full_name }}</strong>
-                <small>{{ featuredProject.category || 'Open Source' }}</small>
-              </div>
-            </div>
-            <p>{{ featuredProject.highlight || featuredProject.description }}</p>
-            <div class="repo-meta">
-              <span>{{ featuredProject.language || 'Unknown' }}</span>
-              <span>★ {{ formatNumber(featuredProject.stargazers_count) }}</span>
-              <span>⑂ {{ formatNumber(featuredProject.forks_count) }}</span>
-            </div>
-            <a class="repo-link" href="/news" @click.prevent="navigateTo('/news')">浏览项目与 README <span aria-hidden="true">→</span></a>
-          </div>
-          <div v-else class="featured-repo repo-loading">正在整理 GitHub 项目索引…</div>
         </article>
       </div>
     </section>
@@ -144,7 +126,9 @@ import {
   DocumentTextOutline,
   LogoGithub,
   SchoolOutline,
-  ImagesOutline
+  ImagesOutline,
+  HeartOutline,
+  ChatbubbleEllipsesOutline
 } from '@vicons/ionicons5'
 import { getDailyCheckinLeaderboard, getGithubRankings, getHomeDailyStatus } from '@/api'
 import workspaceImage from '@/assets/images/home-workspace-aurora.png'
@@ -161,7 +145,9 @@ const tools = [
   { title: '论文翻译', description: '保留版式输出双语 PDF', path: '/translate', icon: DocumentTextOutline },
   { title: 'PPT 生成', description: '从论文生成答辩材料', path: '/contact', icon: SchoolOutline },
   { title: 'GPT 生图', description: '生成图片或用参考图继续创作', path: '/image-generate', icon: ImagesOutline },
-  { title: '开源项目', description: '浏览 GitHub 仓库与 README', path: '/news', icon: LogoGithub }
+  { title: '婚恋定位体检', description: '生成五维定位与沟通报告', path: '/matchmaking-report', icon: HeartOutline },
+  { title: '开源项目', description: '浏览 GitHub 仓库与 README', path: '/news', icon: LogoGithub },
+  { title: '留言板', description: '留下建议或查看站内交流', path: '/guestbook', icon: ChatbubbleEllipsesOutline }
 ]
 
 const dailyProgress = computed(() => [
@@ -170,8 +156,6 @@ const dailyProgress = computed(() => [
   statusItem('研究任务', dailyStatus.value.siteTaskReady, dailyStatus.value.siteTaskUpdatedAt)
 ])
 const rankedProjects = computed(() => (rankingData.value?.[rankingPeriod.value]?.projects || []).slice(0, 3))
-const featuredProject = computed(() => null)
-
 onMounted(async () => {
   getDailyCheckinLeaderboard().then(response => { checkinLeaders.value = response?.data || [] }).catch(() => {})
   getHomeDailyStatus().then(response => { dailyStatus.value = response?.data || {} }).catch(() => {})

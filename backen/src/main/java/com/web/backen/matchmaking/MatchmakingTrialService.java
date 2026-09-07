@@ -60,9 +60,9 @@ public class MatchmakingTrialService {
         Timestamp expiry = parseExpiry(expiresAt);
         jdbc.update("""
                 INSERT INTO matchmaking_trial_codes
-                    (code_hash, code_suffix, status, enabled, expires_at, created_by)
-                VALUES (?, ?, ?, TRUE, ?, ?)
-                """, hash(code), code.substring(code.length() - 4), STATUS_UNUSED, expiry, rootId);
+                    (code_hash, code_plain, code_suffix, status, enabled, expires_at, created_by)
+                VALUES (?, ?, ?, ?, TRUE, ?, ?)
+                """, hash(code), code, code.substring(code.length() - 4), STATUS_UNUSED, expiry, rootId);
 
         Map<String, Object> created = new LinkedHashMap<>();
         created.put("code", code);
@@ -75,11 +75,11 @@ public class MatchmakingTrialService {
 
     public List<Map<String, Object>> codes() {
         return jdbc.query("""
-                SELECT id, code_suffix, guest_user_id, status, active_task_id, report_id,
+                SELECT id, code_plain, code_suffix, guest_user_id, status, active_task_id, report_id,
                        enabled, expires_at, redeemed_at, completed_at, created_by, created_at, updated_at
                 FROM matchmaking_trial_codes
                 ORDER BY id DESC
-                """, (rs, rowNum) -> summary(rs));
+                """, (rs, rowNum) -> adminSummary(rs));
     }
 
     @Transactional
@@ -163,6 +163,35 @@ public class MatchmakingTrialService {
         return accessForUser(userId);
     }
 
+    @Transactional
+    public void reserveTask(long userId, String taskId) {
+        int updated = jdbc.update("""
+                UPDATE matchmaking_trial_codes
+                SET status=?, active_task_id=?, updated_at=CURRENT_TIMESTAMP
+                WHERE guest_user_id=? AND enabled=TRUE AND status IN (?, ?)
+                """, STATUS_RUNNING, taskId, userId, STATUS_CLAIMED, STATUS_RETRYABLE);
+        if (updated != 1) throw new AuthException(409, "该内测邀请码已在生成或已完成报告");
+    }
+
+    @Transactional
+    public void markRetryable(long userId, String taskId) {
+        jdbc.update("""
+                UPDATE matchmaking_trial_codes
+                SET status=?, active_task_id=NULL, updated_at=CURRENT_TIMESTAMP
+                WHERE guest_user_id=? AND enabled=TRUE AND status=? AND active_task_id=?
+                """, STATUS_RETRYABLE, userId, STATUS_RUNNING, taskId);
+    }
+
+    @Transactional
+    public void markCompleted(long userId, String taskId, String reportId) {
+        int updated = jdbc.update("""
+                UPDATE matchmaking_trial_codes
+                SET status=?, active_task_id=NULL, report_id=?, completed_at=?, updated_at=CURRENT_TIMESTAMP
+                WHERE guest_user_id=? AND enabled=TRUE AND status=? AND active_task_id=?
+                """, STATUS_COMPLETED, reportId, Timestamp.from(clock.instant()), userId, STATUS_RUNNING, taskId);
+        if (updated != 1) throw new AuthException(409, "内测邀请码状态已变化，无法保存报告");
+    }
+
     private Map<String, Object> summary(ResultSet rs) throws SQLException {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("id", rs.getLong("id"));
@@ -178,6 +207,14 @@ public class MatchmakingTrialService {
         result.put("createdBy", rs.getLong("created_by"));
         result.put("createdAt", rs.getTimestamp("created_at"));
         result.put("updatedAt", rs.getTimestamp("updated_at"));
+        return result;
+    }
+
+    private Map<String, Object> adminSummary(ResultSet rs) throws SQLException {
+        Map<String, Object> result = summary(rs);
+        String code = rs.getString("code_plain");
+        result.put("code", code);
+        result.put("codeRecoverable", code != null && !code.isBlank());
         return result;
     }
 

@@ -153,6 +153,44 @@ class AuthQuotaServiceTest {
         assertEquals(1, services.jdbc().queryForObject("SELECT COUNT(*) FROM credit_transactions WHERE user_id=? AND kind='DAILY_CHECKIN'", Integer.class, userId));
     }
 
+    @Test
+    void concurrentRefundsCreditExactlyOnceInRealTransactions() throws Exception {
+        TestServices services = newServices();
+        var tx = new org.springframework.transaction.support.TransactionTemplate(
+                new org.springframework.jdbc.datasource.DataSourceTransactionManager(services.db()));
+        services.jdbc().update("UPDATE users SET credits=10 WHERE id=1");
+        long spend = tx.execute(status -> services.quota().spend(1, 3, "TEST", "concurrent", "test"));
+        var pool = Executors.newFixedThreadPool(8);
+        CountDownLatch start = new CountDownLatch(1);
+        var futures = new java.util.ArrayList<java.util.concurrent.Future<?>>();
+        try {
+            for (int i = 0; i < 8; i++) futures.add(pool.submit(() -> {
+                try { assertTrue(start.await(5, TimeUnit.SECONDS)); }
+                catch (InterruptedException e) { throw new RuntimeException(e); }
+                tx.executeWithoutResult(status -> services.quota().refund(spend, "concurrent retry"));
+            }));
+            start.countDown();
+            for (var future : futures) future.get(10, TimeUnit.SECONDS);
+            assertEquals(10, services.quota().balance(1));
+            assertEquals(1, services.jdbc().queryForObject("SELECT COUNT(*) FROM credit_transactions WHERE kind='REFUND'", Integer.class));
+            assertEquals(1, services.jdbc().queryForObject("SELECT COUNT(*) FROM credit_refund_claims", Integer.class));
+        } finally { pool.shutdownNow(); services.db().shutdown(); }
+    }
+
+    @Test
+    void rolledBackRefundDoesNotLeaveClaimOrCredit() {
+        TestServices services = newServices();
+        var tx = new org.springframework.transaction.support.TransactionTemplate(
+                new org.springframework.jdbc.datasource.DataSourceTransactionManager(services.db()));
+        services.jdbc().update("UPDATE users SET credits=10 WHERE id=1");
+        long spend = tx.execute(status -> services.quota().spend(1, 3, "TEST", "rollback", "test"));
+        tx.executeWithoutResult(status -> { services.quota().refund(spend, "rollback"); status.setRollbackOnly(); });
+        assertEquals(7, services.quota().balance(1));
+        assertEquals(0, services.jdbc().queryForObject("SELECT COUNT(*) FROM credit_refund_claims", Integer.class));
+        tx.executeWithoutResult(status -> services.quota().refund(spend, "retry"));
+        assertEquals(10, services.quota().balance(1));
+    }
+
     private TestServices newServices() {
         EmbeddedDatabase db = new EmbeddedDatabaseBuilder()
                 .generateUniqueName(true)

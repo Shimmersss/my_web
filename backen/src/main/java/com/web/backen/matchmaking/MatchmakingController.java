@@ -14,8 +14,8 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/matchmaking")
 public class MatchmakingController {
-    private final MatchmakingService service; private final AuthService auth; private final RuntimeConfigService runtime; private final QuotaService quota;
-    public MatchmakingController(MatchmakingService service, AuthService auth, RuntimeConfigService runtime, QuotaService quota) { this.service=service; this.auth=auth; this.runtime=runtime; this.quota=quota; }
+    private final MatchmakingService service; private final AuthService auth; private final RuntimeConfigService runtime; private final QuotaService quota; private final MatchmakingTrialService trials;
+    public MatchmakingController(MatchmakingService service, AuthService auth, RuntimeConfigService runtime, QuotaService quota, MatchmakingTrialService trials) { this.service=service; this.auth=auth; this.runtime=runtime; this.quota=quota; this.trials=trials; }
     @GetMapping("/catalogue") public Map<String,Object> catalogue() { return ok(service.catalogue()); }
     @GetMapping("/status") public Map<String,Object> status(HttpServletRequest request) { return ok(service.status(access(request))); }
     @PostMapping("/reports") public ResponseEntity<?> create(@RequestBody Map<String,Object> body, HttpServletRequest request) {
@@ -38,10 +38,10 @@ public class MatchmakingController {
         catch(AuthException e) { return error(e); }
     }
     @DeleteMapping("/data") public ResponseEntity<?> delete(HttpServletRequest request) {
-        try { AuthUser user=access(request); auth.requireCsrf(request); return ResponseEntity.ok(ok(service.deleteAll(user))); }
+        try { AuthUser user=access(request); auth.requireCsrf(request); if(user.isMatchmakingTrial()) throw new AuthException(403,"内测身份不能清空全部数据"); return ResponseEntity.ok(ok(service.deleteAll(user))); }
         catch(AuthException e) { return error(e); }
     }
-    private AuthUser access(HttpServletRequest request) { AuthUser user=auth.requireUser(request); if("ROOT".equalsIgnoreCase(runtime.visibilityLevel("Matchmaking"))&&!user.isRoot()) throw new AuthException(403,"无权访问该节目"); return user; }
+    private AuthUser access(HttpServletRequest request) { AuthUser user=auth.requireSessionUser(request); if(user.isMatchmakingTrial()){ trials.requireEnabled(user.id()); return user; } if("ROOT".equalsIgnoreCase(runtime.visibilityLevel("Matchmaking"))&&!user.isRoot()) throw new AuthException(403,"无权访问该节目"); return user; }
     private Map<String,Object> ok(Object data) { return Map.of("code",200,"data",data); }
     private ResponseEntity<?> error(AuthException e) { return ResponseEntity.status(e.getStatus()).body(Map.of("code",e.getStatus(),"message",e.getMessage())); }
 }

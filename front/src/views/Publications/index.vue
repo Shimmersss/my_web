@@ -156,6 +156,10 @@
                         <template #icon><n-icon><DocumentTextOutline /></n-icon></template>
                         {{ attachmentButtonLabel(item.key, att) }}
                       </n-button>
+                      <n-button v-if="att.isPdf" size="small" @click="downloadAttachment(att)">
+                        <template #icon><n-icon><DownloadOutline /></n-icon></template>
+                        下载
+                      </n-button>
                       <n-button v-if="auth.isRoot && att.isPdf" size="small" type="warning" ghost :loading="translationSubmitting === att.key" @click="submitToTranslation(att)">提交翻译</n-button>
                     </template>
                     <n-dropdown
@@ -237,7 +241,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useRouter } from 'vue-router'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { requestAndroidTextSave } from '@/utils/androidBridge'
+import { requestAndroidTextSave, downloadUrl } from '@/utils/androidBridge'
 
 const message = useMessage()
 const auth = useAuthStore()
@@ -584,6 +588,15 @@ function pdfAttachments(item) {
   return (item.attachments || []).filter(a => a.isPdf)
 }
 
+// App 内内嵌 PDF 查看器的自带 Download 按钮走 blob: 链接会被容器拦截，
+// 这里提供走附件代理白名单（/api/zotero/file/{key}）的正式下载入口：
+// App 内经桥接带进度下载并由 SAF 保存，桌面浏览器直接触发原生下载。
+function downloadAttachment(att) {
+  const rawName = att.filename || att.title || `shimmer-${att.key}.pdf`
+  const filename = /\.[a-z0-9]{2,5}$/i.test(rawName) ? rawName : `${rawName}.pdf`
+  downloadUrl(`/api/zotero/file/${att.key}`, filename, 'application/pdf')
+}
+
 function isMarkdown(att) {
   const fn = att.filename || att.title || ''
   return /\.(md|markdown)$/i.test(fn)
@@ -688,7 +701,9 @@ async function doExport(itemKey, opt) {
       message.success('APA 引用已复制到剪贴板')
     } else {
       const filename = `${itemKey}.${opt === 'bibtex' ? 'bib' : 'ris'}`
-      if (requestAndroidTextSave({ text, filename })) {
+      // MIME 必须与扩展名匹配，否则 Android SAF 会把保存名改写成 .bib.txt
+      const mimeType = opt === 'bibtex' ? 'application/x-bibtex' : 'application/x-research-info-systems'
+      if (requestAndroidTextSave({ text, filename, mimeType })) {
         message.success(`${opt.toUpperCase()} 已交给系统保存`)
         return
       }

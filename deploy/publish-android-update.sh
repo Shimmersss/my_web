@@ -4,9 +4,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCAL_CONFIG="${DEPLOY_LOCAL_CONFIG:-$ROOT/.deploy.local}"
 ANDROID_HOME="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
-APK="${1:-$ROOT/.release/android/shimmer-internal-0.3.4.apk}"
+APK="${1:-$ROOT/.release/android/shimmer-internal-0.3.6.apk}"
 REMOTE_UPDATE_DIR="${ANDROID_UPDATE_REMOTE_DIR:-/home/admin/web-homepage/.run/android-updates}"
-NOTES="${ANDROID_UPDATE_NOTES:-升级 GeckoView 149 并修复 Android 15 启动崩溃；旧版本取消更新后，下次打开仍会再次提示。}"
+NOTES="${ANDROID_UPDATE_NOTES:-新增婚恋邀请码内测与后台管理，优化电脑 Web、文件上传下载和整体使用体验。}"
 
 die() { printf '[x] %s\n' "$*" >&2; exit 1; }
 sha256_file() {

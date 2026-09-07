@@ -12,6 +12,7 @@
             :value="activeKey"
             mode="horizontal"
             :options="menuOptions"
+            @update:value="handleMenuSelect"
           />
         </nav>
 
@@ -29,17 +30,17 @@
             </n-icon>
           </n-button>
 
-          <NotificationPanel v-if="auth.isLoggedIn" class="desktop-auth-action" />
+          <NotificationPanel v-if="auth.isLoggedIn && !auth.isMatchmakingTrial" class="desktop-auth-action" />
 
           <n-button v-if="!auth.isLoggedIn" size="small" secondary class="desktop-auth-action" @click="openLogin">
             登录
           </n-button>
           <div v-else class="account-chip desktop-auth-action">
             <button type="button" class="account-button" @click="auth.isRoot ? navigateTo('/admin') : null">
-              <span>{{ auth.user?.username }}</span>
-              <strong>{{ auth.credits }} credits</strong>
+              <span>{{ auth.isMatchmakingTrial ? '婚恋内测' : auth.user?.username }}</span>
+              <strong v-if="!auth.isMatchmakingTrial">{{ auth.credits }} credits</strong>
             </button>
-            <n-button size="small" secondary :disabled="!auth.dailyCheckin?.enabled || auth.dailyCheckin?.claimed" @click="handleDailyCheckin">
+            <n-button v-if="!auth.isMatchmakingTrial" size="small" secondary :disabled="!auth.dailyCheckin?.enabled || auth.dailyCheckin?.claimed" @click="handleDailyCheckin">
               {{ auth.dailyCheckin?.claimed ? '已签到' : '签到' }}
             </n-button>
             <n-button size="small" text @click="handleLogout">退出</n-button>
@@ -66,15 +67,16 @@
           :value="activeKey"
           :options="mobileMenuOptions"
           class="mobile-nav-menu"
+          @update:value="handleMenuSelect"
         />
         <div class="mobile-account-actions">
           <template v-if="auth.isLoggedIn">
-            <NotificationPanel class="mobile-notification" />
+            <NotificationPanel v-if="!auth.isMatchmakingTrial" class="mobile-notification" />
             <button type="button" class="mobile-account" @click="auth.isRoot ? navigateTo('/admin') : null">
-              <span>{{ auth.user?.username }}</span>
-              <strong>{{ auth.credits }} credits</strong>
+              <span>{{ auth.isMatchmakingTrial ? '婚恋内测' : auth.user?.username }}</span>
+              <strong v-if="!auth.isMatchmakingTrial">{{ auth.credits }} credits</strong>
             </button>
-            <n-button block secondary :disabled="!auth.dailyCheckin?.enabled || auth.dailyCheckin?.claimed" @click="handleDailyCheckin">
+            <n-button v-if="!auth.isMatchmakingTrial" block secondary :disabled="!auth.dailyCheckin?.enabled || auth.dailyCheckin?.claimed" @click="handleDailyCheckin">
               {{ auth.dailyCheckin?.claimed ? '今日已签到' : `每日签到 +${auth.dailyCheckin?.credits || 0}` }}
             </n-button>
             <n-button block secondary @click="handleLogout">退出登录</n-button>
@@ -125,6 +127,7 @@ import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
 import NotificationPanel from './NotificationPanel.vue'
 import { isAndroidMobileWeb } from '@/utils/androidBridge'
+import { buildDesktopMenuOptions, resolveMenuPath } from '@/utils/navigation'
 
 const router = useRouter()
 const route = useRoute()
@@ -170,7 +173,7 @@ const inviteInputProps = {
 }
 
 const isDark = computed(() => themeStore.isDark)
-const activeKey = computed(() => route.name)
+const activeKey = computed(() => route.name === 'MatchmakingReportDetail' ? 'Matchmaking' : route.name)
 
 const MenuIcon = MenuOutline
 const MoonIcon = MoonOutline
@@ -180,7 +183,7 @@ watch(() => auth.authPrompt, prompt => {
   if (prompt === 'login') {
     openLogin()
   } else if (prompt === 'forbidden') {
-    message.error('权限不足：该节目需要 root 权限')
+    message.error(auth.isMatchmakingTrial ? '内测身份只能使用婚恋报告' : '权限不足：该节目需要 root 权限')
     auth.clearAuthPrompt()
   }
 })
@@ -209,58 +212,55 @@ watch(() => auth.user?.id || null, userId => maybeShowDownloadReminder(userId), 
 const allMenuOptions = computed(() => [
   {
     label: '文献',
-    key: 'Publications',
-    onClick: () => navigateTo('/publications')
+    key: 'Publications'
   },
   {
     label: '翻译',
-    key: 'Translate',
-    onClick: () => navigateTo('/translate')
+    key: 'Translate'
   },
   {
     label: 'PPT 生成',
-    key: 'Contact',
-    onClick: () => navigateTo('/contact')
+    key: 'Contact'
   },
   {
     label: 'GPT 生图',
-    key: 'ImageGenerate',
-    onClick: () => navigateTo('/image-generate')
+    key: 'ImageGenerate'
   },
   {
-    label: '婚恋条件报告',
-    key: 'Matchmaking',
-    onClick: () => navigateTo('/matchmaking-report')
+    label: '婚恋报告',
+    key: 'Matchmaking'
   },
   {
     label: 'GitHub 项目',
-    key: 'News',
-    onClick: () => navigateTo('/news')
+    key: 'News'
   },
   {
     label: '留言板',
-    key: 'Guestbook',
-    onClick: () => navigateTo('/guestbook')
+    key: 'Guestbook'
   },
   ...(auth.isLoggedIn && isAndroidMobileWeb() ? [{
     label: '下载 App',
-    key: 'DownloadApp',
-    onClick: () => navigateTo('/download-app')
+    key: 'DownloadApp'
   }] : []),
   ...(auth.isRoot ? [{
     label: '后台',
-    key: 'Admin',
-    onClick: () => navigateTo('/admin')
+    key: 'Admin'
   }] : [])
 ])
 
-const menuOptions = computed(() => allMenuOptions.value.filter(item => auth.canView(item.key) || item.key === 'Admin'))
+const visibleMenuOptions = computed(() => allMenuOptions.value.filter(item => auth.canView(item.key) || item.key === 'Matchmaking' || item.key === 'Admin'))
+const menuOptions = computed(() => buildDesktopMenuOptions(visibleMenuOptions.value))
 
-const mobileMenuOptions = computed(() => menuOptions.value)
+const mobileMenuOptions = computed(() => visibleMenuOptions.value)
 
 const navigateTo = (path) => {
   mobileMenuOpen.value = false
   router.push(path)
+}
+
+const handleMenuSelect = (key) => {
+  const path = resolveMenuPath(key)
+  if (path) navigateTo(path)
 }
 
 const toggleTheme = () => {
@@ -309,10 +309,12 @@ async function submitAuth() {
 }
 
 async function handleLogout() {
+  const wasTrial = auth.isMatchmakingTrial
   mobileMenuOpen.value = false
   await auth.logout()
   message.success('已退出')
   if (route.name === 'Admin') navigateTo('/')
+  else if (wasTrial && route.name === 'MatchmakingReportDetail') navigateTo('/matchmaking-report')
 }
 
 async function handleDailyCheckin() {
@@ -530,8 +532,8 @@ async function handleDailyCheckin() {
   .nav-menu {
     :deep(.n-menu) {
       .n-menu-item {
-        padding: 0 16px;
-        font-size: 16px;
+        padding: 0 8px;
+        font-size: 14px;
         height: 72px;
       }
     }
@@ -635,6 +637,97 @@ async function handleDailyCheckin() {
 
   .account-button {
     max-width: 92px;
+  }
+}
+
+@media (min-width: 993px) {
+  .app-header {
+    background: rgba(248, 245, 238, 0.94);
+    backdrop-filter: blur(14px);
+  }
+
+  .header-content {
+    max-width: 1480px;
+    height: 72px;
+    padding: 0 28px;
+    gap: 30px;
+  }
+
+  .logo {
+    gap: 9px;
+  }
+
+  .logo-text {
+    font-size: 24px;
+    letter-spacing: -0.04em;
+  }
+
+  .logo-mark {
+    height: 25px;
+    border-radius: 2px;
+  }
+
+  .header-right {
+    gap: 22px;
+  }
+
+  .nav-menu {
+    :deep(.n-menu) {
+      align-items: center;
+      min-height: 72px;
+
+      .n-menu-item {
+        height: 72px;
+        padding: 0 3px;
+
+        .n-menu-item-content {
+          min-height: 40px;
+          padding: 0 12px;
+          border-radius: 9px;
+          transition: color 0.2s ease, background 0.2s ease;
+        }
+
+        .n-menu-item-content--selected {
+          background: #f3e8e2;
+          color: #9f2a20;
+          font-weight: 700;
+        }
+      }
+    }
+  }
+
+  .header-actions {
+    gap: 9px;
+    padding-left: 16px;
+    border-left: 1px solid #ddd5c8;
+  }
+
+  .theme-btn {
+    width: 36px;
+    height: 36px;
+    border-radius: 9px;
+
+    &:hover {
+      background: #f1ebe2;
+    }
+  }
+
+  .account-chip {
+    gap: 7px;
+  }
+
+  .account-button {
+    min-width: 104px;
+    padding: 6px 10px;
+    border-color: #d9d0c3;
+    border-radius: 8px;
+    background: rgba(255, 250, 240, 0.72);
+    transition: border-color 0.2s ease, background 0.2s ease;
+
+    &:hover {
+      border-color: #c6aa9a;
+      background: #fffaf0;
+    }
   }
 }
 </style>

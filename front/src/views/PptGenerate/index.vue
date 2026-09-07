@@ -199,13 +199,13 @@
               <div class="field-label">资料与视觉参考 <span class="optional-label">（可选）</span></div>
               <div class="upload-grid">
               <label v-if="outputFormat === 'pptx'" class="file-box">
-                <input type="file" accept=".pptx" aria-label="上传自定义 PPT 模板" @change="handleTemplateSelect" />
+                <input type="file" accept=".pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation" aria-label="上传自定义 PPT 模板" @change="handleTemplateSelect" />
                 <n-icon size="34"><EaselOutline /></n-icon>
                 <strong>{{ templateFile ? templateFile.name : '上传自定义 PPT 模板' }}</strong>
                 <span>可选；作为 Codex 的视觉参考，不会覆盖当前设计系统</span>
               </label>
               <label class="file-box">
-                <input type="file" accept=".pdf,.docx,.pptx,.xlsx,.txt,.md,.csv,.html,.htm" aria-label="上传资料文件" @change="handleSourceSelect" />
+                <input type="file" accept=".pdf,application/pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pptx,application/vnd.openxmlformats-officedocument.presentationml.presentation,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,.txt,text/plain,.md,text/markdown,.csv,text/csv,.html,text/html,.htm,text/html" aria-label="上传资料文件" @change="handleSourceSelect" />
                 <n-icon size="34"><DocumentTextOutline /></n-icon>
                 <strong>{{ sourceFile ? sourceFile.name : '上传资料文件' }}</strong>
                 <span>可选；支持 PDF、Word、PPT、Excel、TXT、Markdown、CSV、网页，最大 30MB</span>

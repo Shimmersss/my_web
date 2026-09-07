@@ -4,9 +4,12 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.ClipData;
 import android.content.Intent;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
+import android.provider.OpenableColumns;
+import android.util.Log;
 import android.view.View;
 import android.widget.ProgressBar;
 import android.widget.Toast;
@@ -39,6 +42,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public final class LauncherActivity extends Activity {
+    private static final String TAG = "ShimmerLauncher";
     private static final String HOME_URL = "https://shimmer.help/";
     private static final String PRIMARY_ORIGIN = "https://shimmer.help";
     private static final String USER_AGENT_TOKEN = "ShimmerAndroid/0.3";
@@ -50,6 +54,31 @@ public final class LauncherActivity extends Activity {
     private static final int SAVE_DOCUMENT_REQUEST = 7102;
     private static final long MAX_DOWNLOAD_BYTES = 256L * 1024L * 1024L;
     private static final long MAX_TEXT_BYTES = 1024L * 1024L;
+
+    // 站点 file input 的 accept 可能只写扩展名；DocumentsUI 只认 MIME，
+    // 扩展名 token 会让文件点击被静默拒绝，因此按此表归一化。
+    private static final Map<String, String> EXTENSION_MIME_TYPES = Map.ofEntries(
+            Map.entry("pdf", "application/pdf"),
+            Map.entry("png", "image/png"),
+            Map.entry("jpg", "image/jpeg"),
+            Map.entry("jpeg", "image/jpeg"),
+            Map.entry("gif", "image/gif"),
+            Map.entry("bmp", "image/bmp"),
+            Map.entry("webp", "image/webp"),
+            Map.entry("svg", "image/svg+xml"),
+            Map.entry("txt", "text/plain"),
+            Map.entry("csv", "text/csv"),
+            Map.entry("md", "text/markdown"),
+            Map.entry("html", "text/html"),
+            Map.entry("htm", "text/html"),
+            Map.entry("json", "application/json"),
+            Map.entry("bib", "application/x-bibtex"),
+            Map.entry("doc", "application/msword"),
+            Map.entry("docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            Map.entry("ppt", "application/vnd.ms-powerpoint"),
+            Map.entry("pptx", "application/vnd.openxmlformats-officedocument.presentationml.presentation"),
+            Map.entry("xls", "application/vnd.ms-excel"),
+            Map.entry("xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"));
 
     private final ExecutorService ioExecutor = Executors.newSingleThreadExecutor();
 
@@ -141,9 +170,10 @@ public final class LauncherActivity extends Activity {
                 if (text.getBytes(StandardCharsets.UTF_8).length > MAX_TEXT_BYTES) {
                     throw new JSONException("text too large");
                 }
+                String filename = sanitizeFilename(payload.optString("filename", "shimmer-export.txt"));
                 requestSave(PendingSave.forText(
-                        sanitizeFilename(payload.optString("filename", "shimmer-export.txt")),
-                        safeTextMimeType(payload.optString("mimeType", "text/plain")), text));
+                        filename,
+                        textSaveMimeType(filename, payload.optString("mimeType", "text/plain")), text));
             }
         } catch (JSONException error) {
             Toast.makeText(this, "App 无法处理该下载请求", Toast.LENGTH_SHORT).show();
@@ -258,7 +288,8 @@ public final class LauncherActivity extends Activity {
         }
         filePrompt = prompt;
         filePromptResult = result;
-        String[] types = prompt.mimeTypes == null ? new String[0] : prompt.mimeTypes;
+        String[] types = normalizePromptMimeTypes(prompt.mimeTypes);
+        clearFilePromptCache();
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT)
                 .addCategory(Intent.CATEGORY_OPENABLE)
                 .setType(types.length == 1 ? safeMimeType(types[0]) : "*/*")
@@ -279,10 +310,15 @@ public final class LauncherActivity extends Activity {
         filePromptResult = null;
         filePrompt = null;
         if (result == null || prompt == null) return;
-        if (selected == null || selected.length == 0) result.complete(prompt.dismiss());
-        else if (prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE) {
+        if (selected == null || selected.length == 0) {
+            Log.i(TAG, "file prompt dismissed");
+            result.complete(prompt.dismiss());
+        } else if (prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE) {
+            Log.i(TAG, "file prompt confirm multiple count=" + selected.length
+                    + " first=" + selected[0]);
             result.complete(prompt.confirm(this, selected));
         } else {
+            Log.i(TAG, "file prompt confirm single " + selected[0]);
             result.complete(prompt.confirm(this, selected[0]));
         }
     }
@@ -318,14 +354,89 @@ public final class LauncherActivity extends Activity {
         if (data.getData() != null) candidates.add(data.getData());
         ArrayList<Uri> accepted = new ArrayList<>();
         for (Uri uri : candidates) {
-            if (uri == null || !"content".equalsIgnoreCase(uri.getScheme())) continue;
+            if (uri == null || !"content".equalsIgnoreCase(uri.getScheme())) {
+                Log.i(TAG, "file candidate rejected non-content " + uri);
+                continue;
+            }
             try (ParcelFileDescriptor ignored = getContentResolver().openFileDescriptor(uri, "r")) {
-                if (ignored != null) accepted.add(uri);
-            } catch (IOException | SecurityException ignored) {
+                if (ignored == null) continue;
+            } catch (IOException | SecurityException error) {
+                Log.i(TAG, "file candidate unreadable " + uri + " : " + error.getClass().getSimpleName());
                 // Reject unreadable providers before handing the URI to Gecko.
+                continue;
+            }
+            try {
+                // GeckoView 149 的 FilePickerDelegate 解析 Downloads 等 provider 返回的
+                // content:// URI（如 msf%3A…）会抛 NS_ERROR_FILE_UNRECOGNIZED_PATH，
+                // change 事件永远不触发；复制进应用缓存后以 file:// 交给 Gecko 是
+                // provider 无关的稳定路径。
+                accepted.add(localFileCopy(uri));
+            } catch (IOException error) {
+                Log.i(TAG, "file candidate copy failed " + uri + " : " + error.getClass().getSimpleName());
             }
         }
         return accepted.isEmpty() ? null : accepted.toArray(new Uri[0]);
+    }
+
+    private File filePromptCacheDir() {
+        File directory = new File(getCacheDir(), "file-prompt");
+        if (!directory.isDirectory() && !directory.mkdirs()) return null;
+        return directory;
+    }
+
+    private void clearFilePromptCache() {
+        File directory = new File(getCacheDir(), "file-prompt");
+        File[] stale = directory == null ? null : directory.listFiles();
+        if (stale == null) return;
+        for (File file : stale) file.delete();
+    }
+
+    private Uri localFileCopy(Uri source) throws IOException {
+        File directory = filePromptCacheDir();
+        if (directory == null) throw new IOException("cache dir unavailable");
+        // 保留原始文件名，页面 change 处理器和用户看到的都是这个名字。
+        String name = sanitizeFilename(queryDisplayName(source));
+        if (name.isEmpty() || "shimmer-download".equals(name)) name = "upload";
+        File target = new File(directory, name);
+        int counter = 1;
+        while (target.exists()) {
+            int dot = name.lastIndexOf('.');
+            String base = dot > 0 ? name.substring(0, dot) : name;
+            String extension = dot > 0 ? name.substring(dot) : "";
+            target = new File(directory, base + "-" + (counter++) + extension);
+        }
+        long total = 0;
+        try (InputStream input = getContentResolver().openInputStream(source);
+             FileOutputStream output = new FileOutputStream(target)) {
+            if (input == null) throw new IOException("provider stream unavailable");
+            byte[] buffer = new byte[64 * 1024];
+            int read;
+            while ((read = input.read(buffer)) != -1) {
+                total += read;
+                if (total > MAX_DOWNLOAD_BYTES) throw new IOException("selected file too large");
+                output.write(buffer, 0, read);
+            }
+            output.getFD().sync();
+        } catch (IOException error) {
+            target.delete();
+            throw error;
+        }
+        return Uri.fromFile(target);
+    }
+
+    private String queryDisplayName(Uri uri) {
+        try (Cursor cursor = getContentResolver().query(uri, null, null, null, null)) {
+            if (cursor != null && cursor.moveToFirst()) {
+                int index = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME);
+                if (index >= 0 && cursor.getString(index) != null) {
+                    String name = cursor.getString(index).replaceAll("[\\\\/:*?\"<>|\\p{Cntrl}]", "_");
+                    if (!name.isEmpty()) return name;
+                }
+            }
+        } catch (RuntimeException ignored) {
+            // Best-effort naming; a generic name is acceptable.
+        }
+        return "upload";
     }
 
     private Uri parseTrustedDownloadUri(String rawUrl) {
@@ -413,10 +524,14 @@ public final class LauncherActivity extends Activity {
         // App Link open therefore arrives here instead of onCreate(); recheck
         // without persisting cancellation so an outdated build prompts once
         // again on every explicit open.
+        Log.i(TAG, "onNewIntent action=" + (intent == null ? null : intent.getAction())
+                + " data=" + (intent == null ? null : intent.getData()));
         if (appUpdateManager != null) appUpdateManager.checkForUpdates();
         if (session != null && Intent.ACTION_VIEW.equals(intent.getAction())
                 && isTrustedHttpsUri(intent.getData())) {
-            session.loadUri(canonicalize(intent.getData()).toString());
+            String target = canonicalize(intent.getData()).toString();
+            Log.i(TAG, "deep link loadUri " + target);
+            session.loadUri(target);
         }
     }
 
@@ -474,6 +589,7 @@ public final class LauncherActivity extends Activity {
         finishFilePrompt(null);
         if (pendingSave != null) pendingSave.cleanup();
         pendingSave = null;
+        clearFilePromptCache();
         if (session != null) {
             session.close();
             session = null;
@@ -634,6 +750,41 @@ public final class LauncherActivity extends Activity {
     private String safeTextMimeType(String mimeType) {
         String safe = safeMimeType(mimeType);
         return safe.startsWith("text/") ? safe : "text/plain";
+    }
+
+    /**
+     * 把 GeckoView 传来的 accept token 归一化为 SAF 可匹配的 MIME：扩展名按表映射，
+     * 无法映射的 token 直接丢弃（它们永远匹配不上，只会让选择器静默拒绝点击）。
+     * 返回空数组表示放弃过滤，由选择器展示全部文件兜底。
+     */
+    private String[] normalizePromptMimeTypes(String[] rawTypes) {
+        if (rawTypes == null || rawTypes.length == 0) return new String[0];
+        Set<String> resolved = new LinkedHashSet<>();
+        for (String rawType : rawTypes) {
+            if (rawType == null) continue;
+            String token = rawType.trim().toLowerCase(Locale.ROOT);
+            if (token.isEmpty() || token.equals("*/*")) return new String[0];
+            if (token.startsWith(".")) token = token.substring(1);
+            if (token.contains("/")) {
+                if (token.matches("[a-z0-9!#$&^_.+-]+/[a-z0-9!#$&^_.+-]+")) resolved.add(token);
+            } else {
+                String mapped = EXTENSION_MIME_TYPES.get(token);
+                if (mapped != null) resolved.add(mapped);
+            }
+        }
+        return resolved.toArray(new String[0]);
+    }
+
+    /** saveText 的保存名与内容类型不一致时 SAF 会改写文件名（.bib → .bib.txt），
+     * 因此文件名扩展名能映射到更具体类型时优先于站点传来的通用 text MIME。 */
+    private String textSaveMimeType(String filename, String providedMimeType) {
+        String name = filename == null ? "" : filename.toLowerCase(Locale.ROOT);
+        int dot = name.lastIndexOf('.');
+        if (dot >= 0) {
+            String mapped = EXTENSION_MIME_TYPES.get(name.substring(dot + 1));
+            if (mapped != null) return mapped;
+        }
+        return safeTextMimeType(providedMimeType);
     }
 
     private OutputStream requireOutputStream(Uri destination) throws IOException {

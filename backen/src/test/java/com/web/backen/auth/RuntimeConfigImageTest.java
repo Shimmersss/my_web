@@ -47,11 +47,16 @@ class RuntimeConfigImageTest {
         runtime.update(Map.of(
                 "pptRetention", Map.of("maxPerUser", 5, "maxTotal", 1),
                 "translationRetention", Map.of("maxPerUser", 5, "maxTotal", 2),
-                "imageRetention", Map.of("maxPerUser", 5, "maxTotal", 3)));
+                "imageRetention", Map.of("maxPerUser", 5, "maxTotal", 3),
+                "matchmakingRetention", Map.of("maxPerUser", 7, "maxTotal", 70)));
 
         assertEquals(1, runtime.pptMaxGlobalHistory());
         assertEquals(2, runtime.translationMaxGlobalHistory());
         assertEquals(3, runtime.imageMaxGlobalHistory());
+        assertEquals(7, runtime.matchmakingMaxHistory());
+        assertEquals(70, runtime.matchmakingMaxGlobalHistory());
+        assertEquals(Map.of("maxPerUser", 7, "maxTotal", 70),
+                runtime.publicSettings().get("matchmakingRetention"));
     }
 
     @Test

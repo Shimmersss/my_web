@@ -2,6 +2,14 @@
 @use './mixins' as *;
 @use './common' as *;
 
+@font-face {
+  font-family: 'Noto Serif SC';
+  src: url('../fonts/noto-serif-sc-zh-500.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+}
+
 * {
   margin: 0;
   padding: 0;

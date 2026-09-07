@@ -27,7 +27,7 @@
           <p class="drop-text">拖拽 PDF 或图片到此处，或点击选择文件</p>
           <p id="translate-upload-hint" class="drop-hint">支持 .pdf、.png、.jpg、.jpeg、.gif、.bmp，最大 50MB</p>
         </button>
-        <input ref="fileInput" class="visually-hidden" type="file" accept=".pdf,.png,.jpg,.jpeg,.gif,.bmp" aria-label="选择需要翻译的 PDF 或图片文件" @change="handleFileSelect" />
+        <input ref="fileInput" class="visually-hidden" type="file" accept=".pdf,application/pdf,.png,image/png,.jpg,image/jpeg,.jpeg,image/jpeg,.gif,image/gif,.bmp,image/bmp" aria-label="选择需要翻译的 PDF 或图片文件" @change="handleFileSelect" />
 
         <n-alert v-if="errorMsg" type="error" :title="errorMsg" closable @close="errorMsg = ''" style="margin-top: 16px" />
       </div>

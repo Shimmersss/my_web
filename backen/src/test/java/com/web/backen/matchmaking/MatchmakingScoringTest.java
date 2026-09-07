@@ -66,7 +66,9 @@ class MatchmakingScoringTest {
     }
 
     @Test void incomeMidpointMappingFeedsLedger() {
-        assertEquals(25000d, MatchmakingScoring.incomeMidpoint("2-3万"));
+        assertEquals(25000d, MatchmakingScoring.incomeMidpoint("2万-3万"));
+        assertEquals(9000d, MatchmakingScoring.incomeMidpoint("8千-1万"));
+        assertEquals(2500d, MatchmakingScoring.incomeMidpoint("3千以下"));
         assertEquals(0d, MatchmakingScoring.incomeMidpoint("不愿透露"));
         assertEquals(0d, MatchmakingScoring.incomeMidpoint(""));
     }

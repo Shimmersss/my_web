@@ -12,7 +12,8 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Covers the v3 profile contract: income band, structured family selects and the personality survey. */
 class MatchmakingProfileValidationTest {
     private final MatchmakingService service =
-            new MatchmakingService(null, new ObjectMapper(), null, null, null, null, "build/matchmaking-tasks-test");
+            new MatchmakingService(null, new ObjectMapper(), null, null, null, null, null, null,
+                    "build/matchmaking-tasks-test");
 
     @Test void acceptsBandInputStructuredFamilyAndPersonalitySurvey() {
         Map<String, Object> body = baseBody();
@@ -25,7 +26,7 @@ class MatchmakingProfileValidationTest {
         body.put("partnerExpectations", "希望对方工作稳定、能沟通");
         body.put("personality", personalityAnswers());
         Map<String, Object> profile = service.validate(body);
-        assertEquals("2-3万", profile.get("incomeBand"));
+        assertEquals("2万-3万", profile.get("incomeBand"));
         assertEquals("租住", profile.get("housingStatus"));
         assertEquals("有稳定退休金", profile.get("parentsPension"));
         assertEquals(8, ((Map<?, ?>) profile.get("personality")).size());
@@ -34,7 +35,7 @@ class MatchmakingProfileValidationTest {
         assertFalse(profile.containsKey("parentsSituation"));
         Map<String, Object> signals = service.marketSignals(profile, MatchmakingBenchmarks.context("上海"));
         Map<String, Object> agentProfile = service.agentProfile(profile, signals);
-        assertEquals("2-3万", agentProfile.get("incomeBand"));
+        assertEquals("2万-3万", agentProfile.get("incomeBand"));
         assertEquals("有稳定退休金", agentProfile.get("parentsPension"));
         assertFalse(agentProfile.containsKey("savings"));
         Map<String, Object> scores = MatchmakingScoring.score(profile);
@@ -67,7 +68,7 @@ class MatchmakingProfileValidationTest {
     @Test void marketSignalsBucketFinancialsAndNeverExposeExactAmounts() {
         Map<String, Object> profile = service.validate(baseBody());
         Map<String, Object> signals = service.marketSignals(profile, MatchmakingBenchmarks.context("上海"));
-        // 2-3万 band midpoint 25000*12=300000 vs Shanghai 91987*2=183974 -> 显著高于
+        // 2万-3万 band midpoint 25000*12=300000 vs Shanghai 91987*2=183974 -> 显著高于
         assertEquals("显著高于所在省居民人均可支配收入", signals.get("incomePosition"));
         assertEquals("十万到三十万", signals.get("savingsBucket"));
         assertEquals("未填写住房状态", signals.get("housingSignal"));
@@ -75,7 +76,7 @@ class MatchmakingProfileValidationTest {
         assertFalse(dumped.contains("150000"));
         assertFalse(dumped.contains("25000"));
         Map<String, Object> lower = new HashMap<>(baseBody());
-        lower.put("incomeBand", "5千以下"); lower.put("savings", 5000);
+        lower.put("incomeBand", "3千-5千"); lower.put("savings", 5000);
         Map<String, Object> lowerSignals = service.marketSignals(service.validate(lower), MatchmakingBenchmarks.context("上海"));
         assertEquals("低于所在省居民人均可支配收入", lowerSignals.get("incomePosition"));
     }
@@ -83,7 +84,7 @@ class MatchmakingProfileValidationTest {
     private Map<String, Object> baseBody() {
         Map<String, Object> body = new HashMap<>();
         body.put("city", "上海"); body.put("education", "硕士"); body.put("industry", "互联网");
-        body.put("incomeBand", "2-3万"); body.put("savings", 150000);
+        body.put("incomeBand", "2万-3万"); body.put("savings", 150000);
         return body;
     }
 

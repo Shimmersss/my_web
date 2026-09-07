@@ -65,6 +65,8 @@ public class RuntimeConfigService {
     private static final String IMAGE_MAX_GLOBAL_HISTORY = "image.history.max-total";
     private static final String PRESENTATION_IMAGE_MAX_HISTORY = "presentation-image.history.max-per-user";
     private static final String PRESENTATION_IMAGE_MAX_GLOBAL_HISTORY = "presentation-image.history.max-total";
+    private static final String MATCHMAKING_MAX_HISTORY = "matchmaking.history.max-per-user";
+    private static final String MATCHMAKING_MAX_GLOBAL_HISTORY = "matchmaking.history.max-total";
     private static final String GITHUB_RANKING_ENABLED = "github.ranking.enabled";
     private static final String GITHUB_RANKING_INTERVAL_HOURS = "github.ranking.interval.hours";
     private static final String GITHUB_RANKING_MANUAL_COOLDOWN_MINUTES = "github.ranking.manual.cooldown.minutes";
@@ -289,6 +291,7 @@ public class RuntimeConfigService {
         data.put("translationRetention", translationRetentionSettings());
         data.put("imageRetention", imageRetentionSettings());
         data.put("presentationImageRetention", presentationImageRetentionSettings());
+        data.put("matchmakingRetention", matchmakingRetentionSettings());
         data.put("research", new LinkedHashMap<>(Map.of(
                 "name", "Tavily / 演示研究",
                 "baseUrl", tavilyUrl(),
@@ -402,6 +405,11 @@ public class RuntimeConfigService {
         if (!presentationImageRetentionBody.isEmpty()) {
             save(PRESENTATION_IMAGE_MAX_HISTORY, Integer.toString(clamp(intValue(presentationImageRetentionBody.get("maxPerUser"), presentationImageMaxHistory()), 1, 100)));
             save(PRESENTATION_IMAGE_MAX_GLOBAL_HISTORY, Integer.toString(clamp(intValue(presentationImageRetentionBody.get("maxTotal"), presentationImageMaxGlobalHistory()), 1, 1000)));
+        }
+        Map<String, Object> matchmakingRetentionBody = map(body.get("matchmakingRetention"));
+        if (!matchmakingRetentionBody.isEmpty()) {
+            save(MATCHMAKING_MAX_HISTORY, Integer.toString(clamp(intValue(matchmakingRetentionBody.get("maxPerUser"), matchmakingMaxHistory()), 1, 100)));
+            save(MATCHMAKING_MAX_GLOBAL_HISTORY, Integer.toString(clamp(intValue(matchmakingRetentionBody.get("maxTotal"), matchmakingMaxGlobalHistory()), 1, 1000)));
         }
         Map<String, Object> visibility = map(body.get("visibility"));
         VISIBILITY_DEFAULTS.forEach((feature, fallback) -> {
@@ -539,6 +547,11 @@ public class RuntimeConfigService {
     }
     public int presentationImageMaxHistory() { return safeInt(PRESENTATION_IMAGE_MAX_HISTORY, 20, 1, 100); }
     public int presentationImageMaxGlobalHistory() { return safeInt(PRESENTATION_IMAGE_MAX_GLOBAL_HISTORY, 100, 1, 1000); }
+    public Map<String, Object> matchmakingRetentionSettings() {
+        return new LinkedHashMap<>(Map.of("maxPerUser", matchmakingMaxHistory(), "maxTotal", matchmakingMaxGlobalHistory()));
+    }
+    public int matchmakingMaxHistory() { return safeInt(MATCHMAKING_MAX_HISTORY, 20, 1, 100); }
+    public int matchmakingMaxGlobalHistory() { return safeInt(MATCHMAKING_MAX_GLOBAL_HISTORY, 200, 1, 1000); }
     private int safeInt(String key, int fallback, int min, int max) { return clamp(intValue(value(key, Integer.toString(fallback)), fallback), min, max); }
     private int clamp(int value, int min, int max) { return Math.max(min, Math.min(max, value)); }
     private int intValue(Object value, int fallback) { try { return Integer.parseInt(value == null ? "" : value.toString().trim()); } catch (Exception e) { return fallback; } }

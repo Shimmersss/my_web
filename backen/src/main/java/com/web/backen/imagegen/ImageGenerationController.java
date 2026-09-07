@@ -83,8 +83,10 @@ public class ImageGenerationController {
         try {
             ImageGenerationSession session = service.requireReadable(taskId, requireAccess(request));
             if (!"completed".equals(session.getStatus()) || !Files.isRegularFile(session.getResultPath())) throw new IllegalArgumentException("图片尚未生成");
+            // attachment 而非 inline：App 内下载走 GeckoView onExternalResponse，只有 attachment
+            // 才会触发保存；<img> 子资源加载不受 Content-Disposition 影响。
             return ResponseEntity.ok().cacheControl(CacheControl.noStore()).contentType(MediaType.IMAGE_PNG)
-                    .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=gpt-image-" + taskId + ".png")
+                    .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=gpt-image-" + taskId + ".png")
                     .body(new FileSystemResource(session.getResultPath()));
         } catch (AuthException e) { return error(e.getStatus(), e.getMessage()); }
         catch (IllegalArgumentException e) { return error(404, e.getMessage()); }

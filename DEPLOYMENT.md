@@ -493,3 +493,14 @@ and attempts rollback if installation or local verification fails. Do not set
 `FORCE_NGINX_CONFIG=1` for a routine release. OpenClaw was retired separately at
 the service, firewall, and Nginx layers; normal application deployment must not
 re-enable any of them.
+
+
+## 2026-09-07 Matchmaking transactional task storage
+
+This local change introduces `matchmaking_tasks` and `credit_refund_claims` through the existing idempotent `schema.sql` initialization. Back up these tables together with credit transactions, users, trial codes, reports, and profiles. The current worker remains single-instance; do not start multiple application instances against the same task store.
+
+On first startup, legacy matchmaking JSON snapshots are imported into SQL. A source file is removed only after its SQL insert commits; an unreadable snapshot or failed import stops startup visibly instead of silently losing refund evidence. Terminal snapshots discard questionnaire inputs; pending compensation is retained beyond the normal 24-hour task-history limit. Original charges are preserved for idempotent compensation.
+
+Rollback to a release that understands only disk-backed matchmaking tasks is **not** a code-only operation. Stop new submissions and reconcile all queued/running tasks and pending compensation before considering that rollback. Preserve a consistent SQL backup; use a compatible release or an explicitly reviewed task-state export/migration. Do not restore old account balances or clear the SQL task/claim tables merely to restore an older jar. The existing generic release rollback script does not translate SQL tasks back into legacy files.
+
+Independent MySQL integration check (uses disposable databases only; requires CREATE/DROP DATABASE permission on a local test instance): set `WEB_TEST_MYSQL_URL`, `WEB_TEST_MYSQL_USER`, and `WEB_TEST_MYSQL_PASSWORD`, then run `mvn -f backen/pom.xml -Dtest=MatchmakingMySqlIT test`. Never point this test at production. Default `mvn test` runs the H2 transaction/failure tests and does not invoke this explicitly named integration test.

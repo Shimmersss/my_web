@@ -108,8 +108,10 @@ export function createMatchmakingReport(profile) {
 export function getMatchmakingTasks() {
   return get("/matchmaking/tasks");
 }
-export function getMatchmakingTask(taskId) {
-  return get(`/matchmaking/tasks/${taskId}`);
+export function getMatchmakingTask(taskId, options = {}) {
+  return requestWithOptions(`/matchmaking/tasks/${encodeURIComponent(taskId)}`, {
+    ...options, method: 'GET', timeoutMs: 15000,
+  });
 }
 export function getMatchmakingReports() {
   return get("/matchmaking/reports");
@@ -122,6 +124,9 @@ export function deleteMatchmakingReport(reportId) {
 }
 export function deleteMatchmakingData() {
   return requestWithOptions("/matchmaking/data", { method: "DELETE" });
+}
+export function redeemMatchmakingTrial(code) {
+  return post("/matchmaking/trial/redeem", { code });
 }
 
 // ==================== 留言板与站内通知 API ====================
@@ -204,6 +209,17 @@ export function getAdminAccounts() {
 
 export function createInviteCode({ code, credits, maxUses, expiresAt = "" }) {
   return post("/admin/accounts/invites", { code, credits, maxUses, expiresAt });
+}
+
+export function createMatchmakingTrialCode(expiresAt = "") {
+  return post("/admin/accounts/matchmaking-trial-codes", { expiresAt });
+}
+
+export function updateMatchmakingTrialCode(id, enabled, expiresAt = "") {
+  return requestWithOptions(`/admin/accounts/matchmaking-trial-codes/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify({ enabled, expiresAt }),
+  });
 }
 
 export function adjustUserCredits({ userId, amount, note }) {

@@ -5,21 +5,21 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.QuotaService;
+import com.web.backen.auth.RuntimeConfigService;
 import com.web.backen.imagegen.OpenAiImageClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import java.io.File;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
-import java.nio.file.StandardCopyOption;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.Base64;
@@ -38,7 +38,6 @@ public class MatchmakingService {
     static final String REPORT_VERSION = "market-positioning-v3";
     private static final int QUEUE_CAPACITY = 3;
     private static final int MAX_LISTED_TASKS = 10;
-    private static final int MAX_LISTED_REPORTS = 20;
     /** Terminal task snapshots only feed the "recent tasks" list; reports live in MySQL, so a day is enough. */
     private static final long TASK_RETENTION_MS = 24L * 3600 * 1000;
     private static final Set<String> GENDERS = Set.of("男", "女", "不愿透露");
@@ -48,7 +47,15 @@ public class MatchmakingService {
     private static final Set<String> WORK_INTENSITY = Set.of("965", "996", "大小周", "倒班", "经常出差", "自由安排");
     private static final Set<String> CAR_STATUS = Set.of("无", "有", "有贷款");
     private static final Set<String> ONLY_CHILD = Set.of("是", "否", "不愿透露");
-    private static final Set<String> INCOME_BANDS = Set.of("5千以下", "5千-1万", "1-2万", "2-3万", "3-5万", "5万以上", "不愿透露");
+    private static final Set<String> INCOME_BANDS = Set.of("3千以下", "3千-5千", "5千-8千", "8千-1万", "1万-1万5", "1万5-2万", "2万-3万", "3万-5万", "5万以上", "不愿透露");
+    private static final Set<String> SMOKING = Set.of("不吸烟", "偶尔吸烟", "经常吸烟", "不愿透露");
+    private static final Set<String> DRINKING = Set.of("不饮酒", "偶尔饮酒", "经常饮酒", "不愿透露");
+    private static final Set<String> COHABITATION = Set.of("婚后与父母同住", "婚后分开住", "同小区就近住", "未想好", "不愿透露");
+    private static final Set<String> PORTRAIT_GENDER = Set.of("女", "男", "不指定");
+    private static final Set<String> PORTRAIT_AGE = Set.of("22-26岁", "27-31岁", "32-36岁", "36岁以上", "不指定");
+    private static final Set<String> PORTRAIT_STYLE = Set.of("温柔亲切", "干练知性", "阳光活力", "沉稳安静", "不指定");
+    private static final Set<String> PORTRAIT_HAIR = Set.of("长发", "短发", "扎发或盘发", "不指定");
+    private static final Set<String> PORTRAIT_SCENE = Set.of("日常休闲", "职业装", "咖啡馆约会", "户外自然", "不指定");
     private static final Set<String> HOUSING_OPTIONS = Set.of("租住", "自有房有月供", "自有房无贷款", "与父母同住", "其他");
     private static final Set<String> PARENTS_PENSION = Set.of("有稳定退休金", "有部分", "无", "不愿透露");
     private static final Set<String> PARENTS_HEALTH = Set.of("健康", "一般", "需要照顾", "不愿透露");
@@ -59,72 +66,91 @@ public class MatchmakingService {
     private final QuotaService quota;
     private final OpenAiImageClient imageClient;
     private final TransactionTemplate transactions;
+    private final RuntimeConfigService runtime;
+    private final MatchmakingTrialService trials;
     private final String storageDir;
     private final LinkedBlockingQueue<MatchmakingTask> queue = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
+    private Thread worker;
     private final Map<String, MatchmakingTask> tasks = new ConcurrentHashMap<>();
 
     public MatchmakingService(JdbcTemplate jdbc, ObjectMapper mapper, MatchmakingReportAgent agent, QuotaService quota,
                               OpenAiImageClient imageClient, TransactionTemplate transactions,
+                              RuntimeConfigService runtime,
+                              MatchmakingTrialService trials,
                               @Value("${matchmaking.storage-dir:../.run/matchmaking-tasks}") String storageDir) {
         this.jdbc = jdbc; this.mapper = mapper; this.agent = agent; this.quota = quota;
-        this.imageClient = imageClient; this.transactions = transactions; this.storageDir = storageDir;
+        this.imageClient = imageClient; this.transactions = transactions != null ? transactions
+                : jdbc == null ? null : new TransactionTemplate(new DataSourceTransactionManager(jdbc.getDataSource())); this.runtime = runtime;
+        this.trials = trials; this.storageDir = storageDir;
     }
 
     @PostConstruct void init() {
         recoverInterruptedTasks();
-        Thread worker = new Thread(this::workerLoop, "matchmaking-worker");
+        worker = new Thread(this::workerLoop, "matchmaking-worker");
         worker.setDaemon(true);
         worker.start();
     }
 
-    /** Tasks found queued/running after a restart can never finish; refund so no credit leaks. */
+    @PreDestroy void shutdown() { if (worker != null) worker.interrupt(); }
+
+    /** Import legacy snapshots before recovery; SQL becomes the sole source of truth. */
     private void recoverInterruptedTasks() {
-        File dir = new File(storageDir);
-        File[] leftovers = dir.listFiles((d, name) -> name.endsWith(".tmp"));
-        if (leftovers != null) for (File leftover : leftovers) leftover.delete();
-        File[] files = dir.listFiles((d, name) -> name.endsWith(".json"));
-        if (files == null) return;
-        Instant cutoff = Instant.now().minusMillis(TASK_RETENTION_MS);
-        for (File file : files) {
+        File[] files = new File(storageDir).listFiles((d, name) -> name.endsWith(".json"));
+        if (files != null) for (File file : files) {
             try {
-                Map<String, Object> snapshot = mapper.readValue(file, new TypeReference<Map<String, Object>>() {});
-                MatchmakingTask task = MatchmakingTask.fromSnapshot(snapshot);
-                if ("queued".equals(task.status) || "running".equals(task.status)) {
-                    task.status = "error"; task.stage = "error"; task.error = "服务重启导致任务中断，积分已退还";
-                    refundQuietly(task);
-                    tasks.put(task.id, task);
-                    persist(task);
-                } else if (stale(task, cutoff)) {
-                    file.delete();
-                } else {
-                    tasks.put(task.id, task);
-                }
-            } catch (Exception e) {
-                log.warn("婚恋任务文件恢复失败: {}", file.getName());
-            }
+                MatchmakingTask task = decode(mapper.readValue(file, new TypeReference<Map<String, Object>>() {}));
+                transactions.executeWithoutResult(status -> {
+                    Integer found = jdbc.queryForObject("SELECT COUNT(*) FROM matchmaking_tasks WHERE id=?", Integer.class, task.id);
+                    if (found == null || found == 0) insertTask(task);
+                });
+                Files.delete(file.toPath());
+                Files.deleteIfExists(new File(file.getPath() + ".tmp").toPath());
+            } catch (Exception e) { throw new IllegalStateException("婚恋旧任务导入失败: " + file.getName(), e); }
         }
+        for (String payload : jdbc.queryForList("SELECT payload FROM matchmaking_tasks", String.class)) {
+            MatchmakingTask task;
+            try { task = decode(mapper.readValue(payload, new TypeReference<Map<String, Object>>() {})); }
+            catch (Exception e) { throw new IllegalStateException("婚恋任务恢复失败", e); }
+            tasks.put(task.id, task);
+            if ("queued".equals(task.status) || "running".equals(task.status)) {
+                task.status = "error"; task.stage = "error";
+                task.updatedAt = Instant.now().toString();
+                task.compensationPending = true;
+            }
+            if (terminal(task.status)) task.request = Map.of();
+            if (task.compensationPending) settleFailure(task);
+            else persist(task);
+        }
+        pruneFinishedTasks();
     }
 
+    private MatchmakingTask decode(Map<String, Object> snapshot) { return MatchmakingTask.fromSnapshot(snapshot); }
     private static boolean terminal(String status) { return "done".equals(status) || "error".equals(status); }
 
     private static boolean stale(MatchmakingTask task, Instant cutoff) {
-        if (!terminal(task.status)) return false;
+        if (!terminal(task.status) || task.compensationPending) return false;
         try { return Instant.parse(task.updatedAt).isBefore(cutoff); }
         catch (Exception e) { return true; }
     }
 
-    /** Keeps task files and the in-memory map bounded; terminal snapshots older than a day are progress artifacts only. */
     @Scheduled(cron = "0 40 3 * * *", zone = "Asia/Shanghai")
-    public void pruneFinishedTasks() {
+    public synchronized void pruneFinishedTasks() {
         Instant cutoff = Instant.now().minusMillis(TASK_RETENTION_MS);
-        tasks.values().removeIf(t -> stale(t, cutoff));
-        File[] files = new File(storageDir).listFiles((d, name) -> name.endsWith(".json"));
-        if (files == null) return;
-        for (File file : files) {
-            try {
-                MatchmakingTask task = MatchmakingTask.fromSnapshot(mapper.readValue(file, new TypeReference<Map<String, Object>>() {}));
-                if (stale(task, cutoff)) file.delete();
-            } catch (Exception e) { log.warn("婚恋任务文件清理跳过: {}", file.getName()); }
+        for (MatchmakingTask task : List.copyOf(tasks.values())) {
+            if (stale(task, cutoff)) {
+                jdbc.update("DELETE FROM matchmaking_tasks WHERE id=?", task.id);
+                tasks.remove(task.id);
+            }
+        }
+    }
+
+    @Scheduled(fixedDelay = 60000)
+    public synchronized void retryCompensations() {
+        for (MatchmakingTask task : tasks.values()) {
+            if ("error".equals(task.status) && task.compensationPending) {
+                try { settleFailure(task); }
+                catch (Exception e) { log.error("婚恋任务 {} 补偿状态保存失败，下轮重试", task.id, e); }
+            }
         }
     }
 
@@ -136,14 +162,14 @@ public class MatchmakingService {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 return;
-            }
+            } catch (Exception e) { log.error("婚恋 worker 任务处理异常", e); }
         }
     }
 
     private void run(MatchmakingTask task) {
         try {
             setStage(task, "scoring");
-            Map<String, Object> profile = validate(task.request);
+            Map<String, Object> profile = new LinkedHashMap<>(task.request); // Validated before transactional admission.
             Map<String, Object> context = MatchmakingBenchmarks.context(string(profile, "city"));
             Map<String, Object> ledger = calculate(profile);
             Map<String, Object> signals = marketSignals(profile, context);
@@ -158,7 +184,7 @@ public class MatchmakingService {
             String partnerImage = null;
             if (task.includePartnerImage) {
                 setStage(task, "illustrating");
-                partnerImage = generatePartnerImage(narrative);
+                partnerImage = generatePartnerImage(profile, narrative);
             }
             setStage(task, "saving");
             String reportId = UUID.randomUUID().toString();
@@ -171,28 +197,36 @@ public class MatchmakingService {
                 profilePayload = mapper.writeValueAsString(profile);
                 reportPayload = mapper.writeValueAsString(buildReport(task, reportId, profile, context, ledger, scores, narrative, partnerImage, expiry));
             } catch (Exception e) { throw new IllegalStateException("报告序列化失败", e); }
-            if (!tasks.containsKey(task.id)) {
-                refundQuietly(task);
-                return;
+            synchronized (this) {
+                if (!tasks.containsKey(task.id) || !"running".equals(task.status)) return;
+                MatchmakingTask completed = decode(task.snapshot());
+                completed.reportId = reportId; completed.status = "done"; completed.stage = "done";
+                completed.updatedAt = Instant.now().toString(); completed.request = Map.of();
+                transactions.executeWithoutResult(status -> {
+                    jdbc.update("INSERT INTO matchmaking_profiles(id,user_id,payload,expires_at) VALUES(?,?,?,?)",
+                            profileId, task.userId, profilePayload, Timestamp.from(expiry));
+                    jdbc.update("INSERT INTO matchmaking_reports(id,profile_id,user_id,report_payload,source_version,total_score,level,city,has_image,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
+                            reportId, profileId, task.userId, reportPayload,
+                            MatchmakingBenchmarks.VERSION, ((Number) scores.getOrDefault("total", 0)).doubleValue(),
+                            String.valueOf(scores.getOrDefault("level", "")), string(profile, "city"), hasImage, Timestamp.from(expiry));
+                    if (task.trial) trials.markCompleted(task.userId, task.id, reportId);
+                    persist(completed);
+                });
+                task.reportId = completed.reportId; task.status = completed.status; task.stage = completed.stage;
+                task.updatedAt = completed.updatedAt; task.request = Map.of();
             }
-            transactions.executeWithoutResult(status -> {
-                jdbc.update("INSERT INTO matchmaking_profiles(id,user_id,payload,expires_at) VALUES(?,?,?,?)",
-                        profileId, task.userId, profilePayload, Timestamp.from(expiry));
-                jdbc.update("INSERT INTO matchmaking_reports(id,profile_id,user_id,report_payload,source_version,total_score,level,city,has_image,expires_at) VALUES(?,?,?,?,?,?,?,?,?,?)",
-                        reportId, profileId, task.userId, reportPayload,
-                        MatchmakingBenchmarks.VERSION, ((Number) scores.getOrDefault("total", 0)).doubleValue(),
-                        String.valueOf(scores.getOrDefault("level", "")), string(profile, "city"), hasImage, Timestamp.from(expiry));
-            });
-            task.reportId = reportId; task.status = "done"; task.stage = "done";
-            task.updatedAt = Instant.now().toString();
-            persist(task);
+            pruneReportsQuietly();
         } catch (Exception e) {
             String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage().replaceAll("[\\r\\n]+", " ");
             log.warn("婚恋报告任务 {} 失败: {}", task.id, message.substring(0, Math.min(180, message.length())));
-            task.status = "error"; task.stage = "error"; task.error = "报告生成失败，积分已退还，请调整后重试";
-            task.updatedAt = Instant.now().toString();
-            refundQuietly(task);
-            if (tasks.containsKey(task.id)) persist(task);
+            synchronized (this) {
+                if (!tasks.containsKey(task.id) || "error".equals(task.status)) return;
+                task.reportId = "";
+                task.status = "error"; task.stage = "error";
+                task.updatedAt = Instant.now().toString();
+                task.compensationPending = true;
+                settleFailure(task);
+            }
         }
     }
 
@@ -209,68 +243,106 @@ public class MatchmakingService {
         return report;
     }
 
-    private void setStage(MatchmakingTask task, String stage) {
+    private synchronized void setStage(MatchmakingTask task, String stage) {
+        if (!tasks.containsKey(task.id) || terminal(task.status)) throw new IllegalStateException("任务已取消");
         task.status = "running"; task.stage = stage; task.updatedAt = Instant.now().toString();
         persist(task);
     }
 
-    private void refundQuietly(MatchmakingTask task) {
-        if (task.transactionId <= 0) return;
-        long transactionId = task.transactionId;
-        task.transactionId = 0;
-        try { quota.refund(transactionId, "婚恋报告任务失败退款"); }
-        catch (Exception e) { log.warn("婚恋任务 {} 退款失败", task.id); }
+    private void settleFailure(MatchmakingTask task) {
+        task.request = Map.of();
+        task.compensationPending = true;
+        task.error = task.trial ? "正在恢复免费生成资格，请稍后重试" : "报告生成未完成，积分退还处理中";
+        // Reconcile before compensation: a lost commit acknowledgement must not refund a saved report.
+        boolean needsCompensation = Boolean.TRUE.equals(transactions.execute(status -> {
+            MatchmakingTask durable = durableTask(task.id);
+            if ("done".equals(durable.status)) {
+                task.status = durable.status; task.stage = durable.stage; task.reportId = durable.reportId;
+                task.updatedAt = durable.updatedAt; task.error = ""; task.compensationPending = false;
+                return false;
+            }
+            persist(task);
+            return true;
+        }));
+        if (!needsCompensation) return;
+        try {
+            transactions.executeWithoutResult(status -> {
+                if (task.trial) trials.markRetryable(task.userId, task.id);
+                else if (task.transactionId > 0) quota.refund(task.transactionId, "婚恋报告任务失败退款");
+                task.compensationPending = false;
+                task.error = task.trial ? "报告生成未完成，可免费重试" : "报告生成未完成，积分已退还";
+                persist(task);
+            });
+        } catch (Exception e) {
+            task.compensationPending = true;
+            task.error = task.trial ? "正在恢复免费生成资格，请稍后重试" : "报告生成未完成，积分退还处理中";
+            log.error("婚恋任务 {} 补偿待重试", task.id, e);
+            // The preceding transaction already preserved the pending state for restart/retry.
+        }
+    }
+
+    private MatchmakingTask durableTask(String id) {
+        String saved = jdbc.queryForObject("SELECT payload FROM matchmaking_tasks WHERE id=? FOR UPDATE", String.class, id);
+        try { return decode(mapper.readValue(saved, new TypeReference<Map<String, Object>>() {})); }
+        catch (Exception e) { throw new IllegalStateException("无法核对婚恋任务状态", e); }
+    }
+
+    private String snapshot(MatchmakingTask task) {
+        try { return mapper.writeValueAsString(task.snapshot()); }
+        catch (Exception e) { throw new IllegalStateException("婚恋任务序列化失败", e); }
+    }
+
+    private void insertTask(MatchmakingTask task) {
+        jdbc.update("INSERT INTO matchmaking_tasks(id,user_id,payload) VALUES (?,?,?)", task.id, task.userId, snapshot(task));
     }
 
     private void persist(MatchmakingTask task) {
-        try {
-            File dir = new File(storageDir);
-            if (!dir.exists() && !dir.mkdirs()) return;
-            File target = new File(dir, task.id + ".json");
-            File tmp = new File(dir, task.id + ".json.tmp");
-            mapper.writeValue(tmp, task.snapshot());
-            try { Files.move(tmp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE); }
-            catch (AtomicMoveNotSupportedException e) { Files.move(tmp.toPath(), target.toPath(), StandardCopyOption.REPLACE_EXISTING); }
-        } catch (Exception e) {
-            log.warn("婚恋任务 {} 状态保存失败", task.id);
-        }
+        if (jdbc.update("UPDATE matchmaking_tasks SET payload=? WHERE id=?", snapshot(task), task.id) != 1)
+            throw new IllegalStateException("婚恋任务记录不存在");
     }
 
     public Map<String, Object> catalogue() { return MatchmakingBenchmarks.catalogue(); }
 
-    @Transactional
-    public Map<String, Object> createTask(AuthUser user, Map<String, Object> body) {
+    // Synchronize admission with deletion/finalization; the service intentionally has one worker instance.
+    public synchronized Map<String, Object> createTask(AuthUser user, Map<String, Object> body) {
         cleanExpired();
         boolean busy = tasks.values().stream().anyMatch(t -> t.userId == user.id()
                 && ("queued".equals(t.status) || "running".equals(t.status)));
-        if (busy) throw new AuthException(429, "已有报告在生成中，请等待完成后再提交");
+        if (!user.isMatchmakingTrial() && busy) throw new AuthException(429, "已有报告在生成中，请等待完成后再提交");
         Map<String, Object> profile = validate(body);
         MatchmakingBenchmarks.context(string(profile, "city"));
         boolean imageOn = Boolean.TRUE.equals(body.get("includePartnerImage"))
                 || "true".equalsIgnoreCase(String.valueOf(body.get("includePartnerImage")));
-        int imageCredits = imageOn ? quota.imageCredit("low") : 0;
-        String reportId = UUID.randomUUID().toString();
-        long transactionId = quota.spend(user.id(), quota.matchmakingCreditPerReport() + imageCredits,
-                "MATCHMAKING_REPORT", reportId, imageOn ? "婚恋个人报告生成（含伴侣画像插画）" : "婚恋个人报告生成");
-        MatchmakingTask task = new MatchmakingTask(UUID.randomUUID().toString(), user.id(), transactionId,
-                quota.matchmakingCreditPerReport() + imageCredits, imageOn, body);
+        if (queue.remainingCapacity() == 0) throw new AuthException(503, "生成队列已满，请稍后再试");
+        boolean trial = user.isMatchmakingTrial();
+        String taskId = UUID.randomUUID().toString();
+        MatchmakingTask task = transactions.execute(status -> {
+            int cost = 0;
+            long transactionId = 0;
+            if (trial) {
+                if (trials == null) throw new AuthException(503, "婚恋内测服务暂不可用");
+                trials.reserveTask(user.id(), taskId);
+            } else {
+                cost = quota.matchmakingCreditPerReport() + (imageOn ? quota.imageCredit("medium") : 0);
+                transactionId = quota.spend(user.id(), cost, "MATCHMAKING_REPORT", taskId, "婚恋个人报告生成");
+            }
+            MatchmakingTask created = new MatchmakingTask(taskId, user.id(), transactionId, cost, trial, imageOn,
+                    new LinkedHashMap<>(profile));
+            insertTask(created);
+            return created;
+        });
         tasks.put(task.id, task);
-        if (!queue.offer(task)) {
-            tasks.remove(task.id);
-            quota.refund(transactionId, "婚恋报告队列已满退款");
-            throw new AuthException(503, "生成队列已满，请稍后再试");
-        }
-        persist(task);
-        return Map.of("taskId", task.id, "credits", quota.balance(user.id()));
+        queue.add(task); // Admission is serialized, and the worker can only free capacity.
+        return Map.of("taskId", task.id, "credits", trial ? 0 : quota.balance(user.id()));
     }
 
-    public Map<String, Object> task(AuthUser user, String taskId) {
+    public synchronized Map<String, Object> task(AuthUser user, String taskId) {
         MatchmakingTask task = tasks.get(taskId);
         if (task == null || task.userId != user.id()) throw new AuthException(404, "任务不存在");
         return task.view();
     }
 
-    public List<Map<String, Object>> tasks(AuthUser user) {
+    public synchronized List<Map<String, Object>> tasks(AuthUser user) {
         return tasks.values().stream().filter(t -> t.userId == user.id())
                 .sorted(Comparator.comparing((MatchmakingTask t) -> t.createdAt).reversed())
                 .limit(MAX_LISTED_TASKS).map(MatchmakingTask::view).toList();
@@ -278,14 +350,24 @@ public class MatchmakingService {
 
     public List<Map<String, Object>> reportSummaries(AuthUser user) {
         cleanExpired();
-        return jdbc.queryForList("""
-                SELECT id, city, total_score, level, has_image, created_at FROM matchmaking_reports
-                WHERE user_id=? AND expires_at>CURRENT_TIMESTAMP ORDER BY created_at DESC LIMIT ?
-                """, user.id(), MAX_LISTED_REPORTS).stream()
+        String select = """
+                SELECT r.id, r.user_id, u.username, tc.code_suffix, r.city, r.total_score, r.level, r.has_image, r.created_at
+                FROM matchmaking_reports r JOIN users u ON u.id=r.user_id
+                LEFT JOIN matchmaking_trial_codes tc ON tc.guest_user_id=r.user_id
+                """;
+        List<Map<String, Object>> rows = user.isRoot()
+                ? jdbc.queryForList(select + " WHERE r.expires_at>CURRENT_TIMESTAMP ORDER BY r.created_at DESC LIMIT ?",
+                    matchmakingMaxGlobalHistory())
+                : jdbc.queryForList(select + " WHERE r.user_id=? AND r.expires_at>CURRENT_TIMESTAMP ORDER BY r.created_at DESC LIMIT ?",
+                    user.id(), matchmakingMaxHistory());
+        return rows.stream()
                 .map(row -> {
                     Map<String, Object> summary = new LinkedHashMap<>();
                     summary.put("id", row.get("id")); summary.put("city", row.get("city"));
                     summary.put("total", row.get("total_score")); summary.put("level", row.get("level"));
+                    String ownerLabel = ownerLabel(row);
+                    summary.put("ownerUsername", ownerLabel); summary.put("ownerLabel", ownerLabel);
+                    summary.put("viewerCanDelete", ((Number) row.get("user_id")).longValue() == user.id());
                     summary.put("hasImage", Boolean.TRUE.equals(row.get("has_image")) || Integer.valueOf(1).equals(row.get("has_image")));
                     Object createdAt = row.get("created_at");
                     summary.put("createdAt", createdAt instanceof Timestamp t ? t.toInstant().toString() : String.valueOf(createdAt));
@@ -295,17 +377,39 @@ public class MatchmakingService {
 
     public Map<String, Object> report(AuthUser user, String reportId) {
         cleanExpired();
-        List<String> records = jdbc.queryForList(
-                "SELECT report_payload FROM matchmaking_reports WHERE id=? AND user_id=? AND expires_at>CURRENT_TIMESTAMP",
-                String.class, reportId, user.id());
+        String select = """
+                SELECT r.report_payload, r.user_id, u.username, tc.code_suffix
+                FROM matchmaking_reports r JOIN users u ON u.id=r.user_id
+                LEFT JOIN matchmaking_trial_codes tc ON tc.guest_user_id=r.user_id
+                WHERE r.id=? AND r.expires_at>CURRENT_TIMESTAMP
+                """;
+        List<Map<String, Object>> records = user.isRoot()
+                ? jdbc.queryForList(select, reportId)
+                : jdbc.queryForList(select + " AND r.user_id=?", reportId, user.id());
         if (records.isEmpty()) throw new AuthException(404, "报告不存在或已过期");
-        try { return mapper.readValue(records.get(0), new TypeReference<Map<String, Object>>() {}); }
+        try {
+            Map<String, Object> record = records.get(0);
+            Map<String, Object> report = mapper.readValue(String.valueOf(record.get("report_payload")), new TypeReference<Map<String, Object>>() {});
+            String ownerLabel = ownerLabel(record);
+            report.put("ownerUsername", ownerLabel); report.put("ownerLabel", ownerLabel);
+            report.put("viewerCanDelete", ((Number) record.get("user_id")).longValue() == user.id());
+            return report;
+        }
         catch (Exception e) { throw new AuthException(500, "已保存报告无法读取，请删除后重新生成"); }
     }
 
-    public Map<String, Object> deleteReport(AuthUser user, String reportId) {
-        int removed = jdbc.update("DELETE FROM matchmaking_reports WHERE id=? AND user_id=?", reportId, user.id());
-        if (removed == 0) throw new AuthException(404, "报告不存在或已过期");
+    public synchronized Map<String, Object> deleteReport(AuthUser user, String reportId) {
+        List<MatchmakingTask> associated = tasks.values().stream()
+                .filter(t -> t.userId == user.id() && reportId.equals(t.reportId)).toList();
+        transactions.executeWithoutResult(status -> {
+            List<String> profiles = jdbc.queryForList("SELECT profile_id FROM matchmaking_reports WHERE id=? AND user_id=?",
+                    String.class, reportId, user.id());
+            if (profiles.isEmpty()) throw new AuthException(404, "报告不存在或已过期");
+            jdbc.update("DELETE FROM matchmaking_reports WHERE id=? AND user_id=?", reportId, user.id());
+            jdbc.update("DELETE FROM matchmaking_profiles WHERE id=? AND user_id=?", profiles.get(0), user.id());
+            for (MatchmakingTask task : associated) jdbc.update("DELETE FROM matchmaking_tasks WHERE id=?", task.id);
+        });
+        associated.forEach(t -> tasks.remove(t.id));
         return Map.of("deleted", true);
     }
 
@@ -317,25 +421,86 @@ public class MatchmakingService {
         catch (Exception e) { throw new AuthException(500, "已保存报告无法读取，请删除后重新生成"); }
     }
 
-    @Transactional public Map<String, Object> deleteAll(AuthUser user) {
-        jdbc.update("DELETE FROM matchmaking_reports WHERE user_id=?", user.id());
-        jdbc.update("DELETE FROM matchmaking_profiles WHERE user_id=?", user.id());
-        tasks.values().stream().filter(t -> t.userId == user.id()).forEach(t -> {
-            new File(storageDir, t.id + ".json").delete();
-            tasks.remove(t.id);
+    public synchronized Map<String, Object> deleteAll(AuthUser user) {
+        List<MatchmakingTask> owned = tasks.values().stream().filter(t -> t.userId == user.id()).toList();
+        transactions.executeWithoutResult(status -> {
+            // Compensate before removing the only recovery evidence; failure rolls back the deletion.
+            for (MatchmakingTask task : owned) {
+                MatchmakingTask durable = durableTask(task.id);
+                if (!terminal(durable.status) || durable.compensationPending) {
+                    if (task.trial) trials.markRetryable(task.userId, task.id);
+                    else if (task.transactionId > 0) quota.refund(task.transactionId, "婚恋资料删除退款");
+                }
+            }
+            jdbc.update("DELETE FROM matchmaking_reports WHERE user_id=?", user.id());
+            jdbc.update("DELETE FROM matchmaking_profiles WHERE user_id=?", user.id());
+            jdbc.update("DELETE FROM matchmaking_tasks WHERE user_id=?", user.id());
         });
+        for (MatchmakingTask task : owned) {
+            task.request = Map.of(); task.status = "error";
+            queue.remove(task); tasks.remove(task.id);
+        }
         return Map.of("deleted", true);
     }
 
     public Map<String, Object> status(AuthUser user) {
+        if (user.isMatchmakingTrial()) {
+            return Map.of("creditCost", 0, "credits", 0, "retentionDays", 30,
+                    "imageLowCredits", 0, "imageMediumCredits", 0, "matchmakingTrial", true);
+        }
         return Map.of("creditCost", quota.matchmakingCreditPerReport(), "credits", quota.balance(user.id()), "retentionDays", 30,
-                "imageLowCredits", quota.imageCredit("low"));
+                "imageLowCredits", quota.imageCredit("low"), "imageMediumCredits", quota.imageCredit("medium"));
     }
     /** Runs independently of user traffic so the 30-day retention promise is enforceable. */
     @Scheduled(cron = "0 15 3 * * *", zone = "Asia/Shanghai")
     public void cleanExpired() {
         jdbc.update("DELETE FROM matchmaking_reports WHERE expires_at<=CURRENT_TIMESTAMP");
         jdbc.update("DELETE FROM matchmaking_profiles WHERE expires_at<=CURRENT_TIMESTAMP");
+        pruneReportsByConfiguredLimits();
+    }
+
+    void pruneReportsByConfiguredLimits() {
+        List<Map<String, Object>> reports = jdbc.queryForList("""
+                SELECT id, profile_id, user_id FROM matchmaking_reports
+                WHERE expires_at>CURRENT_TIMESTAMP ORDER BY created_at DESC, id DESC
+                """);
+        int perUserLimit = matchmakingMaxHistory();
+        int globalLimit = matchmakingMaxGlobalHistory();
+        Map<Long, Integer> userCounts = new LinkedHashMap<>();
+        List<Map<String, Object>> retained = new java.util.ArrayList<>();
+        List<Map<String, Object>> removed = new java.util.ArrayList<>();
+        for (Map<String, Object> report : reports) {
+            long userId = ((Number) report.get("user_id")).longValue();
+            int count = userCounts.getOrDefault(userId, 0);
+            if (count >= perUserLimit) removed.add(report);
+            else {
+                userCounts.put(userId, count + 1);
+                retained.add(report);
+            }
+        }
+        if (retained.size() > globalLimit) {
+            removed.addAll(retained.subList(globalLimit, retained.size()));
+        }
+        for (Map<String, Object> report : removed) {
+            jdbc.update("DELETE FROM matchmaking_reports WHERE id=?", report.get("id"));
+            jdbc.update("DELETE FROM matchmaking_profiles WHERE id=?", report.get("profile_id"));
+        }
+    }
+
+    private void pruneReportsQuietly() {
+        try {
+            pruneReportsByConfiguredLimits();
+        } catch (Exception e) {
+            log.warn("婚恋报告数量清理失败，保留本次报告: {}", e.getMessage());
+        }
+    }
+
+    private int matchmakingMaxHistory() { return runtime == null ? 20 : runtime.matchmakingMaxHistory(); }
+    private int matchmakingMaxGlobalHistory() { return runtime == null ? 200 : runtime.matchmakingMaxGlobalHistory(); }
+
+    private String ownerLabel(Map<String, Object> row) {
+        Object suffix = row.get("code_suffix");
+        return suffix == null ? String.valueOf(row.get("username")) : "内测访客 · ****" + suffix;
     }
 
     Map<String, Object> validate(Map<String, Object> body) {
@@ -360,6 +525,14 @@ public class MatchmakingService {
         p.put("parentsSupport", choice(body, "parentsSupport", PARENTS_SUPPORT));
         p.put("bridePriceView", optional(body, "bridePriceView", 80));
         p.put("partnerExpectations", optional(body, "partnerExpectations", 200));
+        p.put("smokingHabit", choice(body, "smokingHabit", SMOKING));
+        p.put("drinkingHabit", choice(body, "drinkingHabit", DRINKING));
+        p.put("cohabitationExpectation", choice(body, "cohabitationExpectation", COHABITATION));
+        p.put("portraitGender", choice(body, "portraitGender", PORTRAIT_GENDER));
+        p.put("portraitAgeBand", choice(body, "portraitAgeBand", PORTRAIT_AGE));
+        p.put("portraitStyle", choice(body, "portraitStyle", PORTRAIT_STYLE));
+        p.put("portraitHair", choice(body, "portraitHair", PORTRAIT_HAIR));
+        p.put("portraitScene", choice(body, "portraitScene", PORTRAIT_SCENE));
         p.put("incomeBand", choice(body, "incomeBand", INCOME_BANDS));
         if (string(p, "incomeBand").isBlank()) throw new AuthException(400, "请填写收入区间");
         p.put("housingStatus", choice(body, "housingStatus", HOUSING_OPTIONS));
@@ -414,7 +587,9 @@ public class MatchmakingService {
         Map<String, Object> m = new LinkedHashMap<>();
         for (String key : List.of("gender", "age", "heightCm", "appearanceSelf", "maritalStatus", "hukou", "education", "studyStatus",
                 "industry", "jobType", "workYears", "workIntensity", "incomeComposition", "onlyChild", "incomeBand",
-                "parentsPension", "parentsHealth", "parentsSupport", "bridePriceView", "partnerExpectations")) {
+                "parentsPension", "parentsHealth", "parentsSupport", "bridePriceView", "partnerExpectations",
+                "smokingHabit", "drinkingHabit", "cohabitationExpectation",
+                "portraitGender", "portraitAgeBand", "portraitStyle", "portraitHair", "portraitScene")) {
             Object value = p.get(key);
             if (value instanceof Number n ? n.doubleValue() > 0 : value != null && !String.valueOf(value).isBlank()) m.put(key, value);
         }
@@ -442,15 +617,29 @@ public class MatchmakingService {
         return safe;
     }
     /** Reuses the shared safe Images client; any failure fails the whole task so no partial charge survives. */
-    private String generatePartnerImage(Map<String, Object> narrative) throws java.io.IOException, InterruptedException {
+    private String generatePartnerImage(Map<String, Object> profile, Map<String, Object> narrative)
+            throws java.io.IOException, InterruptedException {
         Map<?, ?> portrait = narrative.get("partnerPortrait") instanceof Map<?, ?> m ? m : Map.of();
         Object rawDescription = portrait.get("portrait");
         String description = rawDescription == null ? "" : String.valueOf(rawDescription);
-        if (description.length() > 220) description = description.substring(0, 220);
-        String prompt = "根据以下相亲定位报告的推荐伴侣画像，画一张温馨、正能量的扁平风格插画：" + description
-                + "。画面要求：柔和暖色调、干净背景、两个人物的半身或剪影、氛围自然亲切；画面中不要出现任何文字、水印、标志，不要出现可识别的真实人物长相。";
-        try { return Base64.getEncoder().encodeToString(imageClient.generate(prompt, "1024x1024", "low")); }
-        catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new java.io.IOException("伴侣画像插画生成被中断", e); }
+        if (description.length() > 200) description = description.substring(0, 200);
+        StringBuilder subject = new StringBuilder(switch (string(profile, "portraitGender")) {
+            case "女" -> "一位年轻女性";
+            case "男" -> "一位年轻男性";
+            default -> "一位年轻人";
+        });
+        for (String key : List.of("portraitAgeBand", "portraitStyle", "portraitHair")) {
+            String value = string(profile, key);
+            if (!value.isBlank() && !"不指定".equals(value)) subject.append("，").append(value);
+        }
+        StringBuilder prompt = new StringBuilder("生成一张竖版半身人像照片：").append(subject);
+        String scene = string(profile, "portraitScene");
+        if (!scene.isBlank() && !"不指定".equals(scene)) prompt.append("，").append(scene).append("场景");
+        if (!description.isBlank()) prompt.append("。人物特征参考：").append(description);
+        prompt.append("。要求：真实感AI人像摄影风格，面部清晰自然，自然肤色与柔和光线，背景轻微虚化，构图干净；")
+                .append("画面中不要出现任何文字、水印、标志，不要出现可识别的真实人物或名人长相，仅生成虚构人物。");
+        try { return Base64.getEncoder().encodeToString(imageClient.generate(prompt.toString(), "1024x1536", "medium")); }
+        catch (InterruptedException e) { Thread.currentThread().interrupt(); throw new java.io.IOException("伴侣画像照片生成被中断", e); }
     }
     private String required(Map<String,Object> map,String key,int max) { String value=optional(map,key,max); if(value.isBlank()) throw new AuthException(400,"请填写"+key); return value; }
     private String optional(Map<String,Object> map,String key,int max) { String value=map.get(key)==null?"":map.get(key).toString().trim(); if(value.length()>max) throw new AuthException(400,key+"长度无效"); return value; }

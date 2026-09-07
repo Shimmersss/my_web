@@ -132,6 +132,7 @@ CREATE TABLE IF NOT EXISTS matchmaking_reports (
 CREATE TABLE IF NOT EXISTS matchmaking_trial_codes (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     code_hash VARCHAR(64) NOT NULL UNIQUE,
+    code_plain VARCHAR(64) NULL,
     code_suffix VARCHAR(4) NOT NULL,
     guest_user_id BIGINT NULL UNIQUE,
     status VARCHAR(20) NOT NULL DEFAULT 'UNUSED',
@@ -153,5 +154,19 @@ CREATE TABLE IF NOT EXISTS matchmaking_daily_usage (
     usage_date DATE NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id, usage_date),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+-- One durable refund claim per original spend, including concurrent compensators.
+CREATE TABLE IF NOT EXISTS credit_refund_claims (
+    spend_id BIGINT PRIMARY KEY,
+    FOREIGN KEY (spend_id) REFERENCES credit_transactions(id)
+);
+
+-- Transactional source of truth; JSON files are imported only for legacy recovery.
+CREATE TABLE IF NOT EXISTS matchmaking_tasks (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    payload TEXT NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );

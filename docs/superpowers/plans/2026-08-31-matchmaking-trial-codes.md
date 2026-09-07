@@ -17,7 +17,7 @@
 - 同步失败、队列拒绝、worker 失败和重启中断允许原访客重试；成功后永不恢复生成资格。
 - 邀请码首次兑换默认 7 天有效；绑定后可跨设备恢复，root 撤销后新旧会话立即失效。
 - 报告文案必须写“最长保留 30 天”，并继续服从现有每用户和全站数量上限。
-- 数据库只保存邀请码 SHA-256 和后四位；完整邀请码仅在创建响应中显示一次，日志不得记录原码或问卷内容。
+- 数据库保存邀请码 SHA-256、完整原码和后四位；完整原码只允许 root 管理接口返回，日志不得记录原码或问卷内容。升级前的 hash-only 历史码不可恢复。
 - `MATCHMAKING_TRIAL` 不出现在注册用户列表、用户统计、签到榜、额度管理中，也不能访问其他受保护节目。
 - 保留当前工作区所有无关改动；每次 `git add` 只列本任务文件，不得使用 reset、checkout 或清理命令。
 
@@ -56,7 +56,7 @@ void createsHashedCodeWithSevenDayDefaultAndNeverListsPlaintext() {
 }
 ```
 
-测试中的 hash 查询必须用原码，确保数据库不存在明文；再查询 `code_hash` 长度为 64。
+测试中的兑换查询必须继续使用 hash，并断言 `code_hash` 长度为 64；同时断言 root 管理列表可取得完整码、访客访问摘要不含完整码。
 
 - [ ] **Step 2: 运行测试确认因表或服务不存在而失败**
 
@@ -72,6 +72,7 @@ Expected: FAIL，编译器找不到 `MatchmakingTrialService` 或 H2 找不到 `
 CREATE TABLE IF NOT EXISTS matchmaking_trial_codes (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     code_hash VARCHAR(64) NOT NULL UNIQUE,
+    code_plain VARCHAR(64) NULL,
     code_suffix VARCHAR(4) NOT NULL,
     guest_user_id BIGINT NULL UNIQUE,
     status VARCHAR(20) NOT NULL DEFAULT 'UNUSED',
@@ -100,7 +101,7 @@ private static final char[] CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789".t
 private static final Duration DEFAULT_VALIDITY = Duration.ofDays(7);
 ```
 
-`createCode` 返回包含完整 `code` 的单次响应；`codes()` SQL 显式选择管理字段并转换成 camelCase，不选择 `code_hash`；`updateCode` 不允许把截止时间解析为无效值。所有摘要都使用 `LinkedHashMap`，避免 `Map.of` 遇到 nullable 时间字段。
+`createCode` 返回完整 `code`；`codes()` 仅供 root 管理路径使用，显式返回 `code` 与 `codeRecoverable`，但不返回 `code_hash`。访客使用的 `redeemRecord/accessForUser` 摘要不查询、不返回 `code_plain`。`updateCode` 不允许把截止时间解析为无效值。所有摘要都使用 `LinkedHashMap`，避免 `Map.of` 遇到 nullable 时间字段。
 
 - [ ] **Step 5: 增加过期、撤销和注册邀请码隔离测试并实现 hash 查找**
 
@@ -374,7 +375,7 @@ assertEquals("内测访客 · ****" + suffix,
         matchmaking.reportSummaries(root).get(0).get("ownerLabel"));
 ```
 
-控制器测试还要断言非 root 创建/撤销返回 403，创建响应有完整 code，dashboard 列表没有 `code_hash` 和完整 code。
+控制器测试还要断言非 root 创建/撤销返回 403，创建响应和 root dashboard 列表有完整 code，但均没有 `code_hash`；访客接口不能取得完整 code。
 
 - [ ] **Step 2: 运行测试确认后台尚未暴露 trial 管理**
 
@@ -579,9 +580,9 @@ Admin 状态映射固定为：UNUSED=未兑换、CLAIMED=已兑换待生成、RU
 
 - [ ] **Step 3: 实现后台生成和列表面板**
 
-在账号与账本分区新增锚点 `#matchmaking-trial-panel`。表单默认值由上海时区当前时间加 7 天生成；创建成功后先调用 `navigator.clipboard.writeText(code)`，再用不可自动消失的弹窗显示完整 code 和“完整邀请码仅显示这一次”。dashboard 加载和 patch 响应更新 `trialCodes`。
+在账号与账本分区新增锚点 `#matchmaking-trial-panel`。表单默认值由上海时区当前时间加 7 天生成；创建成功后复制并弹窗显示完整 code，提示之后仍可在后台查看。dashboard 加载和 patch 响应更新 `trialCodes`。
 
-列表只显示 `****后四位`、状态、截止/兑换/完成时间、报告入口和启用切换，不尝试从服务端恢复完整 code。
+列表显示完整邀请码并提供复制按钮，同时展示状态、截止/兑换/完成时间、报告入口和启用切换。升级前 hash-only 记录显示 `****后四位` 与“历史码不可恢复”。
 
 - [ ] **Step 4: 调整报告归属和删除提示**
 

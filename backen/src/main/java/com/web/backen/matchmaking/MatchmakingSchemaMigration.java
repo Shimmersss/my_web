@@ -24,6 +24,7 @@ public class MatchmakingSchemaMigration {
         addColumnIfMissing("matchmaking_reports", "has_image", "BOOLEAN NULL");
         ensureReportPayloadCapacity();
         ensureTrialCodesTable();
+        addColumnIfMissing("matchmaking_trial_codes", "code_plain", "VARCHAR(64) NULL");
     }
 
     private void ensureTrialCodesTable() {
@@ -31,6 +32,7 @@ public class MatchmakingSchemaMigration {
                 CREATE TABLE IF NOT EXISTS matchmaking_trial_codes (
                     id BIGINT AUTO_INCREMENT PRIMARY KEY,
                     code_hash VARCHAR(64) NOT NULL UNIQUE,
+                    code_plain VARCHAR(64) NULL,
                     code_suffix VARCHAR(4) NOT NULL,
                     guest_user_id BIGINT NULL UNIQUE,
                     status VARCHAR(20) NOT NULL DEFAULT 'UNUSED',
@@ -56,7 +58,7 @@ public class MatchmakingSchemaMigration {
             if (!product.contains("mysql")) return;
             Long size = jdbc.queryForObject("""
                     SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS
-                    WHERE LOWER(TABLE_NAME)='matchmaking_reports' AND LOWER(COLUMN_NAME)='report_payload'
+                    WHERE TABLE_SCHEMA=DATABASE() AND LOWER(TABLE_NAME)='matchmaking_reports' AND LOWER(COLUMN_NAME)='report_payload'
                     """, Long.class);
             if (size != null && size > 65535) return;
             jdbc.execute("ALTER TABLE matchmaking_reports MODIFY COLUMN report_payload MEDIUMTEXT NOT NULL");
@@ -64,11 +66,7 @@ public class MatchmakingSchemaMigration {
     }
 
     private void addColumnIfMissing(String table, String column, String definition) {
-        Integer found = jdbc.queryForObject("""
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE LOWER(TABLE_NAME)=LOWER(?) AND LOWER(COLUMN_NAME)=LOWER(?)
-                """, Integer.class, table, column);
-        if (found != null && found > 0) return;
+        if (columnExists(table, column)) return;
         jdbc.execute("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
     }
 
@@ -86,10 +84,16 @@ public class MatchmakingSchemaMigration {
     }
 
     private boolean columnExists(String table, String column) {
-        Integer found = jdbc.queryForObject("""
-                SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
-                WHERE LOWER(TABLE_NAME)=LOWER(?) AND LOWER(COLUMN_NAME)=LOWER(?)
-                """, Integer.class, table, column);
-        return found != null && found > 0;
+        try (Connection connection = jdbc.getDataSource().getConnection()) {
+            String schema = connection.getMetaData().getDatabaseProductName().toLowerCase().contains("mysql")
+                    ? null : connection.getSchema();
+            try (var columns = connection.getMetaData().getColumns(connection.getCatalog(), schema, "%", "%")) {
+                while (columns.next()) {
+                    if (table.equalsIgnoreCase(columns.getString("TABLE_NAME"))
+                            && column.equalsIgnoreCase(columns.getString("COLUMN_NAME"))) return true;
+                }
+                return false;
+            }
+        } catch (Exception e) { throw new IllegalStateException("无法读取当前数据库结构", e); }
     }
 }

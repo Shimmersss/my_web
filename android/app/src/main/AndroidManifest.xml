@@ -38,6 +38,9 @@
                 <data
                     android:host="shimmer.help"
                     android:scheme="https" />
+                <data
+                    android:host="www.shimmer.help"
+                    android:scheme="https" />
             </intent-filter>
         </activity>
 

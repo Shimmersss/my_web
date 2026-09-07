@@ -2,12 +2,18 @@
   <main class="admin-page">
     <div class="admin-shell">
       <header class="admin-header">
-        <div>
-          <span class="eyebrow">CONTROL CENTER / ROOT ONLY</span>
+        <div class="admin-header__copy">
+          <div class="admin-header__eyebrow">
+            <span class="eyebrow">CONTROL CENTER / ROOT ONLY</span>
+            <span class="admin-live"><i aria-hidden="true"></i>已连接</span>
+          </div>
           <h1>运营管理中心</h1>
-          <p>统一管理 API、访问资格、额度和可见节目。</p>
+          <p>统一管理访问、能力配置、额度和内容审核。</p>
         </div>
-        <button class="ghost" @click="loadDashboard">刷新数据</button>
+        <div class="admin-header__actions">
+          <span class="admin-role">ROOT · 管理模式</span>
+          <button class="ghost" @click="loadDashboard">刷新数据</button>
+        </div>
       </header>
       <n-alert v-if="!auth.isRoot" type="warning" title="需要 root 账户登录" />
       <n-alert
@@ -18,7 +24,55 @@
         @close="errorMsg = ''"
       />
       <template v-if="auth.isRoot">
-        <section class="admin-panel">
+        <section id="overview" class="admin-overview">
+          <div class="admin-overview__heading">
+            <div>
+              <span class="eyebrow">OVERVIEW</span>
+              <h2>今日概览</h2>
+            </div>
+            <p>先看运行状态，再处理访问、模型和账本配置。</p>
+          </div>
+          <section class="stat-grid" aria-label="后台统计概览">
+            <div v-for="item in statCards" :key="item.label" class="stat-card">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.hint }}</small>
+            </div>
+          </section>
+        </section>
+
+        <div class="admin-workspace">
+          <aside class="admin-index" aria-label="后台分区导航">
+            <div class="admin-index__heading">
+              <span class="eyebrow">CONTROL INDEX</span>
+              <strong>管理目录</strong>
+            </div>
+            <nav>
+              <a href="#overview">总览 <span>01</span></a>
+              <p>访问与社区</p>
+              <a href="#access-panel">节目权限 <span>02</span></a>
+              <a href="#community-panel">留言审核 <span>03</span></a>
+              <p>能力与运行</p>
+              <a href="#providers-panel">通用 API <span>04</span></a>
+              <a href="#presentation-panel">演示生成 <span>05</span></a>
+              <a href="#image-panel">图片服务 <span>06</span></a>
+              <a href="#storage-panel">任务保留 <span>07</span></a>
+              <a href="#ranking-panel">GitHub 榜单 <span>08</span></a>
+              <p>账号与账本</p>
+              <a href="#billing-panel">计费规则 <span>09</span></a>
+              <a href="#invites-panel">邀请码 <span>10</span></a>
+              <a href="#matchmaking-trial-panel">婚恋内测码 <span>11</span></a>
+              <a href="#users-panel">用户与流水 <span>12</span></a>
+              <a href="#matchmaking-panel">婚恋模型 <span>13</span></a>
+            </nav>
+            <div class="admin-index__note">
+              <span class="admin-index__note-dot" aria-hidden="true"></span>
+              <p>修改后请点击对应面板的保存按钮，配置才会对新任务生效。</p>
+            </div>
+          </aside>
+
+          <div class="admin-content">
+        <section id="access-panel" class="admin-panel">
           <div class="panel-title">
             <div>
               <span class="eyebrow">PROGRAM VISIBILITY</span>
@@ -44,7 +98,7 @@
             >
           </div>
         </section>
-        <section class="admin-panel">
+        <section id="community-panel" class="admin-panel">
           <div class="panel-title">
             <div>
               <span class="eyebrow">GUESTBOOK MODERATION</span>
@@ -119,14 +173,7 @@
             </button>
           </div>
         </section>
-        <section class="stat-grid">
-          <div v-for="item in statCards" :key="item.label" class="stat-card">
-            <span>{{ item.label }}</span
-            ><strong>{{ item.value }}</strong
-            ><small>{{ item.hint }}</small>
-          </div>
-        </section>
-        <section class="admin-panel">
+        <section id="providers-panel" class="admin-panel">
           <div class="panel-title">
             <div>
               <span class="eyebrow">RUNTIME CONFIGURATION</span>
@@ -223,7 +270,7 @@
             </div>
           </div>
         </section>
-        <section class="admin-panel">
+        <section id="presentation-panel" class="admin-panel">
           <div class="panel-title">
             <div>
               <span class="eyebrow">PRESENTATION ENGINE</span>
@@ -327,7 +374,7 @@
             </div>
           </div>
         </section>
-        <section class="admin-panel">
+        <section id="image-panel" class="admin-panel">
           <div class="panel-title">
             <div>
               <span class="eyebrow">SHARED IMAGE API</span>
@@ -415,7 +462,7 @@
             </div>
           </div>
         </section>
-        <section class="admin-panel">
+        <section id="storage-panel" class="admin-panel">
           <div class="panel-title">
             <div>
               <span class="eyebrow">TASK STORAGE</span>
@@ -426,7 +473,7 @@
             </button>
           </div>
           <p class="panel-desc">
-            PPT、文献翻译、GPT 生图和演示生图素材分别按用户及全站总量清理。
+            PPT、文献翻译、GPT 生图、演示生图素材和婚恋报告分别按用户及全站总量清理；婚恋报告仍受 30 天期限约束。
           </p>
           <div class="retention-grid">
             <div>
@@ -485,9 +532,23 @@
                   :max="1000"
               /></label>
             </div>
+            <div>
+              <h3>婚恋报告</h3>
+              <label
+                >每用户最多保留（份）<n-input-number
+                  v-model:value="matchmakingRetentionForm.maxPerUser"
+                  :min="1"
+                  :max="100" /></label
+              ><label
+                >全站最多保留（份）<n-input-number
+                  v-model:value="matchmakingRetentionForm.maxTotal"
+                  :min="1"
+                  :max="1000"
+              /></label>
+            </div>
           </div>
         </section>
-        <section class="admin-panel">
+        <section id="ranking-panel" class="admin-panel">
           <div class="panel-title">
             <div>
               <span class="eyebrow">GITHUB RADAR</span>
@@ -543,8 +604,8 @@
             >
           </div>
         </section>
-        <div class="content-grid">
-          <section class="admin-panel">
+        <div class="content-grid billing-grid">
+          <section id="billing-panel" class="admin-panel">
             <div class="panel-title">
               <div>
                 <span class="eyebrow">BILLING RULES</span>
@@ -593,7 +654,7 @@
               /></label>
             </div>
           </section>
-          <section class="admin-panel">
+          <section id="invite-create-panel" class="admin-panel">
             <div class="panel-title">
               <div>
                 <span class="eyebrow">ACCESS CONTROL</span>
@@ -624,7 +685,7 @@
             </button>
           </section>
         </div>
-        <section class="admin-panel">
+        <section id="invites-panel" class="admin-panel">
           <div class="panel-title">
             <div>
               <span class="eyebrow">INVITATION MANAGEMENT</span>
@@ -674,15 +735,52 @@
             </table>
           </div>
         </section>
-        <div class="content-grid">
-          <section class="admin-panel">
+        <section id="matchmaking-trial-panel" class="admin-panel">
+          <div class="panel-title">
+            <div><span class="eyebrow">MATCHMAKING PRIVATE BETA</span><h2>婚恋内测邀请码</h2></div>
+            <span class="muted">{{ trialCodes.length }} 枚 · root 可随时查看使用情况与完整码</span>
+          </div>
+          <p class="panel-desc">访客无需注册即可免费生成一份报告；失败可重试，完成后只能恢复查看。默认首次兑换期限为 7 天。</p>
+          <div class="trial-code-create">
+            <label>首次兑换截止时间<n-input v-model:value="trialExpiresAt" type="datetime-local" /></label>
+            <button class="primary" @click="createTrialCode">生成并复制内测码</button>
+          </div>
+          <div class="table-wrap audit-table-wrap" tabindex="0" role="region" aria-label="婚恋内测邀请码管理，可上下滚动">
+            <table>
+              <thead><tr><th>邀请码</th><th>状态</th><th>首次截止</th><th>兑换时间</th><th>完成时间</th><th>报告</th><th>操作</th></tr></thead>
+              <tbody>
+                <tr v-for="code in trialCodes" :key="code.id">
+                  <td class="trial-code-cell">
+                    <code v-if="code.codeRecoverable">{{ code.code }}</code>
+                    <span v-else class="muted">历史码不可恢复（****{{ code.codeSuffix }}）</span>
+                    <button v-if="code.codeRecoverable" class="small" @click="copyTrialCode(code.code)">复制</button>
+                  </td>
+                  <td>{{ trialCodeStatus(code) }}</td>
+                  <td>{{ formatDate(code.expiresAt) }}</td>
+                  <td>{{ formatDate(code.redeemedAt) }}</td>
+                  <td>{{ formatDate(code.completedAt) }}</td>
+                  <td><a v-if="code.reportId" :href="`/matchmaking-report/${code.reportId}`">查看</a><span v-else>—</span></td>
+                  <td><button class="small" @click="toggleTrialCode(code)">{{ code.enabled ? "撤销" : "恢复" }}</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <div class="content-grid account-grid">
+          <section id="users-panel" class="admin-panel">
             <div class="panel-title">
               <div>
                 <span class="eyebrow">USER ACCESS</span>
                 <h2>用户与额度</h2>
               </div>
+              <span class="muted">{{ users.length }} 个注册用户 · 可上下拖动查看</span>
             </div>
-            <div class="table-wrap">
+            <div
+              class="table-wrap audit-table-wrap user-table-wrap"
+              tabindex="0"
+              role="region"
+              aria-label="注册用户与额度，可上下滚动"
+            >
               <table>
                 <thead>
                   <tr>
@@ -722,7 +820,7 @@
               </table>
             </div>
           </section>
-          <section class="admin-panel">
+          <section id="transactions-panel" class="admin-panel">
             <div class="panel-title">
               <div>
                 <span class="eyebrow">AUDIT TRAIL</span>
@@ -759,18 +857,26 @@
             </div>
           </section>
         </div>
-      <section class="admin-panel"><div class="panel-title"><div><span class="eyebrow">MATCHMAKING REPORT PROVIDER</span><h2>婚恋报告 / Mimo API</h2></div><button class="primary" @click="saveMatchmakingSettings">保存婚恋报告配置</button></div><p class="panel-desc">默认继承「LLM 通用模型」的 Mimo 配置。填写并保存后，只会覆盖婚恋报告节目；密钥不会返回浏览器。</p><div class="provider-card"><div class="provider-head"><div><h3>专属文本模型</h3><span>不联网检索，仅整理已校验的匿名化条件账本。</span></div><n-tag :type="matchmakingApiHint !== '未配置' ? 'success' : 'warning'" size="small" :bordered="false">{{ matchmakingApiHint }}</n-tag></div><n-input v-model:value="matchmakingForm.baseUrl" placeholder="Base URL" /><label class="provider-protocol field-gap">接口协议<select v-model="matchmakingForm.protocol"><option value="auto">自动识别（推荐）</option><option value="openai">OpenAI Chat Completions</option><option value="claude">Claude Messages</option></select></label><n-input v-model:value="matchmakingForm.model" class="field-gap" placeholder="模型名称" /><n-input v-model:value="matchmakingForm.apiKey" class="field-gap" type="password" show-password-on="click" :placeholder="matchmakingApiHint === '未配置' ? '输入 Key' : '留空保留当前 Key'" /><div class="provider-actions"><button class="small" :disabled="testingProvider === 'matchmaking'" @click="testMatchmakingConnection">{{ testingProvider === 'matchmaking' ? '测试中…' : '测试连通性' }}</button><span v-if="testResults.matchmaking" class="test-result" :class="testResults.matchmaking.type">{{ testResults.matchmaking.text }}<em v-if="testResults.matchmaking.latencyMs"> · {{ testResults.matchmaking.latencyMs }} ms</em></span></div></div></section>
-      <section class="admin-panel"><div class="panel-title"><div><span class="eyebrow">MATCHMAKING BILLING</span><h2>婚恋报告积分</h2></div><button class="primary" @click="saveSettings">保存计费规则</button></div><p class="panel-desc">每份专属报告在模型成功生成后扣除一次积分；调用、结构校验或保存失败会自动退款。</p><div class="form-grid"><label>婚恋报告 / 份<n-input-number v-model:value="settings.matchmakingCreditPerReport" :min="1" /></label></div></section>
+      <section id="matchmaking-panel" class="admin-panel"><div class="panel-title"><div><span class="eyebrow">MATCHMAKING REPORT PROVIDER</span><h2>婚恋报告 / Mimo API</h2></div><button class="primary" @click="saveMatchmakingSettings">保存婚恋报告配置</button></div><p class="panel-desc">默认继承「LLM 通用模型」的 Mimo 配置。填写并保存后，只会覆盖婚恋报告节目；密钥不会返回浏览器。</p><div class="provider-card"><div class="provider-head"><div><h3>专属文本模型</h3><span>不联网检索，仅整理已校验的匿名化条件账本。</span></div><n-tag :type="matchmakingApiHint !== '未配置' ? 'success' : 'warning'" size="small" :bordered="false">{{ matchmakingApiHint }}</n-tag></div><n-input v-model:value="matchmakingForm.baseUrl" placeholder="Base URL" /><label class="provider-protocol field-gap">接口协议<select v-model="matchmakingForm.protocol"><option value="auto">自动识别（推荐）</option><option value="openai">OpenAI Chat Completions</option><option value="claude">Claude Messages</option></select></label><n-input v-model:value="matchmakingForm.model" class="field-gap" placeholder="模型名称" /><n-input v-model:value="matchmakingForm.apiKey" class="field-gap" type="password" show-password-on="click" :placeholder="matchmakingApiHint === '未配置' ? '输入 Key' : '留空保留当前 Key'" /><div class="provider-actions"><button class="small" :disabled="testingProvider === 'matchmaking'" @click="testMatchmakingConnection">{{ testingProvider === 'matchmaking' ? '测试中…' : '测试连通性' }}</button><span v-if="testResults.matchmaking" class="test-result" :class="testResults.matchmaking.type">{{ testResults.matchmaking.text }}<em v-if="testResults.matchmaking.latencyMs"> · {{ testResults.matchmaking.latencyMs }} ms</em></span></div></div></section>
+      <section id="matchmaking-billing-panel" class="admin-panel"><div class="panel-title"><div><span class="eyebrow">MATCHMAKING BILLING</span><h2>婚恋报告积分</h2></div><button class="primary" @click="saveSettings">保存计费规则</button></div><p class="panel-desc">每份专属报告在模型成功生成后扣除一次积分；调用、结构校验或保存失败会自动退款。</p><div class="form-grid"><label>婚恋报告 / 份<n-input-number v-model:value="settings.matchmakingCreditPerReport" :min="1" /></label></div></section>
+          </div>
+        </div>
       </template>
+      <n-modal v-model:show="trialCodeModalOpen" preset="dialog" title="婚恋内测邀请码已生成" :mask-closable="false">
+        <p>邀请码已保存，可随时在本页查看使用情况、完整内容并再次复制。</p>
+        <code class="trial-code-once">{{ createdTrialCode }}</code>
+        <template #action><button class="primary" @click="copyCreatedTrialCode">复制邀请码</button><button class="small" @click="trialCodeModalOpen = false">我已保存</button></template>
+      </n-modal>
     </div>
   </main>
 </template>
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { NAlert, NInput, NInputNumber, NTag, useMessage } from "naive-ui";
+import { NAlert, NInput, NInputNumber, NModal, NTag, useMessage } from "naive-ui";
 import {
   adjustUserCredits,
   createInviteCode,
+  createMatchmakingTrialCode,
   deleteAdminGuestbookEntry,
   deleteInviteCode,
   getAdminAccounts,
@@ -780,8 +886,10 @@ import {
   updateAdminApiSettings,
   updateAdminUserStatus,
   updateInviteStatus,
+  updateMatchmakingTrialCode,
   updateQuotaSettings,
 } from "@/api";
+import { trialCodeStatus as resolveTrialCodeStatus } from "@/utils/matchmakingTrial";
 import { useAuthStore } from "@/stores/auth";
 const visibilityForm = reactive({
   Publications: "PUBLIC",
@@ -816,6 +924,10 @@ const apiKeyHints = reactive({
 });
 const users = ref([]);
 const invites = ref([]);
+const trialCodes = ref([]);
+const trialExpiresAt = ref(defaultTrialExpiry());
+const createdTrialCode = ref("");
+const trialCodeModalOpen = ref(false);
 const transactions = ref([]);
 const guestbookEntries = ref([]);
 const guestbookType = ref("all");
@@ -869,6 +981,7 @@ const presentationImageRetentionForm = reactive({
   maxPerUser: 20,
   maxTotal: 100,
 });
+const matchmakingRetentionForm = reactive({ maxPerUser: 20, maxTotal: 200 });
 const rankingForm = reactive({
   enabled: true,
   refreshIntervalHours: 24,
@@ -895,25 +1008,30 @@ const providerCards = [
 const statCards = computed(() => [
   {
     label: "用户总数",
-    value: stats.users,
-    hint: `${stats.activeUsers} 个账户正常`,
+    value: formatAdminNumber(stats.users),
+    hint: `${formatAdminNumber(stats.activeUsers)} 个账户正常`,
   },
   {
     label: "可用邀请码",
-    value: stats.activeInvites,
+    value: formatAdminNumber(stats.activeInvites),
     hint: "未撤销、未用尽且未过期",
   },
   {
     label: "已发放额度",
-    value: stats.creditsIssued,
+    value: formatAdminNumber(stats.creditsIssued),
     hint: "邀请码和管理员调整",
   },
   {
     label: "已消耗额度",
-    value: stats.creditsSpent,
+    value: formatAdminNumber(stats.creditsSpent),
     hint: "翻译、PPT 与生图任务",
   },
 ]);
+
+function formatAdminNumber(value) {
+  return new Intl.NumberFormat("zh-CN").format(Number(value || 0));
+}
+
 onMounted(async () => {
   await auth.refresh().catch(() => {});
   if (auth.isRoot) {
@@ -927,6 +1045,7 @@ async function loadDashboard() {
     const d = res.data || {};
     users.value = d.users || [];
     invites.value = d.invites || [];
+    trialCodes.value = d.matchmakingTrialCodes || [];
     transactions.value = d.transactions || [];
     Object.assign(settings, d.settings || {});
     Object.assign(stats, d.stats || {});
@@ -950,6 +1069,16 @@ function applyApiSettings(d = {}) {
     apiForm.llm.protocol = String(d.llm.protocol).toLowerCase();
   applyMatchmakingSettings(d.matchmaking);
   if (d.githubRanking) Object.assign(rankingForm, d.githubRanking);
+  if (d.pptRetention) Object.assign(pptRetentionForm, d.pptRetention);
+  if (d.translationRetention)
+    Object.assign(translationRetentionForm, d.translationRetention);
+  if (d.imageRetention) Object.assign(imageRetentionForm, d.imageRetention);
+  if (d.presentationImageRetention)
+    Object.assign(presentationImageRetentionForm, d.presentationImageRetention);
+  if (d.matchmakingRetention)
+    Object.assign(matchmakingRetentionForm, d.matchmakingRetention);
+  applyCodexPptSettings(d.codexPpt);
+  applyImageGenerationSettings(d.imageGeneration);
 }
 function applyMatchmakingSettings(setting) {
   if (!setting) return;
@@ -1028,6 +1157,46 @@ async function createInvite() {
   } catch (e) {
     errorMsg.value = e.message || "邀请码生成失败";
   }
+}
+async function createTrialCode() {
+  try {
+    const expiresAt = trialExpiresAt.value ? new Date(trialExpiresAt.value).toISOString() : "";
+    const result = (await createMatchmakingTrialCode(expiresAt)).data || {};
+    createdTrialCode.value = result.code || "";
+    await navigator.clipboard?.writeText(createdTrialCode.value).catch(() => {});
+    trialCodeModalOpen.value = true;
+    await loadDashboard();
+  } catch (e) {
+    errorMsg.value = e.message || "婚恋内测邀请码生成失败";
+  }
+}
+async function copyCreatedTrialCode() {
+  await copyTrialCode(createdTrialCode.value);
+}
+async function copyTrialCode(code) {
+  if (!code) return;
+  await navigator.clipboard?.writeText(code).catch(() => {});
+  message.success("邀请码已复制");
+}
+async function toggleTrialCode(code) {
+  try {
+    const expiresAt = code.expiresAt ? new Date(code.expiresAt).toISOString() : "";
+    const result = await updateMatchmakingTrialCode(code.id, !code.enabled, expiresAt);
+    trialCodes.value = result.data || [];
+  } catch (e) {
+    errorMsg.value = e.message || "婚恋内测邀请码状态更新失败";
+  }
+}
+function trialCodeStatus(code) { return resolveTrialCodeStatus(code); }
+function defaultTrialExpiry() {
+  const date = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const offset = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+function formatDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short" }).format(date);
 }
 async function toggleInvite(i) {
   try {
@@ -1166,26 +1335,6 @@ async function saveGithubRankingSettings() {
     errorMsg.value = e.message || "排行榜配置保存失败";
   }
 }
-onMounted(async () => {
-  if (!auth.isRoot) return;
-  try {
-    const res = await getAdminAccounts();
-    const settings = res.data?.apiSettings || {};
-    if (settings.pptRetention)
-      Object.assign(pptRetentionForm, settings.pptRetention);
-    if (settings.translationRetention)
-      Object.assign(translationRetentionForm, settings.translationRetention);
-    if (settings.imageRetention)
-      Object.assign(imageRetentionForm, settings.imageRetention);
-    if (settings.presentationImageRetention)
-      Object.assign(
-        presentationImageRetentionForm,
-        settings.presentationImageRetention,
-      );
-  } catch (e) {
-    errorMsg.value = e.message || "任务文件保留配置读取失败";
-  }
-});
 async function savePptRetention() {
   try {
     const result = await updateAdminApiSettings({
@@ -1193,6 +1342,7 @@ async function savePptRetention() {
       translationRetention: translationRetentionForm,
       imageRetention: imageRetentionForm,
       presentationImageRetention: presentationImageRetentionForm,
+      matchmakingRetention: matchmakingRetentionForm,
     });
     if (result.data?.pptRetention)
       Object.assign(pptRetentionForm, result.data.pptRetention);
@@ -1205,6 +1355,8 @@ async function savePptRetention() {
         presentationImageRetentionForm,
         result.data.presentationImageRetention,
       );
+    if (result.data?.matchmakingRetention)
+      Object.assign(matchmakingRetentionForm, result.data.matchmakingRetention);
     message.success("任务文件保留配置已保存");
   } catch (e) {
     errorMsg.value = e.message || "任务文件保留配置保存失败";
@@ -1218,15 +1370,6 @@ const codexPptForm = reactive({
 });
 const codexPptApiHint = ref("未配置");
 const codexPptLocalCli = ref(false);
-onMounted(async () => {
-  if (!auth.isRoot) return;
-  try {
-    const res = await getAdminAccounts();
-    applyCodexPptSettings(res.data?.apiSettings?.codexPpt);
-  } catch (e) {
-    errorMsg.value = e.message || "Codex 演示配置读取失败";
-  }
-});
 function applyCodexPptSettings(setting) {
   if (!setting) return;
   codexPptForm.model = setting.model || "gpt-5.6-terra";
@@ -1272,15 +1415,6 @@ const imageGenerationForm = reactive({
   apiKey: "",
 });
 const imageGenerationApiHint = ref("未配置");
-onMounted(async () => {
-  if (!auth.isRoot) return;
-  try {
-    const res = await getAdminAccounts();
-    applyImageGenerationSettings(res.data?.apiSettings?.imageGeneration);
-  } catch (e) {
-    errorMsg.value = e.message || "GPT Image 2 配置读取失败";
-  }
-});
 function applyImageGenerationSettings(setting) {
   if (!setting) return;
   imageGenerationForm.baseUrl = setting.baseUrl || imageGenerationForm.baseUrl;
@@ -1793,6 +1927,653 @@ code {
   }
   .pagination-controls .small {
     min-height: 44px;
+  }
+}
+/* Desktop control-center pass: keep the existing controls, but give them a clear
+   reading order and a stable navigation rail. */
+.admin-page {
+  min-height: calc(100vh - 80px);
+  padding: 30px clamp(18px, 3vw, 48px) 80px;
+  background:
+    linear-gradient(180deg, #f6f7f8 0%, #f1f3f4 100%);
+  color: #1f2b33;
+}
+
+.admin-shell {
+  max-width: 1480px;
+  gap: 22px;
+}
+
+.admin-shell > *,
+.admin-workspace,
+.admin-content,
+.admin-index,
+.admin-panel {
+  min-width: 0;
+}
+
+.admin-header,
+.admin-overview,
+.admin-panel,
+.stat-card,
+.admin-index {
+  border-color: #dfe5e9;
+}
+
+.admin-header {
+  position: relative;
+  overflow: hidden;
+  min-width: 0;
+  padding: 30px 34px;
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(31, 43, 51, 0.06);
+}
+
+.admin-header::before {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: #b83126;
+  content: "";
+}
+
+.admin-header__copy,
+.admin-header__actions {
+  position: relative;
+  min-width: 0;
+  z-index: 1;
+}
+
+.admin-header__eyebrow,
+.admin-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-header__eyebrow .eyebrow {
+  color: #6c7e89;
+}
+
+.admin-live,
+.admin-role {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #587365;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.admin-live i,
+.admin-index__note-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #5c9a73;
+  box-shadow: 0 0 0 4px rgba(92, 154, 115, 0.12);
+}
+
+.admin-role {
+  padding: 8px 11px;
+  border: 1px solid #e3e8eb;
+  border-radius: 999px;
+  color: #63737d;
+  background: #f7f9fa;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+.admin-header h1 {
+  margin: 10px 0 7px;
+  color: #19252d;
+  font-size: clamp(28px, 3vw, 38px);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+}
+
+.admin-header p,
+.panel-desc,
+.muted {
+  color: #72818b;
+}
+
+.admin-header p {
+  margin: 0;
+  font-size: 14px;
+}
+
+.admin-overview {
+  padding: 2px 2px 0;
+}
+
+.admin-overview__heading {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+  margin: 0 2px 12px;
+}
+
+.admin-overview__heading h2 {
+  margin: 4px 0 0;
+  color: #27343d;
+  font-size: 19px;
+}
+
+.admin-overview__heading p {
+  margin: 0 0 2px;
+  color: #84919a;
+  font-size: 12px;
+}
+
+.admin-workspace {
+  display: grid;
+  grid-template-columns: 224px minmax(0, 1fr);
+  align-items: start;
+  gap: 22px;
+}
+
+.admin-index {
+  position: sticky;
+  top: 104px;
+  display: grid;
+  gap: 18px;
+  padding: 18px 14px;
+  border: 1px solid;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.76);
+  box-shadow: 0 8px 24px rgba(31, 43, 51, 0.045);
+}
+
+.admin-index__heading {
+  display: grid;
+  gap: 5px;
+  padding: 2px 8px 12px;
+  border-bottom: 1px solid #edf0f2;
+}
+
+.admin-index__heading strong {
+  color: #26343d;
+  font-size: 15px;
+}
+
+.admin-index nav {
+  display: grid;
+  gap: 2px;
+}
+
+.admin-index nav p {
+  margin: 12px 8px 4px;
+  color: #95a0a7;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+}
+
+.admin-index nav p:first-child {
+  margin-top: 0;
+}
+
+.admin-index nav a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 36px;
+  padding: 7px 9px;
+  border-radius: 8px;
+  color: #576873;
+  font-size: 13px;
+  text-decoration: none;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.admin-index nav a:hover,
+.admin-index nav a:focus-visible {
+  color: #a12e25;
+  background: #fff4f1;
+  outline: none;
+}
+
+.admin-index nav a span {
+  color: #a7b0b5;
+  font: 10px/1 Roboto, sans-serif;
+}
+
+.admin-index__note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 11px 9px 2px;
+  border-top: 1px solid #edf0f2;
+}
+
+.admin-index__note-dot {
+  flex: 0 0 auto;
+  margin-top: 5px;
+  width: 6px;
+  height: 6px;
+  box-shadow: none;
+}
+
+.admin-index__note p {
+  margin: 0;
+  color: #8a969d;
+  font-size: 11px;
+  line-height: 1.55;
+}
+
+.admin-content {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+.admin-panel,
+.stat-card {
+  border-radius: 14px;
+  box-shadow: 0 7px 22px rgba(31, 43, 51, 0.045);
+}
+
+.admin-panel {
+  padding: 24px;
+  scroll-margin-top: 104px;
+}
+
+.panel-title {
+  align-items: flex-start;
+}
+
+.panel-title h2 {
+  color: #26343d;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+}
+
+.panel-desc {
+  max-width: 850px;
+  margin: 10px 0 20px;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.stat-grid {
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.stat-card {
+  position: relative;
+  overflow: hidden;
+  padding: 18px 20px;
+  background: #fff;
+}
+
+.stat-card::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 38px;
+  height: 3px;
+  background: #b83126;
+  content: "";
+  opacity: 0.7;
+}
+
+.stat-card span,
+.stat-card small {
+  color: #788790;
+}
+
+.stat-card strong {
+  margin: 7px 0 4px;
+  color: #22313a;
+  font-size: 28px;
+  letter-spacing: -0.035em;
+}
+
+.provider-grid,
+.content-grid {
+  gap: 16px;
+}
+
+.provider-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.provider-card,
+.retention-grid > div {
+  border-color: #e4eaed;
+  border-radius: 12px;
+  background: #f8fafb;
+}
+
+.provider-card {
+  padding: 18px;
+}
+
+.provider-head {
+  margin-bottom: 16px;
+}
+
+.provider-head h3,
+.retention-grid h3 {
+  color: #2d3b44;
+}
+
+.provider-head span,
+.field-help,
+.provider-protocol span {
+  color: #829099;
+}
+
+.field-gap {
+  margin-top: 10px;
+}
+
+.form-grid {
+  gap: 14px;
+  margin: 16px 0 18px;
+}
+
+.form-grid label,
+.visibility-grid label,
+.retention-grid label,
+.provider-protocol {
+  color: #62727c;
+}
+
+.visibility-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.visibility-grid select,
+.provider-protocol select,
+.form-grid select {
+  min-height: 40px;
+  padding: 8px 10px;
+  border-color: #d7e0e4;
+  border-radius: 8px;
+  color: #33434d;
+  background: #fbfcfd;
+}
+
+.retention-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.retention-grid > div {
+  padding: 16px;
+}
+
+.retention-grid label {
+  font-size: 12px;
+}
+
+.table-wrap {
+  border-color: #e4eaed;
+  border-radius: 10px;
+  background: #fff;
+}
+
+table {
+  font-size: 13px;
+}
+
+th,
+td {
+  padding: 13px 12px;
+  border-bottom-color: #edf1f3;
+}
+
+th {
+  color: #81909a;
+  background: #fbfcfd;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+
+td {
+  color: #43545e;
+}
+
+code {
+  border: 1px solid #e0e9ed;
+  border-radius: 6px;
+  color: #315e78;
+  background: #f1f7f9;
+}
+
+.primary,
+.ghost,
+.small {
+  border-radius: 8px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
+}
+
+.primary {
+  background: #b83126;
+  box-shadow: 0 5px 12px rgba(184, 49, 38, 0.16);
+}
+
+.primary:hover,
+.primary:focus-visible {
+  background: #9f2a20;
+  box-shadow: 0 7px 16px rgba(184, 49, 38, 0.2);
+  transform: translateY(-1px);
+}
+
+.ghost,
+.small {
+  border: 1px solid #dfe6ea;
+  background: #f4f7f8;
+  color: #4b5d67;
+}
+
+.ghost:hover,
+.small:hover {
+  border-color: #cdd9de;
+  background: #eaf0f2;
+}
+
+.small {
+  min-height: 36px;
+  padding: 6px 10px;
+}
+
+.danger {
+  color: #a12d2d;
+}
+
+.provider-actions {
+  min-height: 32px;
+  margin-top: 12px;
+}
+
+.test-result {
+  line-height: 1.45;
+}
+
+.billing-grid > .admin-panel,
+.account-grid > .admin-panel {
+  min-width: 0;
+}
+
+.guestbook-content {
+  max-width: 360px;
+  white-space: normal;
+  line-height: 1.5;
+}
+
+.user-table-wrap {
+  max-height: 430px;
+}
+
+.pagination-controls {
+  margin-top: 16px;
+}
+
+@media (max-width: 1180px) {
+  .admin-workspace {
+    grid-template-columns: 196px minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  .visibility-grid,
+  .retention-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 1000px) {
+  .admin-workspace {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-index {
+    position: static;
+    display: block;
+    padding: 14px;
+  }
+
+  .admin-index__heading,
+  .admin-index__note,
+  .admin-index nav p {
+    display: none;
+  }
+
+  .admin-index nav {
+    display: flex;
+    gap: 4px;
+    overflow-x: auto;
+    scrollbar-width: thin;
+  }
+
+  .admin-index nav a {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  .admin-index nav a span {
+    display: none;
+  }
+}
+
+@media (max-width: 860px) {
+  .stat-grid,
+  .provider-grid,
+  .visibility-grid,
+  .retention-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .content-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 600px) {
+  .admin-page {
+    padding: 16px 10px 52px;
+  }
+
+  .admin-shell {
+    gap: 14px;
+  }
+
+  .admin-header {
+    align-items: stretch;
+    flex-direction: column;
+    padding: 22px 20px;
+  }
+
+  .admin-header__copy,
+  .admin-header__actions {
+    width: 100%;
+  }
+
+  .admin-header__actions {
+    flex-wrap: wrap;
+    justify-content: space-between;
+  }
+
+  .admin-header__actions .ghost {
+    flex: 1 1 140px;
+    min-height: 40px;
+    width: auto;
+  }
+
+  .admin-overview__heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .admin-panel {
+    padding: 17px;
+  }
+
+  .panel-title,
+  .admin-overview__heading {
+    align-items: stretch;
+  }
+
+  .panel-title {
+    flex-direction: column;
+  }
+
+  .panel-title > .primary,
+  .panel-actions,
+  .panel-actions button {
+    width: 100%;
+  }
+
+  .panel-actions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .stat-grid,
+  .provider-grid,
+  .visibility-grid,
+  .retention-grid,
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .provider-card,
+  .retention-grid > div {
+    padding: 14px;
+  }
+
+  .table-wrap {
+    margin: 0 -2px;
+  }
+
+  .table-wrap::after {
+    display: block;
+    padding: 7px 10px;
+    color: #7b8791;
+    background: #fafbfc;
+    content: "左右滑动查看完整数据";
+    font-size: 11px;
+  }
+
+  .audit-table-wrap {
+    max-height: 320px;
+  }
+
+  .provider-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .provider-actions .small {
+    width: 100%;
   }
 }
 </style>

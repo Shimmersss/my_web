@@ -1,12 +1,12 @@
 # Shimmer Android GeckoView App
 
 This directory contains the first-party Android container for
-`https://shimmer.help/`. Version `0.3.4-internal` embeds Mozilla GeckoView in
+`https://shimmer.help/`. Version `0.3.6-internal` embeds Mozilla GeckoView in
 the APK. It does not render with Android System WebView, a Trusted Web
 Activity, Custom Tabs, or an installed browser.
 
 - Application ID: `help.shimmer.app`
-- Version: `0.3.4-internal` (`versionCode` 9)
+- Version: `0.3.6-internal` (`versionCode` 11)
 - Minimum SDK: 26; compile SDK: 36; target SDK: 35
 - Release ABI: `arm64-v8a` (modern 64-bit ARM Android devices)
 - Embedded engine: GeckoView `149.0.20260403140140`
@@ -26,7 +26,7 @@ Build the signed internal APK with:
 ```
 
 The build atomically publishes
-`.release/android/shimmer-internal-0.3.4.apk` plus its
+`.release/android/shimmer-internal-0.3.6.apk` plus its
 `.verified.sha256` marker only after signature, certificate, package metadata,
 SDK, App Link, release-hardening, and Gecko payload checks pass. The payload
 gate requires the built-in bridge and `lib/arm64-v8a/libxul.so`, rejects a tiny
@@ -79,13 +79,14 @@ Publish an already verified APK and atomically switch the server manifest with:
 ```
 
 Update artifacts live in the server's persistent `.run/android-updates`
-directory. `0.2.1-internal` already contains the updater and can offer 0.3.4;
+directory. `0.2.1-internal` already contains the updater and can offer 0.3.6;
 `0.2.0-internal` must first be manually upgraded to 0.2.1 or newer.
 
 The old TWA used a selected browser profile, and 0.2.x used Android System
-WebView. GeckoView has a separate Cookie/storage profile, so the first launch
-of 0.3.4 requires signing in again. Package name and signing certificate are
-unchanged, so this remains an in-place APK update.
+WebView. GeckoView has a separate Cookie/storage profile, so users upgrading
+from those older containers must sign in once; users upgrading from 0.3.4 or
+newer keep the existing Gecko profile. Package name and signing certificate
+are unchanged, so this remains an in-place APK update.
 
 Do not claim device-level acceptance until a real arm64 device or licensed
 emulator verifies cold launch without System WebView, sign-in persistence,

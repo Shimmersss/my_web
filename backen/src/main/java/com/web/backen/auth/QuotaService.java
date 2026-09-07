@@ -117,12 +117,16 @@ public class QuotaService {
     @Transactional
     public void refund(long transactionId, String reason) {
         List<Map<String, Object>> rows = jdbc.queryForList(
-                "SELECT * FROM credit_transactions WHERE id=? AND kind='SPEND'", transactionId);
+                "SELECT * FROM credit_transactions WHERE id=? AND kind='SPEND' FOR UPDATE", transactionId);
         if (rows.isEmpty()) return;
         Integer existing = jdbc.queryForObject(
                 "SELECT COUNT(*) FROM credit_transactions WHERE related_transaction_id=? AND kind='REFUND'",
                 Integer.class, transactionId);
         if (existing != null && existing > 0) return;
+        // The spend-row lock serializes legacy checks as well as new claim insertion.
+        Integer claimed = jdbc.queryForObject("SELECT COUNT(*) FROM credit_refund_claims WHERE spend_id=?", Integer.class, transactionId);
+        if (claimed != null && claimed > 0) return;
+        jdbc.update("INSERT INTO credit_refund_claims(spend_id) VALUES (?)", transactionId);
         Map<String, Object> spend = rows.get(0);
         long userId = ((Number) spend.get("user_id")).longValue();
         int amount = Math.abs(((Number) spend.get("amount")).intValue());
@@ -163,13 +167,14 @@ public class QuotaService {
     }
 
     public List<Map<String, Object>> users() {
-        return jdbc.queryForList("SELECT id, username, role, credits, enabled, created_at FROM users ORDER BY id");
+        return jdbc.queryForList("SELECT id, username, role, credits, enabled, created_at FROM users WHERE role<>'MATCHMAKING_TRIAL' ORDER BY id");
     }
 
     public List<Map<String, Object>> transactions() {
         return jdbc.queryForList("""
                 SELECT t.*, u.username FROM credit_transactions t
                 JOIN users u ON u.id=t.user_id
+                WHERE u.role<>'MATCHMAKING_TRIAL'
                 ORDER BY t.id DESC LIMIT 100
                 """);
     }
@@ -178,7 +183,7 @@ public class QuotaService {
         return jdbc.queryForList("""
                 SELECT u.username, t.amount, t.created_at
                 FROM credit_transactions t JOIN users u ON u.id=t.user_id
-                WHERE t.kind='DAILY_CHECKIN' AND CAST(t.created_at AS DATE)=?
+                WHERE t.kind='DAILY_CHECKIN' AND u.role<>'MATCHMAKING_TRIAL' AND CAST(t.created_at AS DATE)=?
                 ORDER BY t.amount DESC, t.created_at ASC LIMIT 10
                 """, today());
     }
@@ -232,8 +237,8 @@ public class QuotaService {
 
     public Map<String, Object> stats() {
         return Map.of(
-                "users", count("SELECT COUNT(*) FROM users"),
-                "activeUsers", count("SELECT COUNT(*) FROM users WHERE enabled=TRUE"),
+                "users", count("SELECT COUNT(*) FROM users WHERE role<>'MATCHMAKING_TRIAL'"),
+                "activeUsers", count("SELECT COUNT(*) FROM users WHERE enabled=TRUE AND role<>'MATCHMAKING_TRIAL'"),
                 "activeInvites", count("SELECT COUNT(*) FROM invite_codes WHERE enabled=TRUE AND used_count < max_uses AND (expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP)"),
                 "creditsIssued", sum("SELECT COALESCE(SUM(amount), 0) FROM credit_transactions WHERE amount > 0"),
                 "creditsSpent", Math.abs(sum("SELECT COALESCE(SUM(amount), 0) FROM credit_transactions WHERE kind='SPEND'")));

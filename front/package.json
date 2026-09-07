@@ -6,12 +6,15 @@
   "scripts": {
     "dev": "vite",
     "prepare:pptd-editor": "node scripts/prepare-pptd-editor.mjs",
-    "build": "npm run prepare:pptd-editor && node ../backen/scripts/check_html_template_previews.mjs && npm run check:android-webview && vite build && npm run check:pwa && npm run test:pwa-check && npm run check:pdf-preview -- --dist dist",
+    "build": "npm run prepare:pptd-editor && node ../backen/scripts/check_html_template_previews.mjs && npm run check:navigation && npm run check:matchmaking-trial && npm run test:task-poller && npm run check:android-webview && vite build && npm run check:pwa && npm run test:pwa-check && npm run check:pdf-preview -- --dist dist",
+    "check:navigation": "node scripts/check-navigation.mjs",
+    "check:matchmaking-trial": "node scripts/check-matchmaking-trial.mjs",
     "check:pwa": "node scripts/check-pwa.mjs dist",
     "test:pwa-check": "node scripts/check-pwa-test.mjs dist",
     "check:pdf-preview": "node scripts/check-pdf-preview.mjs",
     "check:android-webview": "node scripts/check-android-webview.mjs",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:task-poller": "node --test scripts/task-poller.test.mjs scripts/request.test.mjs"
   },
   "dependencies": {
     "@vicons/ionicons5": "^0.12.0",
@@ -25,7 +28,9 @@
     "vue-router": "^4.2.5"
   },
   "devDependencies": {
+    "@babel/parser": "7.29.2",
     "@vitejs/plugin-vue": "^5.0.0",
+    "@vue/compiler-sfc": "3.5.30",
     "sass": "^1.69.0",
     "unplugin-auto-import": "^0.17.0",
     "unplugin-vue-components": "^0.26.0",

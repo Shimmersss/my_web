@@ -13,9 +13,11 @@ import java.util.Map;
  */
 final class MatchmakingScoring {
     static final List<String> DIMENSION_NAMES = List.of("经济基础", "学历职业", "年龄外形", "家庭支持", "性格相处");
-    private static final Map<String, Double> INCOME_MIDPOINTS = Map.of(
-            "5千以下", 4000d, "5千-1万", 7500d, "1-2万", 15000d, "2-3万", 25000d,
-            "3-5万", 40000d, "5万以上", 60000d, "不愿透露", 0d);
+    private static final Map<String, Double> INCOME_MIDPOINTS = Map.ofEntries(
+            Map.entry("3千以下", 2500d), Map.entry("3千-5千", 4000d), Map.entry("5千-8千", 6500d),
+            Map.entry("8千-1万", 9000d), Map.entry("1万-1万5", 12500d), Map.entry("1万5-2万", 17500d),
+            Map.entry("2万-3万", 25000d), Map.entry("3万-5万", 40000d), Map.entry("5万以上", 60000d),
+            Map.entry("不愿透露", 0d));
 
     private MatchmakingScoring() {}
 
@@ -44,7 +46,8 @@ final class MatchmakingScoring {
     private static Map<String, Object> economy(Map<String, Object> p) {
         String band = string(p, "incomeBand");
         double income = band.isBlank() || "不愿透露".equals(band) ? 3 : switch (band) {
-            case "5千以下" -> 2; case "5千-1万" -> 4; case "1-2万" -> 6; case "2-3万" -> 8; case "3-5万" -> 9.5; default -> 10; };
+            case "3千以下" -> 1; case "3千-5千" -> 2; case "5千-8千" -> 3.5; case "8千-1万" -> 5;
+            case "1万-1万5" -> 6; case "1万5-2万" -> 7; case "2万-3万" -> 8; case "3万-5万" -> 9.5; default -> 10; };
         double savings = number(p, "savings");
         double savingsScore = savings <= 0 ? 0 : savings < 100_000 ? 2 : savings < 300_000 ? 4 : savings < 1_000_000 ? 5.5 : 6;
         String savingsBucket = savings <= 0 ? "暂无储蓄" : savings < 100_000 ? "十万以内" : savings < 300_000 ? "十万到三十万" : savings < 1_000_000 ? "三十万到一百万" : "一百万以上";

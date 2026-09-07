@@ -40,7 +40,7 @@
         <p v-if="error" class="safe-error">{{ error }}</p>
       </aside>
 
-      <section class="result-panel">
+      <section ref="resultPanel" class="result-panel">
         <div v-if="current?.status === 'completed'" class="result-ready">
           <img :src="resultUrl(current.taskId)" :alt="current.prompt" />
           <div class="result-actions">
@@ -88,7 +88,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { NButton, NInput, NSelect, useMessage } from 'naive-ui'
 import { useAuthStore } from '@/stores/auth'
 import { downloadUrl } from '@/utils/androidBridge'
@@ -102,6 +102,7 @@ const auth = useAuthStore()
 const message = useMessage()
 const form = reactive({ prompt: '', mode: 'GENERATE', size: '1024x1024', quality: 'medium', referenceFiles: [], parentTaskId: '' })
 const current = ref(null)
+const resultPanel = ref(null)
 const history = ref([])
 const costs = ref({})
 const submitting = ref(false)
@@ -150,6 +151,8 @@ async function submit() {
     auth.updateCredits(response.data.credits)
     history.value = [current.value, ...history.value.filter(item => item.taskId !== current.value.taskId)]
     watchTask(current.value.taskId)
+    // 移动端结果区在表单下方，提交后滚到进度卡，避免用户以为没有提交成功
+    nextTick(() => resultPanel.value?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
   } catch (e) { error.value = e.message || '提交失败，请稍后重试' }
   finally { submitting.value = false }
 }

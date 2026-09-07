@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { claimDailyCheckin, getCurrentUser, getSiteSettings, getUnreadNotificationCount, loginAccount, logoutAccount, registerAccount } from '@/api'
+import { claimDailyCheckin, getCurrentUser, getSiteSettings, getUnreadNotificationCount, loginAccount, logoutAccount, redeemMatchmakingTrial, registerAccount } from '@/api'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -12,6 +12,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isLoggedIn = computed(() => Boolean(user.value?.id))
   const isRoot = computed(() => Boolean(user.value?.root))
+  const isMatchmakingTrial = computed(() => Boolean(user.value?.matchmakingTrial))
   const credits = computed(() => Number(user.value?.credits || 0))
   const dailyCheckin = computed(() => user.value?.dailyCheckin || null)
 
@@ -48,7 +49,7 @@ export const useAuthStore = defineStore('auth', () => {
         const site = await getSiteSettings()
         visibility.value = { ...visibility.value, ...(site.data?.visibility || {}) }
       } catch {}
-      if (user.value) await refreshUnreadNotifications().catch(() => {})
+      if (user.value && !isMatchmakingTrial.value) await refreshUnreadNotifications().catch(() => {})
       return user.value
     } finally {
       loading.value = false
@@ -58,12 +59,19 @@ export const useAuthStore = defineStore('auth', () => {
   async function login(username, password) {
     const res = await loginAccount(username, password)
     applyUser(res.data)
-    await refreshUnreadNotifications().catch(() => {})
+    if (!isMatchmakingTrial.value) await refreshUnreadNotifications().catch(() => {})
     return user.value
   }
 
   async function register(username, password, inviteCode) {
     return registerAccount(username, password, inviteCode)
+  }
+
+  async function redeemTrial(code) {
+    const response = await redeemMatchmakingTrial(code)
+    applyUser(response.data)
+    unreadNotifications.value = 0
+    return user.value
   }
 
   async function logout() {
@@ -92,11 +100,12 @@ export const useAuthStore = defineStore('auth', () => {
 
   function canView(feature) {
     const level = visibility.value[feature] || 'PUBLIC'
+    if (isMatchmakingTrial.value) return level === 'PUBLIC' || feature === 'Matchmaking'
     return level === 'PUBLIC' || (level === 'USER' && isLoggedIn.value) || (level === 'ROOT' && isRoot.value)
   }
 
   async function refreshUnreadNotifications() {
-    if (!user.value) { unreadNotifications.value = 0; return 0 }
+    if (!user.value || isMatchmakingTrial.value) { unreadNotifications.value = 0; return 0 }
     const response = await getUnreadNotificationCount()
     unreadNotifications.value = Number(response.data?.count || 0)
     return unreadNotifications.value
@@ -107,5 +116,5 @@ export const useAuthStore = defineStore('auth', () => {
   function clearAuthPrompt() { authPrompt.value = '' }
   function consumePendingPath() { const path = pendingPath.value; pendingPath.value = ''; authPrompt.value = ''; return path }
 
-  return { user, loading, isLoggedIn, isRoot, credits, dailyCheckin, visibility, unreadNotifications, authPrompt, canView, requestLogin, requestPermissionDenied, clearAuthPrompt, consumePendingPath, refresh, refreshUnreadNotifications, login, register, logout, updateCredits, checkIn }
+  return { user, loading, isLoggedIn, isRoot, isMatchmakingTrial, credits, dailyCheckin, visibility, unreadNotifications, authPrompt, canView, requestLogin, requestPermissionDenied, clearAuthPrompt, consumePendingPath, refresh, refreshUnreadNotifications, login, register, redeemTrial, logout, updateCredits, checkIn }
 })

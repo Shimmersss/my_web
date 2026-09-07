@@ -8,6 +8,7 @@ import com.web.backen.ppt.PptGenerationService;
 import com.web.backen.ppt.PptCodexRunner;
 import com.web.backen.translate.TranslationService;
 import com.web.backen.imagegen.ImageGenerationService;
+import com.web.backen.matchmaking.MatchmakingTrialService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -29,13 +30,15 @@ public class AdminAccountController {
     private final TranslationService translationService;
     private final PptCodexRunner pptCodexRunner;
     private final ImageGenerationService imageGenerationService;
+    private final MatchmakingTrialService matchmakingTrialService;
 
     public AdminAccountController(AuthService authService, QuotaService quotaService,
                                   RuntimeConfigService runtimeConfigService, LlmService llmService,
                                   ZoteroService zoteroService, ZoteroCache zoteroCache,
                                   GithubRankingService githubRankingService,
                                   PptGenerationService pptGenerationService, TranslationService translationService,
-                                  PptCodexRunner pptCodexRunner, ImageGenerationService imageGenerationService) {
+                                  PptCodexRunner pptCodexRunner, ImageGenerationService imageGenerationService,
+                                  MatchmakingTrialService matchmakingTrialService) {
         this.authService = authService;
         this.quotaService = quotaService;
         this.runtimeConfigService = runtimeConfigService;
@@ -47,6 +50,7 @@ public class AdminAccountController {
         this.translationService = translationService;
         this.pptCodexRunner = pptCodexRunner;
         this.imageGenerationService = imageGenerationService;
+        this.matchmakingTrialService = matchmakingTrialService;
     }
 
     @GetMapping
@@ -59,9 +63,38 @@ public class AdminAccountController {
                             "users", quotaService.users(),
                             "invites", quotaService.invites(),
                             "transactions", quotaService.transactions(),
+                            "matchmakingTrialCodes", matchmakingTrialService.codes(),
                             "settings", quotaService.settings(),
                             "apiSettings", publicApiSettings(),
                             "stats", quotaService.stats())));
+        } catch (AuthException e) {
+            return error(e);
+        }
+    }
+
+    @PostMapping("/matchmaking-trial-codes")
+    public ResponseEntity<?> createMatchmakingTrialCode(HttpServletRequest request,
+                                                         @RequestBody Map<String, Object> body) {
+        try {
+            authService.requireCsrf(request);
+            AuthUser root = authService.requireRoot(request);
+            return ResponseEntity.ok(Map.of("code", 200, "message", "success", "data",
+                    matchmakingTrialService.createCode(root.id(), value(body.get("expiresAt")))));
+        } catch (AuthException e) {
+            return error(e);
+        }
+    }
+
+    @PatchMapping("/matchmaking-trial-codes/{id}")
+    public ResponseEntity<?> updateMatchmakingTrialCode(HttpServletRequest request, @PathVariable long id,
+                                                         @RequestBody Map<String, Object> body) {
+        try {
+            authService.requireCsrf(request);
+            authService.requireRoot(request);
+            matchmakingTrialService.updateCode(id, booleanValue(body.get("enabled"), true),
+                    value(body.get("expiresAt")));
+            return ResponseEntity.ok(Map.of("code", 200, "message", "success", "data",
+                    matchmakingTrialService.codes()));
         } catch (AuthException e) {
             return error(e);
         }

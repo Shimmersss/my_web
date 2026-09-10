@@ -1,8 +1,15 @@
 # Research Workbench / 研究工具台
 
-一个面向个人工作与研究流程的全栈工具台，整合 Zotero 文献库、PDF/图片翻译、通用资料到 PPT 生成和 GitHub 项目展示。
+一个面向个人工作与研究流程的全栈工具台，整合 Zotero 文献库、PDF/图片翻译、PPT/HTML 生成、AI 生图、婚恋报告、GitHub 项目展示与留言板。
 
-A full-stack personal workbench that brings together a Zotero library browser, PDF/image translation, general-material-to-PPT generation and GitHub project showcases.
+A full-stack personal workbench that brings together a Zotero library browser, PDF/image translation, PPT/HTML generation, AI images, matchmaking reports, GitHub showcases and a guestbook.
+
+## 开发与维护入口 / Contributor Guide
+
+- [项目工作流](docs/WORKFLOW.md)：任务范围、验证矩阵、审查与交付。
+- [部署与恢复](DEPLOYMENT.md)：当前脚本能力、数据备份和SQL兼容性。
+- [文档索引](docs/README.md)：现行说明、历史设计和本地记录的区别。
+- [Android](android/README.md)：容器构建、文件链路与版本发布。
 
 ![Research Workbench home](front/public/readme/home.jpg)
 
@@ -12,6 +19,8 @@ A full-stack personal workbench that brings together a Zotero library browser, P
 - **附件代理 / Attachment proxy**：PDF、Markdown 和网页快照附件统一由后端代理，支持 Zotero S3 跳转、ZIP 附件解包、流式传输和真实下载进度。
 - **PDF/图片翻译 / PDF and image translation**：上传 PDF 后选择页码范围、字体族和速度模式，由后端排队调用 BabelDOC 生成保留版式的纯中文 / 双语 PDF；PNG/JPG 等常见图片使用视觉模型生成中文译图和双语译图。
 - **PPT 生成 / Materials to PPT**：PPTX 与 HTML 的作者层统一使用隔离 Codex CLI；PPTX 输出 PPTD 后由固定导出器交付，HTML 只允许 Codex 输出受限 JSON 计划，再由固定 reveal.js 渲染器按 13 类语义布局、主题节奏和四档安全动效交付。可选智能推荐或精确指定 3–30 页（包含封面与结束页）；PPTX 的 GPT Image 2 可在后台上限内选择数量，单任务可配置为 1–10 张，预扣、生成和失败退款始终使用同一个数量。模板与样式预览会持续展开，方便比较。两条链路均可复用受控的 Tavily、Wikimedia Commons 与 Openverse 搜图，并保留视觉来源与复用权利状态；真实逐页渲染与确定性质量门仍会阻断破损产物。
+- **AI 生图 / Image generation**：独立生成任务、参考图输入、历史结果与受鉴权下载，失败按任务状态补偿额度。
+- **婚恋报告 / Matchmaking reports**：问卷、确定性评分、报告与可选画像，支持一次性内测资格；任务和退款恢复依据保存在MySQL。
 - **GitHub 项目展示 / GitHub showcase**：前端只访问站内接口，后端代理 GitHub API 和 README raw 内容，避免浏览器直连外部接口。
 - **留言板与站内通知 / Guestbook and notifications**：访客可阅读公开留言；注册用户可发布主留言、单层回复和点赞。回复、点赞会生成站内通知，作者可删除自己的内容，root 可在后台统一管理。
 
@@ -51,7 +60,8 @@ flowchart LR
   API --> GitHub["GitHub API / raw README"]
   API --> BabelDOC["BabelDOC CLI"]
   API --> LLM["LLM API"]
-  API --> Disk[".run task storage"]
+  API --> Disk[".run files: translation / PPT / images"]
+  API --> SQL["MySQL: accounts / credits / matchmaking tasks"]
 ```
 
 浏览器只访问 `/api/*`。外部服务、CLI 调用、文件下载、鉴权、队列和资源限制都放在后端。
@@ -148,13 +158,13 @@ This public branch keeps deployment credentials, host addresses and local releas
 
 部署到服务器时，请用 npm 构建前端、用 Maven 打包 Spring Boot 后端，并从服务器环境或根目录 `.env.local` 提供运行密钥。复制 `.deploy.local.example` 为 `.deploy.local` 后执行 `chmod 600 .deploy.local`；优先填写只能通过 VPN/私网访问的 SSH alias，主机、SSH 和远端路径参数必须留在仓库外。
 
-For server deployment, build the frontend with npm, package the Spring Boot backend with Maven, and provide runtime secrets from the server environment or a local root `.env.local` file. Copy `.deploy.local.example` to `.deploy.local`, run `chmod 600 .deploy.local`, and prefer an SSH alias reachable only through a VPN/private network. Host, SSH and remote path values must stay outside the repository.
+For server deployment, follow [the deployment and recovery procedure](DEPLOYMENT.md), including SQL and task-file backups. A code archive alone is not a complete recovery point. Copy `.deploy.local.example` to `.deploy.local`, run `chmod 600 .deploy.local`, and prefer an SSH alias reachable only through a VPN/private network. Host, SSH and remote path values must stay outside the repository.
 
 ## Git 管理 / Git Hygiene
 
-公开仓库只保留根 `README.md` 等对外说明。内部维护记录、本地发布目录、运行态数据、前后端本地文档、前后端 env 文件、截图归档和密钥都被忽略。
+公开仓库保留 `README.md`、`DEPLOYMENT.md`、`docs/WORKFLOW.md` 等通用协作说明。内部维护记录、本地发布目录、运行态数据、前后端本地文档、前后端 env 文件、截图归档和密钥都被忽略。
 
-The public repository only keeps root-level public docs such as `README.md`. Internal maintenance notes, local release folders, runtime state, frontend/backend local docs, frontend/backend env files, screenshot archives and secrets are ignored.
+The repository keeps public contributor docs such as `README.md`, `DEPLOYMENT.md` and `docs/WORKFLOW.md`. Internal maintenance notes, local release folders, runtime state, frontend/backend local docs, frontend/backend env files, screenshot archives and secrets are ignored.
 
 Ignored local/generated paths include / 已忽略的本地或生成路径包括：
 

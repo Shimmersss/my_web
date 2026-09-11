@@ -38,6 +38,7 @@
 | 纯 Markdown | 链接目标、命令存在性、陈旧/冲突规则、`git diff --check` | 本地归档仍受忽略；无敏感信息进入公共文件 |
 | Vue/JS/样式 | `npm --prefix front run build` | 受影响路由、桌面/移动、控制台、权限/空态/错误态 |
 | Java 业务 | 定向测试，随后 `mvn -f backen/pom.xml test` | 相关API、错误码、事务与权限 |
+| Java 包移动/模块依赖 | `mvn -f backen/pom.xml clean test`（包含架构检查） | Spring入口/构造注入与跨模块契约；clean清除旧包class |
 | Node PPT/HTML worker | `npm --prefix backen test` | 改渲染时验真实产物、预览、字体与质量报告 |
 | SQL/计费/异步任务 | Java测试 + 隔离MySQL集成 | 并发、回滚、重启、退款失败、删除竞态 |
 | Android 容器/文件链路 | Android文档中的构建与测试 | 模拟器/真机上传、下载、深链；需要时发布APK |

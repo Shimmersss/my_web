@@ -1,6 +1,11 @@
-package com.web.backen.auth;
+package com.web.backen.admin;
 
-import com.web.backen.translate.LlmService;
+import com.web.backen.auth.AuthException;
+import com.web.backen.auth.AuthService;
+import com.web.backen.auth.AuthUser;
+import com.web.backen.auth.QuotaService;
+import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.ai.LlmClient;
 import com.web.backen.zotero.ZoteroService;
 import com.web.backen.zotero.ZoteroCache;
 import com.web.backen.github.GithubRankingService;
@@ -22,7 +27,7 @@ public class AdminAccountController {
     private final AuthService authService;
     private final QuotaService quotaService;
     private final RuntimeConfigService runtimeConfigService;
-    private final LlmService llmService;
+    private final LlmClient llmService;
     private final ZoteroService zoteroService;
     private final ZoteroCache zoteroCache;
     private final GithubRankingService githubRankingService;
@@ -33,7 +38,7 @@ public class AdminAccountController {
     private final MatchmakingTrialService matchmakingTrialService;
 
     public AdminAccountController(AuthService authService, QuotaService quotaService,
-                                  RuntimeConfigService runtimeConfigService, LlmService llmService,
+                                  RuntimeConfigService runtimeConfigService, LlmClient llmService,
                                   ZoteroService zoteroService, ZoteroCache zoteroCache,
                                   GithubRankingService githubRankingService,
                                   PptGenerationService pptGenerationService, TranslationService translationService,

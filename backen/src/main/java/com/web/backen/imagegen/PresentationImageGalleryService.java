@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.RuntimeConfigService;
-import com.web.backen.ppt.PptGenerationSession;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import javax.imageio.ImageIO;
@@ -22,22 +22,30 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 
 /** Persistent gallery for successful PPTX/HTML generated visuals, independent from task history cleanup. */
 @Service
 public class PresentationImageGalleryService {
+    /** Only publication data crosses the module boundary, never a mutable task/session. */
+    public record Publication(String taskId, long userId, String outputFormat, Path taskDir) {}
+
     private final ObjectMapper mapper;
     private final RuntimeConfigService runtime;
-    private final Path root = Path.of(System.getProperty("user.dir")).toAbsolutePath().getParent()
-            .resolve(".run/presentation-image-assets").normalize();
+    private final Path root;
 
+    @Autowired
     public PresentationImageGalleryService(ObjectMapper mapper, RuntimeConfigService runtime) {
-        this.mapper = mapper; this.runtime = runtime;
+        this(mapper, runtime, Path.of(System.getProperty("user.dir")).toAbsolutePath().getParent()
+                .resolve(".run/presentation-image-assets").normalize());
     }
 
-    public synchronized void publish(PptGenerationSession session) throws IOException {
-        Path manifest = session.getTaskDir().resolve("generated-images/generated-image-manifest.json");
+    PresentationImageGalleryService(ObjectMapper mapper, RuntimeConfigService runtime, Path root) {
+        this.mapper = mapper; this.runtime = runtime;
+        this.root = root;
+    }
+
+    public synchronized void publish(Publication publication) throws IOException {
+        Path manifest = publication.taskDir().resolve("generated-images/generated-image-manifest.json");
         if (!Files.isRegularFile(manifest)) return;
         Map<String, Object> payload = mapper.readValue(manifest.toFile(), new TypeReference<>() {});
         Object raw = payload.get("images");
@@ -50,15 +58,15 @@ public class PresentationImageGalleryService {
             if (!fileName.matches("gpt-\\d+\\.png") || !id.matches("GPT\\d{2}")) continue;
             Path source = manifest.getParent().resolve(fileName).normalize();
             if (!source.startsWith(manifest.getParent()) || !Files.isRegularFile(source)) continue;
-            String assetId = session.getTaskId() + "-" + id.toLowerCase();
+            String assetId = publication.taskId() + "-" + id.toLowerCase();
             Path dir = root.resolve(assetId);
             if (Files.isDirectory(dir) && Files.isRegularFile(dir.resolve("asset.json"))) continue;
             Files.createDirectories(dir);
             Files.copy(source, dir.resolve("output.png"), StandardCopyOption.REPLACE_EXISTING);
             createPreview(dir.resolve("output.png"), dir.resolve("preview.jpg"));
             Map<String, Object> item = new java.util.LinkedHashMap<>();
-            item.put("assetId", assetId); item.put("taskId", session.getTaskId()); item.put("userId", session.getUserId());
-            item.put("outputFormat", session.getOutputFormat()); item.put("slideId", String.valueOf(map.get("slideId") == null ? "" : map.get("slideId")));
+            item.put("assetId", assetId); item.put("taskId", publication.taskId()); item.put("userId", publication.userId());
+            item.put("outputFormat", publication.outputFormat()); item.put("slideId", String.valueOf(map.get("slideId") == null ? "" : map.get("slideId")));
             item.put("slideIndex", map.get("slideIndex") == null ? 0 : map.get("slideIndex")); item.put("slideTitle", String.valueOf(map.get("slideTitle") == null ? "" : map.get("slideTitle")));
             item.put("prompt", String.valueOf(map.get("prompt") == null ? "" : map.get("prompt"))); item.put("quality", runtime.imageGenerationQuality());
             item.put("createdAt", System.currentTimeMillis());

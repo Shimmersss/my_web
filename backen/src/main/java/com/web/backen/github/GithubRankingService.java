@@ -1,6 +1,6 @@
 package com.web.backen.github;
 
-import com.web.backen.translate.LlmService;
+import com.web.backen.ai.LlmClient;
 import com.web.backen.auth.RuntimeConfigService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -45,7 +45,7 @@ public class GithubRankingService {
 
     private final GithubProjectService githubProjectService;
     private final GithubRankingStore store;
-    private final LlmService llmService;
+    private final LlmClient llmService;
     private final RuntimeConfigService runtimeConfig;
     private final ExecutorService refreshExecutor = Executors.newSingleThreadExecutor(r -> {
         Thread thread = new Thread(r, "github-ranking-refresh");
@@ -57,7 +57,7 @@ public class GithubRankingService {
 
     public GithubRankingService(GithubProjectService githubProjectService,
                                 GithubRankingStore store,
-                                LlmService llmService,
+                                LlmClient llmService,
                                 RuntimeConfigService runtimeConfig) {
         this.githubProjectService = githubProjectService;
         this.store = store;

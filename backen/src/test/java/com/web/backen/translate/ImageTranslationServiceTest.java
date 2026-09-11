@@ -1,5 +1,7 @@
 package com.web.backen.translate;
 
+import com.web.backen.ai.LlmClient;
+
 import com.web.backen.config.LlmConfig;
 import com.web.backen.config.PptGenerationConfig;
 import org.apache.pdfbox.Loader;
@@ -33,7 +35,7 @@ class ImageTranslationServiceTest {
         ImageIO.write(source, "png", input.toFile());
         Path resultDir = Files.createDirectories(tempDir.resolve("result"));
 
-        LlmService llmService = mock(LlmService.class);
+        LlmClient llmService = mock(LlmClient.class);
         when(llmService.completeWithImages(any(), anyString(), anyString(), anyList(), anyInt()))
                 .thenReturn("{\"items\":[{\"source\":\"Hello\",\"translation\":\"你好\",\"x\":0.1,\"y\":0.1,\"width\":0.3,\"height\":0.2}]}");
 
@@ -60,7 +62,7 @@ class ImageTranslationServiceTest {
         ImageIO.write(source, "png", input.toFile());
         Path resultDir = Files.createDirectories(tempDir.resolve("repair-result"));
 
-        LlmService llmService = mock(LlmService.class);
+        LlmClient llmService = mock(LlmClient.class);
         when(llmService.completeWithImages(any(), anyString(), anyString(), anyList(), anyInt()))
                 .thenReturn("I found some text, but here is the result:",
                         "The complete answer is: {\"items\":[{\"source\":\"Hello\",\"translation\":\"你好\",\"x\":0.1,\"y\":0.1,\"width\":0.3,\"height\":0.2}]}.");
@@ -79,7 +81,7 @@ class ImageTranslationServiceTest {
         Path input = tempDir.resolve("prefixed-response.png");
         ImageIO.write(new BufferedImage(20, 20, BufferedImage.TYPE_INT_RGB), "png", input.toFile());
         Path resultDir = Files.createDirectories(tempDir.resolve("prefixed-response-result"));
-        LlmService llmService = mock(LlmService.class);
+        LlmClient llmService = mock(LlmClient.class);
         when(llmService.completeWithImages(any(), anyString(), anyString(), anyList(), anyInt()))
                 .thenReturn("说明：[{\"type\":\"metadata\"}] {\"items\":[{\"translation\":\"你好\",\"x\":0.1,\"y\":0.1,\"width\":0.3,\"height\":0.2}]}");
 
@@ -97,7 +99,7 @@ class ImageTranslationServiceTest {
         Path input = tempDir.resolve("bounded-response.png");
         ImageIO.write(new BufferedImage(20, 20, BufferedImage.TYPE_INT_RGB), "png", input.toFile());
         Path resultDir = Files.createDirectories(tempDir.resolve("bounded-response-result"));
-        LlmService llmService = mock(LlmService.class);
+        LlmClient llmService = mock(LlmClient.class);
         String oversized = "{".repeat(64 * 1024 + 1);
         when(llmService.completeWithImages(any(), anyString(), anyString(), anyList(), anyInt()))
                 .thenReturn(oversized, oversized);

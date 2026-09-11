@@ -9,7 +9,6 @@ import com.web.backen.auth.QuotaService;
 import com.web.backen.auth.RuntimeConfigService;
 import com.web.backen.imagegen.PresentationImageGalleryService;
 import com.web.backen.config.PptGenerationConfig;
-import com.web.backen.translate.LlmService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -80,24 +79,24 @@ public class PptGenerationService {
     private Path storageDir;
 
     public PptGenerationService(PptGenerationConfig config, PptInputExtractor inputExtractor,
-                                LlmService ignored, ObjectMapper objectMapper) {
-        this(config, inputExtractor, ignored, objectMapper, null, null, null);
+                                ObjectMapper objectMapper) {
+        this(config, inputExtractor, objectMapper, null, null, null);
     }
 
     public PptGenerationService(PptGenerationConfig config, PptInputExtractor inputExtractor,
-                                LlmService ignored, ObjectMapper objectMapper, QuotaService quotaService) {
-        this(config, inputExtractor, ignored, objectMapper, quotaService, null, null);
+                                ObjectMapper objectMapper, QuotaService quotaService) {
+        this(config, inputExtractor, objectMapper, quotaService, null, null);
     }
 
     public PptGenerationService(PptGenerationConfig config, PptInputExtractor inputExtractor,
-                                LlmService ignored, ObjectMapper objectMapper, QuotaService quotaService,
+                                ObjectMapper objectMapper, QuotaService quotaService,
                                 PptAgentRunner agentRunner) {
-        this(config, inputExtractor, ignored, objectMapper, quotaService, agentRunner, null);
+        this(config, inputExtractor, objectMapper, quotaService, agentRunner, null);
     }
 
     @Autowired
     public PptGenerationService(PptGenerationConfig config, PptInputExtractor inputExtractor,
-                                LlmService ignored, ObjectMapper objectMapper, QuotaService quotaService,
+                                ObjectMapper objectMapper, QuotaService quotaService,
                                 PptAgentRunner agentRunner, RuntimeConfigService runtimeConfig) {
         this.config = config;
         this.inputExtractor = inputExtractor;
@@ -528,7 +527,10 @@ public class PptGenerationService {
             session.setCompletedAt(System.currentTimeMillis());
             saveMetadata(session);
             if (presentationImageGallery != null) {
-                try { presentationImageGallery.publish(session); }
+                try {
+                    presentationImageGallery.publish(new PresentationImageGalleryService.Publication(
+                            session.getTaskId(), session.getUserId(), session.getOutputFormat(), session.getTaskDir()));
+                }
                 catch (Exception galleryError) { log.warn("演示生图图库发布失败: taskId={}", session.getTaskId(), galleryError); }
             }
             emit(session, "done", Map.of("taskId", session.getTaskId(), "qaValid", session.isQaValid(),

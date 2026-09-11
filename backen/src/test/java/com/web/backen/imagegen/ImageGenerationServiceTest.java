@@ -1,5 +1,7 @@
 package com.web.backen.imagegen;
 
+import com.web.backen.ai.OpenAiImageClient;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthUser;

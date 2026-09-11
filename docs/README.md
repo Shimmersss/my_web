@@ -4,6 +4,7 @@
 
 - [项目概览](../README.md)：功能、启动和仓库结构。
 - [工作流](WORKFLOW.md)：开发、验证、审查、交付和文档维护。
+- [架构现状与优化路线](ARCHITECTURE.md)：模块边界、代码证据、首轮改动与待实施优先级。
 - [部署与恢复](../DEPLOYMENT.md)：生产操作顺序、数据兼容性和脚本能力边界。
 - [Android](../android/README.md)：原生容器与APK流程。
 
@@ -11,6 +12,7 @@
 
 ## 已完成设计与历史材料
 
+- [2026-09-11架构优化计划](plans/2026-09-11-architecture-optimization.md)：本轮范围、验证与兼容性边界。
 - [2026-09-07可靠性修复计划](plans/2026-09-07-web-reliability-fixes.md)：该次范围与验证证据；不作为后续每次任务的固定范围。
 - [2026-08-31内测设计](superpowers/specs/2026-08-31-matchmaking-trial-codes-design.md)与[实施计划](superpowers/plans/2026-08-31-matchmaking-trial-codes.md)：历史设计。目录名不表示当前必须安装或启用同名插件。
 - [2026-08-01维护报告](maintenance-report-2026-08-01.md)：带日期的历史报告，不是实时生产状态。

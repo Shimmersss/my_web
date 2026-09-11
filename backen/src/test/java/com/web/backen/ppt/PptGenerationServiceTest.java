@@ -5,7 +5,6 @@ import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.QuotaService;
 import com.web.backen.auth.RuntimeConfigService;
 import com.web.backen.config.PptGenerationConfig;
-import com.web.backen.translate.LlmService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.mock.web.MockMultipartFile;
@@ -410,7 +409,7 @@ class PptGenerationServiceTest {
         PptInputExtractor extractor = mock(PptInputExtractor.class);
         when(extractor.extractPaperText(any(), any(), any(), anyInt(), anyInt(), anyInt())).thenReturn("");
         PptGenerationService service = new PptGenerationService(
-                config, extractor, mock(LlmService.class), new ObjectMapper(), quota, runner, runtime);
+                config, extractor, new ObjectMapper(), quota, runner, runtime);
         service.initialize();
         return service;
     }

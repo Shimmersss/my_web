@@ -1,5 +1,7 @@
 package com.web.backen.translate;
 
+import com.web.backen.ai.LlmClient;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.config.LlmConfig;
@@ -64,11 +66,11 @@ public class ImageTranslationService {
             Escape every quote and backslash inside JSON strings and make sure the final closing braces are present.
             """;
 
-    private final LlmService llmService;
+    private final LlmClient llmService;
     private final LlmConfig llmConfig;
     private final PptGenerationConfig pptGenerationConfig;
 
-    public ImageTranslationService(LlmService llmService, LlmConfig llmConfig,
+    public ImageTranslationService(LlmClient llmService, LlmConfig llmConfig,
                                    PptGenerationConfig pptGenerationConfig) {
         this.llmService = llmService;
         this.llmConfig = llmConfig;

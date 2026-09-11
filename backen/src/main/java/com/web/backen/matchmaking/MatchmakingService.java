@@ -6,7 +6,7 @@ import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.QuotaService;
 import com.web.backen.auth.RuntimeConfigService;
-import com.web.backen.imagegen.OpenAiImageClient;
+import com.web.backen.ai.OpenAiImageClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;

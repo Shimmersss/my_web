@@ -1,4 +1,4 @@
-package com.web.backen.imagegen;
+package com.web.backen.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.RuntimeConfigService;

@@ -7,6 +7,7 @@ A full-stack personal workbench that brings together a Zotero library browser, P
 ## 开发与维护入口 / Contributor Guide
 
 - [项目工作流](docs/WORKFLOW.md)：任务范围、验证矩阵、审查与交付。
+- [架构与优化路线](docs/ARCHITECTURE.md)：当前模块边界、架构检查与后续优先级。
 - [部署与恢复](DEPLOYMENT.md)：当前脚本能力、数据备份和SQL兼容性。
 - [文档索引](docs/README.md)：现行说明、历史设计和本地记录的区别。
 - [Android](android/README.md)：容器构建、文件链路与版本发布。

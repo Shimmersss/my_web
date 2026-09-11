@@ -1,7 +1,7 @@
 package com.web.backen.github;
 
 import com.web.backen.auth.RuntimeConfigService;
-import com.web.backen.translate.LlmService;
+import com.web.backen.ai.LlmClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -44,7 +44,7 @@ class GithubRankingServiceTest {
     void manualRefreshIsQueuedAndRunsBothPeriodsInWorker() {
         GithubProjectService github = mock(GithubProjectService.class);
         GithubRankingStore store = mock(GithubRankingStore.class);
-        LlmService llm = mock(LlmService.class);
+        LlmClient llm = mock(LlmClient.class);
         RuntimeConfigService config = mock(RuntimeConfigService.class);
         when(store.read()).thenAnswer(invocation -> new LinkedHashMap<>());
         when(config.githubRankingManualCooldownMinutes()).thenReturn(30);

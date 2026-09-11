@@ -2,7 +2,7 @@ package com.web.backen.matchmaking;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.web.backen.translate.LlmService;
+import com.web.backen.ai.LlmClient;
 import com.web.backen.auth.RuntimeConfigService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,11 +39,11 @@ public class MimoMatchmakingReportAgent implements MatchmakingReportAgent {
             - limitations 说明数据与边界局限，并提醒评分是市场供需参考、按公开规则计算、不代表个人价值。
             """;
     private static final String RETRY_SUFFIX = "\n上一次输出不符合合同被拒收：JSON 必须完整闭合到最后的 }，七个键缺一不可（尤其 limitations），每个值精简，不得输出 JSON 以外的任何内容。";
-    private final LlmService llm;
+    private final LlmClient llm;
     private final RuntimeConfigService runtime;
     private final ObjectMapper mapper;
 
-    public MimoMatchmakingReportAgent(LlmService llm, RuntimeConfigService runtime, ObjectMapper mapper) { this.llm = llm; this.runtime = runtime; this.mapper = mapper; }
+    public MimoMatchmakingReportAgent(LlmClient llm, RuntimeConfigService runtime, ObjectMapper mapper) { this.llm = llm; this.runtime = runtime; this.mapper = mapper; }
 
     @Override public Map<String, Object> write(Map<String, Object> structuredInput) {
         String payload;

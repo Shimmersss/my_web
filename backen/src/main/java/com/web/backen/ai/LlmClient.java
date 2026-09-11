@@ -1,4 +1,4 @@
-package com.web.backen.translate;
+package com.web.backen.ai;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -25,31 +25,21 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 
+/** Shared server-side text and vision transport; domain prompts belong to callers. */
 @Service
-public class LlmService {
+public class LlmClient {
 
-    private static final Logger log = LoggerFactory.getLogger(LlmService.class);
-
-    private static final String SYSTEM_PROMPT = """
-            You are a professional academic paper translator specializing in translating English research papers to Simplified Chinese. Follow these rules:
-            1. Output Simplified Chinese only, except protected placeholders and required English abbreviations.
-            2. Preserve the original paragraph structure and do not add explanations, notes, or commentary.
-            3. Keep mathematical formulas, variables, LaTeX-like expressions, citations, reference numbers, and placeholders unchanged.
-            4. Preserve abbreviations such as CNN, LSTM, Transformer, YOLO, PointPillars, VoxelNet, KITTI, Waymo, NuScenes, LiDAR, SLAM, mAP, IoU.
-            5. Translate "Figure" or "Fig." captions as "图"; translate "Table" captions as "表".
-            6. Use standard academic Chinese terminology and formal register.
-            7. Output ONLY the translated text.
-            """;
-
-    private static final String CONTINUATION_PROMPT = "This is a partial paragraph. Translate it as a continuation:";
+    private static final Logger log = LoggerFactory.getLogger(LlmClient.class);
 
     private final RestClient llmRestClient;
     private final LlmConfig llmConfig;
     private final RuntimeConfigService runtimeConfig;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public LlmService(RestClient llmRestClient, LlmConfig llmConfig, RuntimeConfigService runtimeConfig) {
-        this.llmRestClient = llmRestClient;
+    public LlmClient(RestClient llmRestClient, LlmConfig llmConfig, RuntimeConfigService runtimeConfig) {
+        // RestClient merges default headers after request-level headers. Removing a key only
+        // in applyHeaders cannot suppress a different provider's inherited credentials.
+        this.llmRestClient = llmRestClient.mutate().defaultHeaders(LlmClient::clearProviderHeaders).build();
         this.llmConfig = llmConfig;
         this.runtimeConfig = runtimeConfig;
     }
@@ -80,67 +70,6 @@ public class LlmService {
                 "protocol", resolvedProtocol,
                 "model", model.trim(),
                 "message", preview.isBlank() ? "连接成功" : "连接成功 · 返回：" + preview));
-    }
-
-    /**
-     * 翻译一段文本，含重试逻辑
-     */
-    public String translate(String sourceText) {
-        return translate(sourceText, false);
-    }
-
-    /**
-     * 翻译一段文本（Anthropic Messages API 格式）
-     * @param sourceText 源文本
-     * @param isContinuation 是否为长段落的后续部分
-     */
-    public String translate(String sourceText, boolean isContinuation) {
-        if (runtimeConfig.llmKey().isBlank()) {
-            throw new IllegalStateException("LLM API Key 未配置，请在 .env.local 中设置 LLM_API_KEY");
-        }
-
-        String userMessage = isContinuation
-                ? CONTINUATION_PROMPT + "\n\n" + sourceText
-                : sourceText;
-
-        Map<String, Object> requestBody = textRequest(runtimeConfig.llmModel(), SYSTEM_PROMPT, userMessage, llmConfig.getMaxTokens());
-
-        int maxRetries = 3;
-        long delayMs = 1000;
-
-        for (int attempt = 0; attempt <= maxRetries; attempt++) {
-            try {
-                String responseJson = llmRestClient.post()
-                        .uri(runtimeConfig.llmEndpoint())
-                        .headers(headers -> applyHeaders(headers))
-                        .body(requestBody)
-                        .retrieve()
-                        .body(String.class);
-
-                return extractContent(responseJson);
-            } catch (Exception e) {
-                String msg = e.getMessage();
-                // 不可重试的错误
-                if (msg != null && (msg.contains("401") || msg.contains("403") || msg.contains("400"))) {
-                    throw new RuntimeException("LLM API 调用失败: " + msg, e);
-                }
-
-                if (attempt < maxRetries) {
-                    log.warn("LLM API 调用失败 (第{}次)，{}ms 后重试: {}", attempt + 1, delayMs, msg);
-                    try {
-                        Thread.sleep(delayMs);
-                    } catch (InterruptedException ie) {
-                        Thread.currentThread().interrupt();
-                        throw new RuntimeException("翻译被中断", ie);
-                    }
-                    delayMs *= 2;
-                } else {
-                    throw new RuntimeException("LLM API 调用失败（已重试" + maxRetries + "次）: " + msg, e);
-                }
-            }
-        }
-
-        throw new RuntimeException("LLM API 调用失败: 未知错误");
     }
 
     public String complete(String systemPrompt, String userPrompt, int maxTokens) {
@@ -274,10 +203,6 @@ public class LlmService {
         throw new RuntimeException("LLM 视觉模型调用失败: 未知错误");
     }
 
-    private Map<String, Object> textRequest(String model, String systemPrompt, String userPrompt, int maxTokens) {
-        return textRequest(runtimeConfig.resolvedLlmProtocol(), model, systemPrompt, userPrompt, maxTokens);
-    }
-
     private Map<String, Object> textRequest(String protocol, String model, String systemPrompt,
                                             String userPrompt, int maxTokens) {
         Map<String, Object> body = new LinkedHashMap<>();
@@ -315,15 +240,19 @@ public class LlmService {
     }
 
     private void applyHeaders(org.springframework.http.HttpHeaders headers, String apiKey, String protocol) {
-        headers.remove("Authorization");
-        headers.remove("x-api-key");
-        headers.remove("anthropic-version");
+        clearProviderHeaders(headers);
         if ("CLAUDE".equals(protocol)) {
             headers.set("x-api-key", apiKey);
             headers.set("anthropic-version", "2023-06-01");
         } else {
             headers.setBearerAuth(apiKey);
         }
+    }
+
+    private static void clearProviderHeaders(org.springframework.http.HttpHeaders headers) {
+        headers.remove("Authorization");
+        headers.remove("x-api-key");
+        headers.remove("anthropic-version");
     }
 
     private String mediaType(Path imagePath) {

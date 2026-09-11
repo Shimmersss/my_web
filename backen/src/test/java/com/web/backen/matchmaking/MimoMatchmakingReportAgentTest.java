@@ -2,7 +2,7 @@ package com.web.backen.matchmaking;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.RuntimeConfigService;
-import com.web.backen.translate.LlmService;
+import com.web.backen.ai.LlmClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -14,11 +14,11 @@ import static org.mockito.Mockito.*;
 
 /** Locks the v3 positioning contract: five-dimension analysis, partner portrait and the red-line gates. */
 class MimoMatchmakingReportAgentTest {
-    private LlmService llm;
+    private LlmClient llm;
     private MimoMatchmakingReportAgent agent;
 
     @BeforeEach void setUp() {
-        llm = mock(LlmService.class);
+        llm = mock(LlmClient.class);
         RuntimeConfigService runtime = mock(RuntimeConfigService.class);
         when(runtime.matchmakingLlmUrl()).thenReturn("https://mimo.example/v1");
         when(runtime.matchmakingLlmKey()).thenReturn("key");

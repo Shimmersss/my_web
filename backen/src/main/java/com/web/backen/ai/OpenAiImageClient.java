@@ -2,7 +2,7 @@ package com.web.backen.ai;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.config.ImageGenerationConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
@@ -29,6 +29,10 @@ import javax.imageio.stream.ImageInputStream;
 
 @Component
 public class OpenAiImageClient {
+    private com.web.backen.runtime.TaskCoordinator coordinator = com.web.backen.runtime.TaskCoordinator.local();
+    @org.springframework.beans.factory.annotation.Autowired
+    void coordinator(com.web.backen.runtime.TaskCoordinator coordinator) { this.coordinator = coordinator; }
+
     private final RuntimeConfigService runtime;
     private final ImageGenerationConfig config;
     private final ObjectMapper objectMapper;
@@ -80,6 +84,7 @@ public class OpenAiImageClient {
     }
 
     private byte[] execute(HttpRequest request) throws IOException, InterruptedException {
+        try (var permit = coordinator.network()) {
         HttpResponse<InputStream> response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
         long encodedLimit = Math.max(1024 * 1024, config.getMaxOutputBytes() * 2);
         byte[] responseBytes;
@@ -105,6 +110,8 @@ public class OpenAiImageClient {
         catch (IllegalArgumentException e) { throw new ImageProviderException("Images API 返回了无效图片编码"); }
         validatePng(result);
         return result;
+
+        }
     }
 
     private HttpRequest.BodyPublisher multipartPublisher(String boundary, String prompt, String size, String quality,

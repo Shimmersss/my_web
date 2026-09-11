@@ -4,7 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthUser;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -33,10 +33,15 @@ public class PresentationImageGalleryService {
     private final RuntimeConfigService runtime;
     private final Path root;
 
-    @Autowired
     public PresentationImageGalleryService(ObjectMapper mapper, RuntimeConfigService runtime) {
         this(mapper, runtime, Path.of(System.getProperty("user.dir")).toAbsolutePath().getParent()
                 .resolve(".run/presentation-image-assets").normalize());
+    }
+
+    @Autowired
+    public PresentationImageGalleryService(ObjectMapper mapper, RuntimeConfigService runtime,
+                                           com.web.backen.runtime.RuntimePaths paths) {
+        this(mapper, runtime, paths.runtimeRoot().resolve("presentation-image-assets"));
     }
 
     PresentationImageGalleryService(ObjectMapper mapper, RuntimeConfigService runtime, Path root) {

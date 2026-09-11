@@ -3,7 +3,7 @@ package com.web.backen.imagegen;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthUser;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 

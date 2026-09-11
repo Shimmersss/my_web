@@ -1,12 +1,16 @@
 package com.web.backen.imagegen;
 
+import com.web.backen.runtime.TaskCoordinator;
+import com.web.backen.runtime.RuntimePaths;
+import com.web.backen.runtime.AtomicTaskStore;
+
 import com.web.backen.ai.OpenAiImageClient;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.QuotaService;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.config.ImageGenerationConfig;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -30,6 +34,22 @@ import java.util.stream.Collectors;
 
 @Service
 public class ImageGenerationService {
+    private final Set<String> executing = ConcurrentHashMap.newKeySet();
+    private TaskCoordinator coordinator = TaskCoordinator.local();
+    private AtomicTaskStore snapshots = new AtomicTaskStore(new ObjectMapper());
+    private RuntimePaths runtimePaths = new RuntimePaths("");
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void infrastructure(TaskCoordinator coordinator, AtomicTaskStore snapshots, RuntimePaths runtimePaths) {
+        this.coordinator = coordinator; this.snapshots = snapshots; this.runtimePaths = runtimePaths;
+        coordinator.register("imagegen", () -> Map.of("queued", sessions.values().stream().filter(t -> "queued".equals(t.getStatus())).count(),
+                "creating", sessions.values().stream().filter(t -> "creating".equals(t.getStatus())).count(),
+                "running", sessions.values().stream().filter(t -> "generating".equals(t.getStatus())).count(),
+                "pendingCompensation", sessions.values().stream().filter(t -> t.isRefundPending()).count(),
+                "pendingSnapshots", sessions.values().stream().filter(t -> snapshots.isDirty(t.getMetadataPath())).count(),
+                "workerAvailable", !executor.isShutdown()));
+    }
+
     private static final Logger log = LoggerFactory.getLogger(ImageGenerationService.class);
     private static final Set<String> SIZES = Set.of("1024x1024", "1536x1024", "1024x1536");
     private static final Set<String> QUALITIES = Set.of("low", "medium", "high");
@@ -57,7 +77,7 @@ public class ImageGenerationService {
 
     @PostConstruct
     void initialize() throws IOException {
-        storage = Path.of(config.getStorageDir()).toAbsolutePath().normalize();
+        storage = runtimePaths.resolve(config.getStorageDir());
         Files.createDirectories(storage);
         try (var dirs = Files.list(storage)) {
             dirs.filter(Files::isDirectory).forEach(dir -> {
@@ -66,7 +86,7 @@ public class ImageGenerationService {
                 try {
                     ImageGenerationSession session = mapper.readValue(metadata.toFile(), ImageGenerationSession.class);
                     session.setTaskDir(dir); sessions.put(session.getTaskId(), session);
-                } catch (Exception e) { log.warn("忽略损坏的生图任务元数据: {}", dir.getFileName(), e); }
+                } catch (Exception e) { throw new IllegalStateException("生图快照读取失败，原文件已保留", e); }
             });
         }
         sessions.values().stream().sorted(Comparator.comparingLong(ImageGenerationSession::getCreatedAt)).forEach(session -> {
@@ -77,6 +97,11 @@ public class ImageGenerationService {
             if ("creating".equals(session.getStatus())) {
                 Long spend = session.getCreditTransactionId() == null ? quota.findSpendTransactionId(session.getTaskId()) : session.getCreditTransactionId();
                 if (spend != null) session.setCreditTransactionId(spend);
+                if (spend != null && quota.isRefunded(spend)) {
+                    session.setCreditRefunded(true); session.setRefundPending(false); session.setStatus("failed");
+                    try { persist(session); } catch (IOException e) { throw new IllegalStateException(e); }
+                    return;
+                }
                 if (session.getCreditCost() > 0 && spend == null) {
                     fail(session, "任务恢复失败，请重新提交", new IllegalStateException("creating task has no charge transaction"));
                     return;
@@ -84,6 +109,12 @@ public class ImageGenerationService {
                 session.setStatus("queued"); session.setProgressStage("queued");
             }
             if ("queued".equals(session.getStatus()) || "generating".equals(session.getStatus())) {
+                if (session.isRefundPending() || session.isCreditRefunded()
+                        || (session.getCreditTransactionId() != null && quota.isRefunded(session.getCreditTransactionId()))) {
+                    fail(session, "任务已进入补偿，请重新提交", new IllegalStateException("compensating task cannot resume"));
+                    return;
+                }
+
                 session.setStatus("queued"); session.setProgressStage("queued");
             try { persist(session); taskFutures.put(session.getTaskId(), executor.submit(() -> run(session))); }
                 catch (Exception e) { fail(session, "任务恢复失败，请重新提交", e); }
@@ -92,7 +123,7 @@ public class ImageGenerationService {
         cleanupHistory();
     }
 
-    @PreDestroy void shutdown() { executor.shutdownNow(); }
+    @PreDestroy void shutdown() { executor.shutdownNow(); com.web.backen.runtime.WorkerShutdown.await(executor); }
 
     public ImageGenerationSession create(String prompt, String mode, String size, String quality,
                                          String parentTaskId, MultipartFile referenceFile, AuthUser user) throws IOException {
@@ -102,6 +133,7 @@ public class ImageGenerationService {
     public ImageGenerationSession create(String prompt, String mode, String size, String quality,
                                          String parentTaskId, MultipartFile referenceFile, List<MultipartFile> referenceFiles,
                                          AuthUser user) throws IOException {
+        try (var admission = coordinator.admit()) {
         String cleanPrompt = prompt == null ? "" : prompt.trim();
         if (cleanPrompt.isEmpty() || cleanPrompt.length() > 4000) throw new IllegalArgumentException("提示词需为 1–4000 个字符");
         String cleanMode = mode == null ? "GENERATE" : mode.trim().toUpperCase(Locale.ROOT);
@@ -142,10 +174,17 @@ public class ImageGenerationService {
             }
             updateQueuePositions(); return session;
         } catch (Exception e) {
-            if (!sessions.containsKey(taskId)) { refund(session, "生图任务创建失败退款"); deleteDirectory(dir); }
+            if (!sessions.containsKey(taskId)) { sessions.put(taskId, session); fail(session, "生图任务创建失败，请稍后重试", e); }
+            if (e instanceof AuthException authError && authError.getStatus() == 402
+                    && session.getCreditTransactionId() == null && !session.isRefundPending()
+                    && !snapshots.isDirty(session.getMetadataPath())) {
+                sessions.remove(taskId); deleteDirectory(dir);
+            }
             if (e instanceof IOException io) throw io;
             if (e instanceof RuntimeException runtimeException) throw runtimeException;
             throw new IllegalStateException("创建生图任务失败", e);
+        }
+
         }
     }
 
@@ -177,23 +216,35 @@ public class ImageGenerationService {
     }
 
     private void run(ImageGenerationSession session) {
+        executing.add(session.getTaskId());
         try {
-            if ("cancelled".equals(session.getStatus())) return;
-            session.setStatus("generating"); session.setProgressStage("generating"); persist(session); send(session);
+        try {
+            synchronized (session) {
+                if ("cancelled".equals(session.getStatus())) return;
+                session.setStatus("generating"); session.setProgressStage("generating"); persist(session); send(session);
+            }
             byte[] output = "EDIT".equals(session.getMode())
                     ? client.edit(session.getPrompt(), session.getSize(), session.getQuality(), session.getReferencePaths(), session.getReferenceContentTypes())
                     : client.generate(session.getPrompt(), session.getSize(), session.getQuality());
+            try (var resource = coordinator.heavy(() -> "cancelled".equals(session.getStatus()))) {
             Path temp = session.getTaskDir().resolve("output.png.tmp"); Files.write(temp, output); move(temp, session.getResultPath());
             createPreview(session.getResultPath(), session.getPreviewPath());
+            synchronized (session) {
             if ("cancelled".equals(session.getStatus())) return;
             session.setStatus("completed"); session.setProgressStage("completed"); session.setCompletedAt(System.currentTimeMillis());
-            persist(session); send(session); completeEmitters(session.getTaskId()); cleanupHistory();
+            persist(session); send(session);
+            }
+            completeEmitters(session.getTaskId()); cleanupHistory();
+            }
         } catch (Exception e) { if (!"cancelled".equals(session.getStatus())) fail(session, "生图失败，请稍后重试", e); }
         finally { taskFutures.remove(session.getTaskId()); updateQueuePositions(); }
+
+        } finally { executing.remove(session.getTaskId()); }
     }
 
     private void fail(ImageGenerationSession session, String safeMessage, Exception error) {
         log.error("生图任务失败: taskId={}", session.getTaskId(), error);
+        session.setRefundPending(true);
         session.setStatus("failed"); session.setProgressStage("failed"); session.setErrorMessage(safeMessage); session.setCompletedAt(System.currentTimeMillis());
         refund(session, "生图任务未完成退款");
         try { persist(session); } catch (Exception persistError) { log.error("保存生图失败状态失败: {}", session.getTaskId(), persistError); }
@@ -201,10 +252,30 @@ public class ImageGenerationService {
     }
 
     private void refund(ImageGenerationSession session, String reason) {
-        if (session.getCreditTransactionId() == null || session.isCreditRefunded()) return;
-        session.setRefundPending(true);
-        try { quota.refund(session.getCreditTransactionId(), reason); session.setCreditRefunded(true); session.setRefundPending(false); session.setRefundError(null); }
-        catch (Exception e) { session.setRefundError("退款待重试"); log.error("生图退款失败: taskId={}", session.getTaskId(), e); }
+        synchronized (session) {
+            session.setRefundPending(true);
+            try {
+                persist(session);
+                if (session.getCreditTransactionId() == null && session.getCreditCost() > 0) {
+                    session.setCreditTransactionId(quota.findSpendTransactionId(session.getTaskId())); persist(session);
+                }
+                if (session.getCreditTransactionId() != null && !session.isCreditRefunded()) {
+                    quota.refund(session.getCreditTransactionId(), reason); session.setCreditRefunded(true);
+                }
+                session.setRefundPending(false); session.setRefundError(null); persist(session);
+            } catch (Exception e) { session.setRefundPending(true); session.setRefundError("状态恢复或退款待重试"); }
+        }
+    }
+
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 60000)
+    void reconcilePendingRefunds() {
+        sessions.values().forEach(session -> {
+            synchronized (session) {
+                if (!session.isRefundPending() && !snapshots.isDirty(session.getMetadataPath())) return;
+                if (Set.of("failed", "cancelled").contains(session.getStatus())) refund(session, "生图任务恢复退款");
+                else try { persist(session); } catch (Exception e) { log.warn("生图快照待重试: taskId={}", session.getTaskId()); }
+            }
+        });
     }
 
     public ImageGenerationSession get(String taskId) {
@@ -243,6 +314,7 @@ public class ImageGenerationService {
     }
     public long latestTaskUpdateAt() { return sessions.values().stream().mapToLong(ImageGenerationSession::getUpdatedAt).max().orElse(0L); }
     public void delete(String taskId, AuthUser user) {
+        if (executing.contains(taskId)) throw new AuthException(409, "任务正在结束，请稍后删除");
         ImageGenerationSession session = requireOwned(taskId, user);
         if (!TERMINAL.contains(session.getStatus())) throw new IllegalStateException("运行中的任务不能删除");
         sessions.remove(taskId); deleteDirectory(session.getTaskDir());
@@ -268,7 +340,7 @@ public class ImageGenerationService {
 
     public synchronized void cleanupHistory() {
         List<ImageGenerationSession> terminal = sessions.values().stream()
-                .filter(s -> TERMINAL.contains(s.getStatus()) && !s.isRefundPending())
+                .filter(s -> TERMINAL.contains(s.getStatus()) && !s.isRefundPending() && !executing.contains(s.getTaskId()) && !snapshots.isDirty(s.getMetadataPath()))
                 .sorted(Comparator.comparingLong(ImageGenerationSession::getCreatedAt).reversed()).toList();
         Set<String> keep = new HashSet<>();
         Map<Long, Integer> perUser = new HashMap<>();
@@ -298,10 +370,7 @@ public class ImageGenerationService {
         }
     }
     private void persist(ImageGenerationSession session) throws IOException {
-        synchronized (session) {
-            Path temp = session.getTaskDir().resolve("task.json.tmp");
-            mapper.writeValue(temp.toFile(), session); move(temp, session.getMetadataPath());
-        }
+        snapshots.write(session.getMetadataPath(), session);
     }
     private void createPreview(Path source, Path target) throws IOException {
         validateImageDimensions(source);

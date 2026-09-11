@@ -1,7 +1,7 @@
 package com.web.backen.zotero;
 
 import com.web.backen.auth.AuthService;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.MediaType;

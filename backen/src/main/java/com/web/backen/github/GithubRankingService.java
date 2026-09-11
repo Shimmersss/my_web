@@ -1,7 +1,7 @@
 package com.web.backen.github;
 
 import com.web.backen.ai.LlmClient;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;

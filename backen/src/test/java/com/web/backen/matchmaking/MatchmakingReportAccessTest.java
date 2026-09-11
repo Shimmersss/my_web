@@ -3,7 +3,7 @@ package com.web.backen.matchmaking;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthUser;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.config.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

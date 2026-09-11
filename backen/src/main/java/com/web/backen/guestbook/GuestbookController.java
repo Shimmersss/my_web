@@ -3,7 +3,7 @@ package com.web.backen.guestbook;
 import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthService;
 import com.web.backen.auth.AuthUser;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;

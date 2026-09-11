@@ -1,7 +1,7 @@
 package com.web.backen.translate;
 
 import com.web.backen.config.BabelDocConfig;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.pdfbox.Loader;
@@ -733,19 +733,7 @@ public class BabelDocService {
     }
 
     private void terminateProcessTree(Process process) {
-        ProcessHandle handle = process.toHandle();
-        handle.descendants().forEach(ProcessHandle::destroy);
-        handle.destroy();
-        try {
-            if (!process.waitFor(5, TimeUnit.SECONDS)) {
-                handle.descendants().forEach(ProcessHandle::destroyForcibly);
-                process.destroyForcibly();
-            }
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            handle.descendants().forEach(ProcessHandle::destroyForcibly);
-            process.destroyForcibly();
-        }
+        com.web.backen.runtime.ProcessTrees.terminate(process);
     }
 
     private record MemoryInfo(long memAvailableBytes, long swapTotalBytes, long swapFreeBytes) {}

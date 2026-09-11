@@ -1,10 +1,14 @@
 package com.web.backen.translate;
 
+import com.web.backen.runtime.TaskCoordinator;
+import com.web.backen.runtime.RuntimePaths;
+import com.web.backen.runtime.AtomicTaskStore;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.AuthException;
 import com.web.backen.auth.QuotaService;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.config.TranslationConfig;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
@@ -18,8 +22,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.channels.FileChannel;
-import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
@@ -29,6 +31,22 @@ import java.util.stream.Stream;
 
 @Service
 public class TranslationService {
+    private final Set<String> executing = ConcurrentHashMap.newKeySet();
+    private TaskCoordinator coordinator = TaskCoordinator.local();
+    private AtomicTaskStore snapshots = new AtomicTaskStore(new ObjectMapper());
+    private RuntimePaths runtimePaths = new RuntimePaths("");
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void infrastructure(TaskCoordinator coordinator, AtomicTaskStore snapshots, RuntimePaths runtimePaths) {
+        this.coordinator = coordinator; this.snapshots = snapshots; this.runtimePaths = runtimePaths;
+        coordinator.register("translate", () -> Map.of("queued", sessions.values().stream().filter(t -> "queued".equals(t.getStatus())).count(),
+                "creating", sessions.values().stream().filter(t -> "creating".equals(t.getStatus())).count(),
+                "running", sessions.values().stream().filter(t -> "translating".equals(t.getStatus())).count(),
+                "pendingCompensation", sessions.values().stream().filter(t -> t.isRefundPending()).count(),
+                "pendingSnapshots", sessions.values().stream().filter(t -> snapshots.isDirty(t.getMetadataPath())).count(),
+                "workerAvailable", !executor.isShutdown()));
+    }
+
 
     private static final Logger log = LoggerFactory.getLogger(TranslationService.class);
     private static final int STABLE_LONG_DOCUMENT_CHUNK_PAGES = 1;
@@ -86,7 +104,7 @@ public class TranslationService {
 
     @PostConstruct
     public void initialize() throws IOException {
-        storageDir = Path.of(config.getStorageDir()).toAbsolutePath().normalize();
+        storageDir = runtimePaths.resolve(config.getStorageDir());
         Files.createDirectories(storageDir);
         List<TranslationSession> recoveredSessions = loadRecentSessions();
         reconcilePendingRefunds();
@@ -99,6 +117,7 @@ public class TranslationService {
     @PreDestroy
     public void shutdown() {
         executor.shutdownNow();
+        com.web.backen.runtime.WorkerShutdown.await(executor);
     }
 
     public TranslationSession createSessionPreview(String fileName, InputStream pdfStream) throws Exception {
@@ -111,7 +130,7 @@ public class TranslationService {
 
     public TranslationSession createSessionPreview(String fileName, String contentType,
                                                    InputStream inputStream, long userId) throws Exception {
-        assertDeploymentNotLocked();
+        try (var admission = coordinator.admit()) {
         TranslationFileSupport.FileDescriptor descriptor = TranslationFileSupport.describe(fileName);
         if (descriptor.kind() == TranslationFileSupport.InputKind.IMAGE && imageTranslationService == null) {
             throw new IllegalStateException("图片翻译服务未启用");
@@ -153,8 +172,11 @@ public class TranslationService {
                     taskId, fileName, session.getInputKind(), totalPages);
             return session;
         } catch (Exception e) {
+            sessions.remove(taskId);
             deleteRecursively(taskDir);
             throw e;
+        }
+
         }
     }
 
@@ -165,74 +187,40 @@ public class TranslationService {
 
     public TranslationSession startTranslation(String taskId, int startPage, int endPage, String fontFamily,
                                                int qps, AuthUser user) {
-        assertDeploymentNotLocked();
-        TranslationSession session = requireSession(taskId);
-        synchronized (session) {
-            if (user != null && !user.isRoot() && session.getUserId() != user.id()) {
-                throw new IllegalArgumentException("任务不存在");
-            }
-            if (Set.of("queued", "translating", "completed", "cancelled").contains(session.getStatus())) {
-                return session;
-            }
-            int effectiveStart = Math.max(1, startPage);
-            int effectiveEnd = Math.min(endPage, session.getTotalPages());
-            if (effectiveStart > effectiveEnd) {
-                throw new IllegalArgumentException("页面范围无效");
-            }
-
-            session.setPageRange(effectiveStart, effectiveEnd);
-            session.setFontFamily(validateFontFamily(fontFamily));
-            session.setQps(validateQps(qps));
-            session.setRequestedQps(session.getQps());
-            session.setResourceDowngraded(false);
-            session.setResourceDowngradeReason(null);
-            session.setResourceDowngradeCount(0);
-            session.setQuotaRequired(user != null && quotaService != null && !user.isRoot());
-            session.setCreationReady(true);
-            session.setStatus("creating");
-            session.setProgressStage("creating");
-            saveMetadata(session);
-            try {
-                if (user != null && quotaService != null && !user.isRoot()) {
-                    int cost = (effectiveEnd - effectiveStart + 1) * quotaService.translationCreditPerPage();
-                    long tx = quotaService.spend(user.id(), cost, "TRANSLATION", taskId, "翻译 " + (effectiveEnd - effectiveStart + 1) + " 页");
-                    session.setUserId(user.id());
-                    session.setCreditCost(cost);
-                    session.setCreditTransactionId(tx);
-                    session.setCreditRefunded(false);
-                    saveMetadata(session);
+        try (var admission = coordinator.admit()) {
+            TranslationSession session = requireSession(taskId);
+            synchronized (session) {
+                if (user != null && !user.isRoot() && session.getUserId() != user.id()) throw new AuthException(404, "任务不存在");
+                if (Set.of("creating", "queued", "translating", "completed", "cancelled").contains(session.getStatus())) return session;
+                if (session.isRefundPending() || snapshots.isDirty(session.getMetadataPath())) throw new AuthException(409, "任务状态正在恢复，请稍后重试");
+                int first = Math.max(1, startPage), last = Math.min(endPage, session.getTotalPages());
+                if (first > last) throw new IllegalArgumentException("页面范围无效");
+                session.setPageRange(first, last);
+                session.setFontFamily(validateFontFamily(fontFamily));
+                session.setQps(validateQps(qps)); session.setRequestedQps(session.getQps());
+                session.setResourceDowngraded(false); session.setResourceDowngradeReason(null); session.setResourceDowngradeCount(0);
+                session.setQuotaRequired(user != null && quotaService != null && !user.isRoot());
+                session.setCreditCost(session.isQuotaRequired() ? (last - first + 1) * quotaService.translationCreditPerPage() : 0);
+                session.setCreditTransactionId(null); session.setCreditRefunded(false);
+                session.setCreationReady(true); session.setStatus("creating"); session.setProgressStage("creating");
+                try {
+                    saveMetadata(session); // Must be durable before a SQL charge can occur.
+                    if (session.isQuotaRequired()) {
+                        session.setCreditTransactionId(quotaService.spend(user.id(), session.getCreditCost(), "TRANSLATION", taskId, "翻译 " + (last - first + 1) + " 页"));
+                        saveMetadata(session);
+                    }
+                    session.setErrorMessage(null); session.setProgress(0);
+                    session.setStatus("queued"); session.setProgressStage("queued"); saveMetadata(session);
+                    taskFutures.put(taskId, executor.submit(() -> runTranslation(session)));
+                } catch (RuntimeException error) {
+                    failTranslation(session, error);
+                    throw error;
                 }
-            } catch (RuntimeException e) {
-                session.setStatus("preview");
-                session.setProgressStage("");
-                saveMetadata(session);
-                throw e;
             }
-            session.setErrorMessage(null);
-            session.setProgress(0);
-            session.setProgressStage("queued");
-            session.setStatus("queued");
-            saveMetadata(session);
+            updateQueuePositions();
+            emit(session, "queued", Map.of("message", "任务已进入后台队列", "queuePosition", session.getQueuePosition()));
+            return session;
         }
-
-        try {
-            taskFutures.put(session.getTaskId(), executor.submit(() -> runTranslation(session)));
-        } catch (RejectedExecutionException e) {
-            refundIfNeeded(session, "翻译队列已满自动退回额度");
-            session.setStatus("preview");
-            session.setProgressStage("");
-            saveMetadata(session);
-            throw new IllegalStateException("翻译队列已满，请等待前面的任务完成后再提交");
-        }
-
-        updateQueuePositions();
-        emit(session, "queued", Map.of(
-                "message", "任务已进入后台队列",
-                "queuePosition", session.getQueuePosition()));
-        log.info("提交 BabelDOC 翻译队列: taskId={}, pages={}-{}, fontFamily={}, qps={}, queuePosition={}",
-                taskId, effectiveStart(session), effectiveEnd(session), session.getFontFamily(),
-                session.getQps(), session.getQueuePosition());
-        return session;
     }
 
     public TranslationSession getSession(String taskId) {
@@ -244,15 +232,7 @@ public class TranslationService {
         return sessions.values().stream().mapToLong(TranslationSession::getUpdatedAt).max().orElse(0L);
     }
 
-    private void assertDeploymentNotLocked() {
-        String configured = System.getenv("DEPLOYMENT_LOCK_PATH");
-        Path lock = configured == null || configured.isBlank()
-                ? Path.of("").toAbsolutePath().resolve("../.run/deployment.lock").normalize()
-                : Path.of(configured).toAbsolutePath().normalize();
-        if (Files.exists(lock)) {
-            throw new IllegalStateException("系统正在发布更新，请稍后重新提交任务");
-        }
-    }
+
 
     public boolean canAccess(TranslationSession session, AuthUser user) {
         return session != null && user != null && (user.isRoot() || session.getUserId() == user.id());
@@ -365,6 +345,9 @@ public class TranslationService {
     }
 
     private void runTranslation(TranslationSession session) {
+        executing.add(session.getTaskId());
+        try {
+        try (var resource = coordinator.heavy(() -> "cancelled".equals(session.getStatus()))) {
         if ("cancelled".equals(session.getStatus())) return;
         session.setStatus("translating");
         session.setProgressStage("starting");
@@ -408,12 +391,14 @@ public class TranslationService {
                                 progress -> sendProgress(session, progress));
                     }
                 }
+                synchronized (session) {
                 if ("cancelled".equals(session.getStatus())) break;
                 session.setProgress(100);
                 session.setProgressStage("completed");
                 session.setCompletedAt(System.currentTimeMillis());
                 session.setStatus("completed");
                 saveMetadata(session);
+                }
                 emit(session, "done", Map.of("taskId", session.getTaskId()));
                 completeEmitters(session.getTaskId());
                 break;
@@ -434,6 +419,15 @@ public class TranslationService {
                 updateQueuePositions();
             }
         }
+
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            if (!"cancelled".equals(session.getStatus())) failTranslation(session, e);
+        } catch (RuntimeException e) {
+            if (!"cancelled".equals(session.getStatus())) failTranslation(session, e);
+        }
+
+        } finally { executing.remove(session.getTaskId()); }
     }
 
     public void cancel(String taskId, AuthUser user) {
@@ -479,21 +473,18 @@ public class TranslationService {
     }
 
     private void failTranslation(TranslationSession session, Exception e) {
-        log.error("翻译任务失败: taskId={}", session.getTaskId(), e);
-        try {
-            refundIfNeeded(session, "翻译任务失败自动退回额度");
-        } catch (RuntimeException refundError) {
+        synchronized (session) {
+            session.setStatus("error"); session.setProgressStage("error");
+            session.setErrorMessage(userFacingErrorMessage(e));
             session.setRefundPending(true);
-            session.setRefundError(refundError.getMessage());
+            try { refundIfNeeded(session, "翻译任务失败自动退回额度"); }
+            catch (RuntimeException recoveryError) {
+                session.setRefundPending(true); session.setRefundError("状态恢复或退款待重试");
+                try { saveMetadata(session); } catch (RuntimeException ignored) { }
+                log.error("翻译任务等待恢复: taskId={}", session.getTaskId());
+            }
         }
-        String userMessage = userFacingErrorMessage(e);
-        session.setStatus("error");
-        // Keep subprocess diagnostics in the server log only. Session metadata is returned
-        // by both SSE and status/history APIs, so it must never contain a stack trace or path.
-        session.setErrorMessage(userMessage);
-        session.setProgressStage("error");
-        saveMetadata(session);
-        emit(session, "task-error", Map.of("message", userMessage));
+        emit(session, "task-error", Map.of("message", session.getErrorMessage(), "refundPending", session.isRefundPending()));
         completeEmitters(session.getTaskId());
     }
 
@@ -508,12 +499,19 @@ public class TranslationService {
     }
 
     private void refundIfNeeded(TranslationSession session, String reason) {
-        if (quotaService == null || session.getCreditTransactionId() == null || session.isCreditRefunded()) return;
-        quotaService.refund(session.getCreditTransactionId(), reason);
-        session.setCreditRefunded(true);
-        session.setRefundPending(false);
-        session.setRefundError(null);
-        saveMetadata(session);
+        synchronized (session) {
+            // Persist the failure intent before issuing a refund. A failed write retains the old evidence.
+            session.setRefundPending(true); saveMetadata(session);
+            if (quotaService != null && session.getCreditTransactionId() == null && (session.isQuotaRequired() || session.getCreditCost() > 0)) {
+                session.setCreditTransactionId(quotaService.findSpendTransactionId(session.getTaskId()));
+                saveMetadata(session);
+            }
+            if (quotaService != null && session.getCreditTransactionId() != null && !session.isCreditRefunded()) {
+                quotaService.refund(session.getCreditTransactionId(), reason);
+                session.setCreditRefunded(true);
+            }
+            session.setRefundPending(false); session.setRefundError(null); saveMetadata(session);
+        }
     }
 
     private String safeBaseName(String fileName) {
@@ -634,7 +632,7 @@ public class TranslationService {
                     }
                     sessions.put(session.getTaskId(), session);
                 } catch (Exception e) {
-                    log.warn("读取翻译任务记录失败: {}", metadata, e);
+                    throw new IllegalStateException("翻译快照读取失败，原文件已保留", e);
                 }
             });
         } catch (IOException e) {
@@ -646,6 +644,11 @@ public class TranslationService {
     private void reconcileCreatingSession(TranslationSession session) {
         if (session.isQuotaRequired() && session.getCreditTransactionId() == null && quotaService != null) {
             session.setCreditTransactionId(quotaService.findSpendTransactionId(session.getTaskId()));
+        }
+        if (session.getCreditTransactionId() != null && quotaService != null && quotaService.isRefunded(session.getCreditTransactionId())) {
+            session.setCreditRefunded(true); session.setRefundPending(false); session.setStatus("error");
+            session.setProgressStage("error"); session.setErrorMessage("任务已退款，请重新提交");
+            saveMetadata(session); return;
         }
         if (!session.isCreationReady() || !Files.isRegularFile(session.getInputPath())) {
             session.setStatus("error");
@@ -673,26 +676,36 @@ public class TranslationService {
         saveMetadata(session);
     }
 
-    private void reconcilePendingRefunds() {
-        if (quotaService == null) return;
-        sessions.values().stream()
-                .filter(session -> session.getCreditTransactionId() != null && !session.isCreditRefunded())
-                .filter(session -> session.isRefundPending() || "error".equals(session.getStatus()))
-                .forEach(session -> {
-                    try {
-                        refundIfNeeded(session, "翻译失败自动补偿额度");
-                    } catch (RuntimeException error) {
-                        session.setRefundPending(true);
-                        session.setRefundError(error.getMessage());
-                        saveMetadata(session);
-                    }
-                });
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 60000)
+    void reconcilePendingRefunds() {
+        sessions.values().forEach(session -> {
+            synchronized (session) {
+                boolean terminal = Set.of("error", "cancelled").contains(session.getStatus());
+                if (!session.isRefundPending() && !snapshots.isDirty(session.getMetadataPath())
+                        && !(terminal && session.getCreditTransactionId() != null && !session.isCreditRefunded())) return;
+                try {
+                    saveMetadata(session);
+                    if (terminal) refundIfNeeded(session, "任务恢复自动补偿额度");
+                } catch (RuntimeException e) {
+                    if (terminal) session.setRefundPending(true);
+                    log.warn("任务状态或补偿待重试: taskId={}", session.getTaskId());
+                }
+            }
+        });
     }
 
     private void resumeIncompleteSessions(List<TranslationSession> incompleteSessions) {
         incompleteSessions.stream()
                 .sorted(Comparator.comparingLong(TranslationSession::getCreatedAt))
                 .forEach(session -> {
+                    if (session.isRefundPending() || session.isCreditRefunded()
+                            || (session.getCreditTransactionId() != null && quotaService != null && quotaService.isRefunded(session.getCreditTransactionId()))) {
+                        session.setStatus("error"); session.setProgressStage("error");
+                        session.setErrorMessage("任务已进入补偿，请重新提交");
+                        saveMetadata(session);
+                        refundIfNeeded(session, "恢复补偿任务");
+                        return;
+                    }
                     if (!Files.isRegularFile(session.getInputPath())) {
                         failRecoveredSession(session, "后端重启后未找到原始文件，请重新上传");
                         return;
@@ -730,41 +743,7 @@ public class TranslationService {
     }
 
     private void saveMetadata(TranslationSession session) {
-        Path metadata = session.getMetadataPath();
-        Path temporary = null;
-        try {
-            Files.createDirectories(metadata.getParent());
-            temporary = Files.createTempFile(metadata.getParent(), "task-", ".json.tmp");
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(temporary.toFile(), session);
-            try (FileChannel channel = FileChannel.open(temporary, java.nio.file.StandardOpenOption.WRITE)) {
-                channel.force(true);
-            }
-            try {
-                Files.move(temporary, metadata, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (AtomicMoveNotSupportedException unsupported) {
-                Files.move(temporary, metadata, StandardCopyOption.REPLACE_EXISTING);
-            }
-            forceMetadataDirectory(metadata.getParent());
-        } catch (IOException e) {
-            log.warn("保存翻译任务记录失败: taskId={}", session.getTaskId(), e);
-        } finally {
-            if (temporary != null) {
-                try {
-                    Files.deleteIfExists(temporary);
-                } catch (IOException ignored) {
-                    // A later save or normal task-directory cleanup removes an abandoned temp file.
-                }
-            }
-        }
-    }
-
-    /** Best effort: supported Unix filesystems persist the rename's directory entry here. */
-    private void forceMetadataDirectory(Path directory) {
-        try (FileChannel channel = FileChannel.open(directory, java.nio.file.StandardOpenOption.READ)) {
-            channel.force(true);
-        } catch (IOException | UnsupportedOperationException ignored) {
-            // Some local filesystems do not permit opening a directory channel.
-        }
+        snapshots.write(session.getMetadataPath(), session);
     }
 
     public void cleanupHistory() {
@@ -807,7 +786,7 @@ public class TranslationService {
             keep.remove(session.getTaskId());
         }
         for (TranslationSession session : orderedSessions) {
-            if (keep.contains(session.getTaskId())) continue;
+            if (keep.contains(session.getTaskId()) || executing.contains(session.getTaskId()) || snapshots.isDirty(session.getMetadataPath()) || session.isRefundPending()) continue;
             sessions.remove(session.getTaskId(), session);
             deleteRecursively(session.getTaskDir());
         }

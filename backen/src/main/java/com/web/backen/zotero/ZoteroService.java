@@ -1,7 +1,7 @@
 package com.web.backen.zotero;
 
 import com.web.backen.config.ZoteroConfig;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.MediaType;

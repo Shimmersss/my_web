@@ -1,7 +1,7 @@
 package com.web.backen.ai;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.config.ImageGenerationConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

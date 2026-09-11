@@ -1,6 +1,6 @@
 package com.web.backen.translate;
 
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.config.BabelDocConfig;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;

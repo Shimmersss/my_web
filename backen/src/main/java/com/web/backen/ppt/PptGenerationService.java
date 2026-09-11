@@ -1,12 +1,16 @@
 package com.web.backen.ppt;
 
+import com.web.backen.runtime.TaskCoordinator;
+import com.web.backen.runtime.RuntimePaths;
+import com.web.backen.runtime.AtomicTaskStore;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.AuthException;
 import com.web.backen.auth.QuotaService;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.imagegen.PresentationImageGalleryService;
 import com.web.backen.config.PptGenerationConfig;
 import jakarta.annotation.PostConstruct;
@@ -54,6 +58,22 @@ import java.util.stream.Stream;
  */
 @Service
 public class PptGenerationService {
+    private final Set<String> executing = ConcurrentHashMap.newKeySet();
+    private TaskCoordinator coordinator = TaskCoordinator.local();
+    private AtomicTaskStore snapshots = new AtomicTaskStore(new ObjectMapper());
+    private RuntimePaths runtimePaths = new RuntimePaths("");
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void infrastructure(TaskCoordinator coordinator, AtomicTaskStore snapshots, RuntimePaths runtimePaths) {
+        this.coordinator = coordinator; this.snapshots = snapshots; this.runtimePaths = runtimePaths;
+        coordinator.register("ppt", () -> Map.of("queued", sessions.values().stream().filter(t -> "queued".equals(t.getStatus())).count(),
+                "creating", sessions.values().stream().filter(t -> "creating".equals(t.getStatus())).count(),
+                "running", sessions.values().stream().filter(t -> "generating".equals(t.getStatus())).count(),
+                "pendingCompensation", sessions.values().stream().filter(t -> t.isRefundPending()).count(),
+                "pendingSnapshots", sessions.values().stream().filter(t -> snapshots.isDirty(t.getMetadataPath())).count(),
+                "workerAvailable", !executor.isShutdown()));
+    }
+
     private static final Logger log = LoggerFactory.getLogger(PptGenerationService.class);
     private static final int MAX_AI_IMAGES_PER_TASK = 10;
     private static final String AUTO_PROMPT =
@@ -117,7 +137,7 @@ public class PptGenerationService {
 
     @PostConstruct
     public void initialize() throws IOException {
-        storageDir = Path.of(config.getStorageDir()).toAbsolutePath().normalize();
+        storageDir = runtimePaths.resolve(config.getStorageDir());
         Files.createDirectories(storageDir);
         loadRecentSessions();
         reconcilePendingRefunds();
@@ -131,6 +151,7 @@ public class PptGenerationService {
     public void shutdown() {
         executor.shutdownNow();
         inputExtractor.shutdown();
+        com.web.backen.runtime.WorkerShutdown.await(executor);
     }
 
     @Autowired(required = false)
@@ -293,7 +314,7 @@ public class PptGenerationService {
                                            String visualMode, String fontFamily, String imageGenerationMode,
                                            String motionMode, Integer requestedPageCount,
                                            Integer requestedImageGenerationCount) throws IOException {
-        assertDeploymentNotLocked();
+        try (var admission = coordinator.admit()) {
         String cleanPrompt = validatePrompt(prompt);
         String normalizedOutputFormat = normalizeOutputFormat(outputFormat);
         if ("html".equals(normalizedOutputFormat) && templateFile != null && !templateFile.isEmpty()) {
@@ -340,9 +361,8 @@ public class PptGenerationService {
         session.setStatus("creating");
         session.setProgressStage("creating");
         sessions.put(session.getTaskId(), session);
-        saveMetadata(session);
-
         try {
+            saveMetadata(session);
             acceptUploads(session, templateFile, sourceFile);
             session.setCreationReady(true);
             saveMetadata(session);
@@ -358,12 +378,14 @@ public class PptGenerationService {
             if (e instanceof RuntimeException runtime) throw runtime;
             throw new IllegalStateException(e.getMessage(), e);
         }
+
+        }
     }
 
     public PptGenerationSession createRevisionTask(PptGenerationSession original, String revisionPrompt,
                                                    List<Map<String, Object>> ignoredSlideEdits, AuthUser user,
                                                    String clientRequestId) throws IOException {
-        assertDeploymentNotLocked();
+        try (var admission = coordinator.admit()) {
         if (original == null || !"completed".equals(original.getStatus())) {
             throw new IllegalArgumentException("只有已生成完成的演示才可修改");
         }
@@ -438,6 +460,8 @@ public class PptGenerationService {
             if (e instanceof RuntimeException runtime) throw runtime;
             throw new IllegalStateException(e.getMessage(), e);
         }
+
+        }
     }
 
     private void acceptUploads(PptGenerationSession session, MultipartFile templateFile,
@@ -498,18 +522,23 @@ public class PptGenerationService {
         sessions.put(session.getTaskId(), session);
         if (claimKey != null) idempotencyClaims.put(claimKey, session.getTaskId());
         saveMetadata(session);
-        executor.execute(() -> runGenerationTask(session));
+        executor.execute(() -> {
+                            if ("PPTD 编辑器手工保存".equals(session.getRevisionPrompt())) runManualVersionTask(session);
+                            else runGenerationTask(session);
+                        });
         updateQueuePositions();
         emit(session, "queued", Map.of("message", message, "queuePosition", session.getQueuePosition()));
     }
 
     private void runGenerationTask(PptGenerationSession session) {
+        executing.add(session.getTaskId());
+        try {
+        try (var resource = coordinator.heavy(() -> "cancelled".equals(session.getStatus()))) {
         if ("cancelled".equals(session.getStatus())) return;
         session.setStatus("generating");
         session.setQueuePosition(0);
         saveAndProgress(session, 5, "planning", "正在启动演示 Agent");
         updateQueuePositions();
-        try {
             if (agentRunner == null) throw new IllegalStateException("PPT Agent runner 未配置");
             Files.createDirectories(session.getImagesDir());
             String sourceText = inputExtractor.extractPaperText(
@@ -521,11 +550,14 @@ public class PptGenerationService {
             agentRunner.run(session, storageDir, (event, data) -> handleAgentEvent(session, event, data));
             verifyAgentArtifacts(session);
             if ("cancelled".equals(session.getStatus())) return;
+            synchronized (session) {
+                if ("cancelled".equals(session.getStatus())) return;
             session.setStatus("completed");
             session.setProgress(100);
             session.setProgressStage("completed");
             session.setCompletedAt(System.currentTimeMillis());
             saveMetadata(session);
+            }
             if (presentationImageGallery != null) {
                 try {
                     presentationImageGallery.publish(new PresentationImageGalleryService.Publication(
@@ -541,6 +573,8 @@ public class PptGenerationService {
         } finally {
             cleanupHistory();
         }
+
+        } finally { executing.remove(session.getTaskId()); }
     }
 
     private void verifyAgentArtifacts(PptGenerationSession session) throws IOException {
@@ -665,7 +699,7 @@ public class PptGenerationService {
 
     public synchronized PptGenerationSession createManualVersion(PptGenerationSession parent, int baseVersion,
                                                      List<Map<String, Object>> changes, AuthUser user) throws IOException {
-        assertDeploymentNotLocked();
+        try (var admission = coordinator.admit()) {
         requireCompletedPptd(parent);
         if (user == null || (!user.isRoot() && parent.getUserId() != user.id())) {
             throw new IllegalArgumentException("仅任务所有者可保存 PPTD 编辑版本");
@@ -726,26 +760,36 @@ public class PptGenerationService {
         executor.execute(() -> runManualVersionTask(session));
         updateQueuePositions();
         return session;
+
+        }
     }
 
     private void runManualVersionTask(PptGenerationSession session) {
+        executing.add(session.getTaskId());
+        try {
+        try (var resource = coordinator.heavy(() -> "cancelled".equals(session.getStatus()))) {
+        if ("cancelled".equals(session.getStatus())) return;
         session.setStatus("generating");
         saveAndProgress(session, 20, "rendering", "正在导出手工编辑版本");
-        try {
             agentRunner.finalizePptdProject(session, (event, data) -> handleAgentEvent(session, event, data));
             verifyAgentArtifacts(session);
+            synchronized (session) {
+                if ("cancelled".equals(session.getStatus())) return;
             session.setStatus("completed");
             session.setProgress(100);
             session.setProgressStage("completed");
             session.setCompletedAt(System.currentTimeMillis());
             saveMetadata(session);
+            }
             emit(session, "done", Map.of("taskId", session.getTaskId(), "qaValid", session.isQaValid()));
             completeEmitters(session.getTaskId());
         } catch (Exception e) {
-            failTask(session, e);
+            if (!"cancelled".equals(session.getStatus())) failTask(session, e);
         } finally {
             cleanupHistory();
         }
+
+        } finally { executing.remove(session.getTaskId()); }
     }
 
     private void requireCompletedPptd(PptGenerationSession session) {
@@ -1001,15 +1045,7 @@ public class PptGenerationService {
         };
     }
 
-    private void assertDeploymentNotLocked() {
-        String configured = System.getenv("DEPLOYMENT_LOCK_PATH");
-        Path lock = configured == null || configured.isBlank()
-                ? Path.of("").toAbsolutePath().resolve("../.run/deployment.lock").normalize()
-                : Path.of(configured).toAbsolutePath().normalize();
-        if (Files.exists(lock)) {
-            throw new IllegalStateException("系统正在发布更新，请稍后重新提交任务");
-        }
-    }
+
 
     private String normalizeClientRequestId(String value) {
         if (value == null) return "";
@@ -1050,22 +1086,17 @@ public class PptGenerationService {
     }
 
     private void failTask(PptGenerationSession session, Exception error) {
-        log.error("PPT Agent 任务失败: taskId={}", session.getTaskId(), error);
-        session.setStatus("error");
-        session.setProgressStage("error");
-        session.setErrorMessage(error.getMessage() == null ? "PPT 生成失败" : error.getMessage());
-        saveMetadata(session);
-        try {
-            refundIfNeeded(session, "PPT 生成失败自动退回额度");
-        } catch (Exception refundError) {
-            session.setRefundPending(true);
-            session.setRefundError(trimLog(refundError.getMessage()));
-            saveMetadata(session);
+        synchronized (session) {
+            session.setStatus("error"); session.setProgressStage("error");
+            session.setErrorMessage(error.getMessage() == null ? "PPT 生成未完成，请稍后重试" : trimLog(error.getMessage())); session.setRefundPending(true);
+            try { refundIfNeeded(session, "PPT 生成失败自动退回额度"); }
+            catch (RuntimeException e) {
+                session.setRefundPending(true); session.setRefundError("状态恢复或退款待重试");
+                try { saveMetadata(session); } catch (RuntimeException ignored) { }
+                log.warn("PPT任务等待恢复: taskId={}", session.getTaskId());
+            }
         }
-        Map<String, Object> payload = new LinkedHashMap<>();
-        payload.put("message", session.getErrorMessage());
-        if (session.isRefundPending()) payload.put("refundPending", true);
-        emit(session, "task-error", payload);
+        emit(session, "task-error", Map.of("message", session.getErrorMessage(), "refundPending", session.isRefundPending()));
         completeEmitters(session.getTaskId());
     }
 
@@ -1101,29 +1132,26 @@ public class PptGenerationService {
     }
 
     private boolean persistCreationFailure(PptGenerationSession session, Exception cause, String refundReason) {
-        session.setStatus("error");
-        session.setProgressStage("error");
-        session.setErrorMessage(cause.getMessage() == null ? "PPT 任务创建失败" : cause.getMessage());
-        boolean keep = false;
-        try {
-            refundIfNeeded(session, refundReason);
-        } catch (Exception refundError) {
-            keep = true;
-            session.setRefundPending(true);
-            session.setRefundError(trimLog(refundError.getMessage()));
-        }
-        if (keep) sessions.put(session.getTaskId(), session);
-        saveMetadata(session);
-        return keep;
+        sessions.put(session.getTaskId(), session);
+        failTask(session, cause);
+        // Retain failed creation records as recovery evidence; normal retention removes durable settled tasks.
+        return true;
     }
 
     private void refundIfNeeded(PptGenerationSession session, String reason) {
-        if (quotaService == null || session.getCreditTransactionId() == null || session.isCreditRefunded()) return;
-        quotaService.refund(session.getCreditTransactionId(), reason);
-        session.setCreditRefunded(true);
-        session.setRefundPending(false);
-        session.setRefundError(null);
-        saveMetadata(session);
+        synchronized (session) {
+            // Persist the failure intent before issuing a refund. A failed write retains the old evidence.
+            session.setRefundPending(true); saveMetadata(session);
+            if (quotaService != null && session.getCreditTransactionId() == null && (session.isQuotaRequired() || session.getCreditCost() > 0)) {
+                session.setCreditTransactionId(quotaService.findSpendTransactionId(session.getTaskId()));
+                saveMetadata(session);
+            }
+            if (quotaService != null && session.getCreditTransactionId() != null && !session.isCreditRefunded()) {
+                quotaService.refund(session.getCreditTransactionId(), reason);
+                session.setCreditRefunded(true);
+            }
+            session.setRefundPending(false); session.setRefundError(null); saveMetadata(session);
+        }
     }
 
     private void sendSnapshot(PptGenerationSession session, SseEmitter emitter) {
@@ -1213,7 +1241,7 @@ public class PptGenerationService {
                         idempotencyClaims.put(session.getUserId() + ":" + session.getClientRequestId(), session.getTaskId());
                     }
                 } catch (Exception e) {
-                    log.warn("读取 PPT Agent 任务记录失败: {}", metadata, e);
+                    throw new IllegalStateException("PPT快照读取失败，原文件已保留", e);
                 }
             });
         } catch (IOException e) {
@@ -1224,6 +1252,11 @@ public class PptGenerationService {
     private void reconcileCreatingSession(PptGenerationSession session) {
         if (session.isQuotaRequired() && session.getCreditTransactionId() == null && quotaService != null) {
             session.setCreditTransactionId(quotaService.findSpendTransactionId(session.getTaskId()));
+        }
+        if (session.getCreditTransactionId() != null && quotaService != null && quotaService.isRefunded(session.getCreditTransactionId())) {
+            session.setCreditRefunded(true); session.setRefundPending(false); session.setStatus("error");
+            session.setProgressStage("error"); session.setErrorMessage("任务已退款，请重新提交");
+            saveMetadata(session); return;
         }
         if (!session.isCreationReady()) {
             session.setStatus("error");
@@ -1253,8 +1286,19 @@ public class PptGenerationService {
         sessions.values().stream().filter(session -> "queued".equals(session.getStatus()))
                 .sorted(Comparator.comparingLong(PptGenerationSession::getCreatedAt))
                 .forEach(session -> {
+                    if (session.isRefundPending() || session.isCreditRefunded()
+                            || (session.getCreditTransactionId() != null && quotaService != null && quotaService.isRefunded(session.getCreditTransactionId()))) {
+                        session.setStatus("error"); session.setProgressStage("error");
+                        session.setErrorMessage("任务已进入补偿，请重新提交");
+                        saveMetadata(session);
+                        refundIfNeeded(session, "恢复补偿任务");
+                        return;
+                    }
                     try {
-                        executor.execute(() -> runGenerationTask(session));
+                        executor.execute(() -> {
+                            if ("PPTD 编辑器手工保存".equals(session.getRevisionPrompt())) runManualVersionTask(session);
+                            else runGenerationTask(session);
+                        });
                     } catch (RejectedExecutionException e) {
                         failTask(session, new IllegalStateException("恢复任务超过有界队列容量", e));
                     }
@@ -1263,32 +1307,25 @@ public class PptGenerationService {
     }
 
     private void saveMetadata(PptGenerationSession session) {
-        try {
-            Path temp = session.getMetadataPath().resolveSibling("task.json.tmp");
-            objectMapper.writerWithDefaultPrettyPrinter().writeValue(temp.toFile(), session);
-            try {
-                Files.move(temp, session.getMetadataPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-            } catch (java.nio.file.AtomicMoveNotSupportedException e) {
-                Files.move(temp, session.getMetadataPath(), StandardCopyOption.REPLACE_EXISTING);
-            }
-        } catch (IOException e) {
-            log.warn("保存 PPT Agent 任务记录失败: taskId={}", session.getTaskId(), e);
-        }
+        snapshots.write(session.getMetadataPath(), session);
     }
 
-    private void reconcilePendingRefunds() {
-        if (quotaService == null) return;
-        sessions.values().stream().filter(session -> "error".equals(session.getStatus()))
-                .filter(session -> session.getCreditTransactionId() != null && !session.isCreditRefunded())
-                .forEach(session -> {
-                    try {
-                        refundIfNeeded(session, "PPT 生成失败自动补偿额度");
-                    } catch (Exception e) {
-                        session.setRefundPending(true);
-                        session.setRefundError(trimLog(e.getMessage()));
-                        saveMetadata(session);
-                    }
-                });
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelay = 60000)
+    void reconcilePendingRefunds() {
+        sessions.values().forEach(session -> {
+            synchronized (session) {
+                boolean terminal = Set.of("error", "cancelled").contains(session.getStatus());
+                if (!session.isRefundPending() && !snapshots.isDirty(session.getMetadataPath())
+                        && !(terminal && session.getCreditTransactionId() != null && !session.isCreditRefunded())) return;
+                try {
+                    saveMetadata(session);
+                    if (terminal) refundIfNeeded(session, "任务恢复自动补偿额度");
+                } catch (RuntimeException e) {
+                    if (terminal) session.setRefundPending(true);
+                    log.warn("任务状态或补偿待重试: taskId={}", session.getTaskId());
+                }
+            }
+        });
     }
 
     public void cleanupHistory() {
@@ -1313,7 +1350,7 @@ public class PptGenerationService {
             keep.remove(session.getTaskId());
         }
         for (PptGenerationSession session : terminal) {
-            if (keep.contains(session.getTaskId())) continue;
+            if (keep.contains(session.getTaskId()) || executing.contains(session.getTaskId()) || snapshots.isDirty(session.getMetadataPath()) || session.isRefundPending()) continue;
             sessions.remove(session.getTaskId(), session);
             deleteRecursively(session.getTaskDir());
         }

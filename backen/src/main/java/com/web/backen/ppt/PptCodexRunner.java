@@ -3,7 +3,7 @@ package com.web.backen.ppt;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.config.PptGenerationConfig;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -1020,9 +1020,7 @@ public class PptCodexRunner {
     }
 
     private void terminate(Process process) {
-        process.descendants().forEach(child -> { child.destroy(); if (child.isAlive()) child.destroyForcibly(); });
-        process.destroy();
-        if (process.isAlive()) process.destroyForcibly();
+        com.web.backen.runtime.ProcessTrees.terminate(process);
     }
 
     private void deleteTree(Path root) throws IOException {

@@ -3,7 +3,7 @@ package com.web.backen.ppt;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.QuotaService;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.config.PptGenerationConfig;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

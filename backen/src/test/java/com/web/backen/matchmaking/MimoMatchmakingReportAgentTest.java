@@ -1,7 +1,7 @@
 package com.web.backen.matchmaking;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.ai.LlmClient;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;

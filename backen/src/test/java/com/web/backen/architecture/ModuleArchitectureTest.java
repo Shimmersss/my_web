@@ -14,7 +14,8 @@ import static com.tngtech.archunit.library.dependencies.SlicesRuleDefinition.sli
 
 class ModuleArchitectureTest {
     private static final String[] FOUNDATIONS = {
-            "com.web.backen.auth..", "com.web.backen.config..", "com.web.backen.ai.."
+            "com.web.backen.auth..", "com.web.backen.config..", "com.web.backen.ai..",
+            "com.web.backen.settings..", "com.web.backen.runtime.."
     };
     private static final JavaClasses PRODUCTION = new ClassFileImporter()
             .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)

@@ -3,7 +3,7 @@ package com.web.backen.ai;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.config.LlmConfig;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,6 +28,10 @@ import java.awt.image.BufferedImage;
 /** Shared server-side text and vision transport; domain prompts belong to callers. */
 @Service
 public class LlmClient {
+    private com.web.backen.runtime.TaskCoordinator coordinator = com.web.backen.runtime.TaskCoordinator.local();
+    @org.springframework.beans.factory.annotation.Autowired
+    void coordinator(com.web.backen.runtime.TaskCoordinator coordinator) { this.coordinator = coordinator; }
+
 
     private static final Logger log = LoggerFactory.getLogger(LlmClient.class);
 
@@ -57,12 +61,7 @@ public class LlmClient {
         String endpoint = runtimeConfig.llmEndpoint(baseUrl, protocol);
         Map<String, Object> requestBody = textRequest(resolvedProtocol, model.trim(),
                 "Reply with exactly OK.", "Return only the requested short confirmation.", 256);
-        String responseJson = llmRestClient.post()
-                .uri(endpoint)
-                .headers(headers -> applyHeaders(headers, apiKey, resolvedProtocol))
-                .body(requestBody)
-                .retrieve()
-                .body(String.class);
+        String responseJson = exchange(endpoint, headers -> applyHeaders(headers, apiKey, resolvedProtocol), requestBody);
         String response = extractContent(responseJson);
         String preview = response.replaceAll("\\s+", " ").trim();
         if (preview.length() > 48) preview = preview.substring(0, 48) + "…";
@@ -101,12 +100,7 @@ public class LlmClient {
         long delayMs = 1000;
         for (int attempt = 0; attempt <= maxRetries; attempt++) {
             try {
-                String responseJson = llmRestClient.post()
-                        .uri(runtimeConfig.llmEndpoint(selectedBaseUrl, selectedProtocol))
-                        .headers(headers -> applyHeaders(headers, apiKey, selectedProtocol))
-                        .body(requestBody)
-                        .retrieve()
-                        .body(String.class);
+                String responseJson = exchange(runtimeConfig.llmEndpoint(selectedBaseUrl, selectedProtocol), headers -> applyHeaders(headers, apiKey, selectedProtocol), requestBody);
                 return extractContent(responseJson);
             } catch (Exception e) {
                 String msg = e.getMessage();
@@ -175,12 +169,7 @@ public class LlmClient {
         long delayMs = 1000;
         for (int attempt = 0; attempt <= maxRetries; attempt++) {
             try {
-                String responseJson = llmRestClient.post()
-                        .uri(runtimeConfig.llmEndpoint())
-                        .headers(headers -> applyHeaders(headers))
-                        .body(requestBody)
-                        .retrieve()
-                        .body(String.class);
+                String responseJson = exchange(runtimeConfig.llmEndpoint(), headers -> applyHeaders(headers), requestBody);
                 return extractContent(responseJson);
             } catch (Exception e) {
                 String msg = e.getMessage();
@@ -201,6 +190,15 @@ public class LlmClient {
             }
         }
         throw new RuntimeException("LLM 视觉模型调用失败: 未知错误");
+    }
+
+    private String exchange(String endpoint, java.util.function.Consumer<org.springframework.http.HttpHeaders> headers,
+                            Map<String, Object> body) {
+        try (var permit = coordinator.network()) {
+            return llmRestClient.post().uri(endpoint).headers(headers).body(body).retrieve().body(String.class);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt(); throw new IllegalStateException("模型请求已中断", e);
+        }
     }
 
     private Map<String, Object> textRequest(String protocol, String model, String systemPrompt,

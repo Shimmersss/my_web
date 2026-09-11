@@ -1,6 +1,6 @@
 package com.web.backen.github;
 
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.ai.LlmClient;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;

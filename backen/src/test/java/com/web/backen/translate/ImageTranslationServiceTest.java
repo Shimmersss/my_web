@@ -3,7 +3,7 @@ package com.web.backen.translate;
 import com.web.backen.ai.LlmClient;
 
 import com.web.backen.config.LlmConfig;
-import com.web.backen.config.PptGenerationConfig;
+import com.web.backen.config.VisionConfig;
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.junit.jupiter.api.Test;
@@ -39,8 +39,7 @@ class ImageTranslationServiceTest {
         when(llmService.completeWithImages(any(), anyString(), anyString(), anyList(), anyInt()))
                 .thenReturn("{\"items\":[{\"source\":\"Hello\",\"translation\":\"你好\",\"x\":0.1,\"y\":0.1,\"width\":0.3,\"height\":0.2}]}");
 
-        PptGenerationConfig generationConfig = new PptGenerationConfig();
-        generationConfig.setVisionModel("vision-model");
+        VisionConfig generationConfig = new VisionConfig("vision-model");
         ImageTranslationService service = new ImageTranslationService(llmService, new LlmConfig(), generationConfig);
         service.translateImage(input, resultDir, "poster.png", "auto", ignored -> {});
 
@@ -67,8 +66,7 @@ class ImageTranslationServiceTest {
                 .thenReturn("I found some text, but here is the result:",
                         "The complete answer is: {\"items\":[{\"source\":\"Hello\",\"translation\":\"你好\",\"x\":0.1,\"y\":0.1,\"width\":0.3,\"height\":0.2}]}.");
 
-        PptGenerationConfig generationConfig = new PptGenerationConfig();
-        generationConfig.setVisionModel("vision-model");
+        VisionConfig generationConfig = new VisionConfig("vision-model");
         ImageTranslationService service = new ImageTranslationService(llmService, new LlmConfig(), generationConfig);
         service.translateImage(input, resultDir, "repair.png", "auto", ignored -> {});
 
@@ -85,8 +83,7 @@ class ImageTranslationServiceTest {
         when(llmService.completeWithImages(any(), anyString(), anyString(), anyList(), anyInt()))
                 .thenReturn("说明：[{\"type\":\"metadata\"}] {\"items\":[{\"translation\":\"你好\",\"x\":0.1,\"y\":0.1,\"width\":0.3,\"height\":0.2}]}");
 
-        PptGenerationConfig generationConfig = new PptGenerationConfig();
-        generationConfig.setVisionModel("vision-model");
+        VisionConfig generationConfig = new VisionConfig("vision-model");
         ImageTranslationService service = new ImageTranslationService(llmService, new LlmConfig(), generationConfig);
         service.translateImage(input, resultDir, "prefixed-response.png", "auto", ignored -> {});
 
@@ -104,8 +101,7 @@ class ImageTranslationServiceTest {
         when(llmService.completeWithImages(any(), anyString(), anyString(), anyList(), anyInt()))
                 .thenReturn(oversized, oversized);
 
-        PptGenerationConfig generationConfig = new PptGenerationConfig();
-        generationConfig.setVisionModel("vision-model");
+        VisionConfig generationConfig = new VisionConfig("vision-model");
         ImageTranslationService service = new ImageTranslationService(llmService, new LlmConfig(), generationConfig);
 
         assertThrows(Exception.class,

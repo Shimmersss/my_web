@@ -5,7 +5,7 @@ import com.web.backen.ai.LlmClient;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.config.LlmConfig;
-import com.web.backen.config.PptGenerationConfig;
+import com.web.backen.config.VisionConfig;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
@@ -68,13 +68,13 @@ public class ImageTranslationService {
 
     private final LlmClient llmService;
     private final LlmConfig llmConfig;
-    private final PptGenerationConfig pptGenerationConfig;
+    private final VisionConfig visionConfig;
 
     public ImageTranslationService(LlmClient llmService, LlmConfig llmConfig,
-                                   PptGenerationConfig pptGenerationConfig) {
+                                   VisionConfig visionConfig) {
         this.llmService = llmService;
         this.llmConfig = llmConfig;
-        this.pptGenerationConfig = pptGenerationConfig;
+        this.visionConfig = visionConfig;
     }
 
     public TranslationFileSupport.ImageInfo inspect(Path imagePath) throws IOException {
@@ -112,7 +112,7 @@ public class ImageTranslationService {
     }
 
     private String visionModel() {
-        String model = pptGenerationConfig.getVisionModel();
+        String model = visionConfig.getModel();
         return model == null || model.isBlank() ? null : model.trim();
     }
 

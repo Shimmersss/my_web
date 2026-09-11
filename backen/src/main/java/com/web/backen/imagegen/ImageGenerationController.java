@@ -1,5 +1,7 @@
 package com.web.backen.imagegen;
 
+import com.web.backen.settings.RuntimeConfigService;
+
 import com.web.backen.auth.*;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;

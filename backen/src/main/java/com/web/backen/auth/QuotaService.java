@@ -147,6 +147,13 @@ public class QuotaService {
         return ids.isEmpty() ? null : ids.get(0);
     }
 
+    /** Both new claims and pre-claim refund rows are durable evidence that a task must not run again. */
+    public boolean isRefunded(long spendId) {
+        Integer claims = jdbc.queryForObject("SELECT COUNT(*) FROM credit_refund_claims WHERE spend_id=?", Integer.class, spendId);
+        Integer legacy = jdbc.queryForObject("SELECT COUNT(*) FROM credit_transactions WHERE related_transaction_id=? AND kind='REFUND'", Integer.class, spendId);
+        return claims != null && claims > 0 || legacy != null && legacy > 0;
+    }
+
     @Transactional
     public void adjust(long userId, int amount, String note) {
         if (amount == 0) return;

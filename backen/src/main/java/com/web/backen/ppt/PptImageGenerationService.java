@@ -1,7 +1,7 @@
 package com.web.backen.ppt;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.ai.OpenAiImageClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;

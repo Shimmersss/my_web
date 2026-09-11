@@ -3,7 +3,7 @@ package com.web.backen.matchmaking;
 import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthService;
 import com.web.backen.auth.AuthUser;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.auth.QuotaService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;

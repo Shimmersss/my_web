@@ -6,7 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.QuotaService;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.config.ImageGenerationConfig;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -100,6 +100,7 @@ class ImageGenerationServiceTest {
     @Test
     void insufficientBalanceDoesNotLeaveAQueuedTask() throws Exception {
         QuotaService quota = mock(QuotaService.class);
+        when(quota.findSpendTransactionId(anyString())).thenReturn(null);
         when(quota.imageCredit("medium")).thenReturn(4);
         when(quota.spend(eq(9L), eq(4), anyString(), anyString(), anyString()))
                 .thenThrow(new AuthException(402, "额度不足"));
@@ -120,7 +121,7 @@ class ImageGenerationServiceTest {
         ImageGenerationService result = new ImageGenerationService(config, client, new ObjectMapper(), quota, runtime); result.initialize(); return result;
     }
     private void awaitTerminal(ImageGenerationSession session) throws InterruptedException {
-        for (int i = 0; i < 100 && !java.util.Set.of("completed", "failed").contains(session.getStatus()); i++) Thread.sleep(10);
+        for (int i = 0; i < 300 && (!java.util.Set.of("completed", "failed").contains(session.getStatus()) || session.isRefundPending()); i++) Thread.sleep(10);
         assertTrue(java.util.Set.of("completed", "failed").contains(session.getStatus()), "task did not finish");
     }
     private byte[] validPng() throws Exception {

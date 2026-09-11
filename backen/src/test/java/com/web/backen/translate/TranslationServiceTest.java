@@ -210,6 +210,25 @@ class TranslationServiceTest {
     }
 
     @Test
+    void refundedQueuedSnapshotNeverStartsAgain() throws Exception {
+        QuotaService quota = mock(QuotaService.class);
+        when(quota.isRefunded(73L)).thenReturn(true);
+        BabelDocService babel = mock(BabelDocService.class);
+        TranslationConfig config = new TranslationConfig(); config.setStorageDir(tempDir.toString());
+        Path directory = Files.createDirectories(tempDir.resolve("refunded"));
+        TranslationSession queued = new TranslationSession("refunded", "paper.pdf", directory);
+        queued.setStatus("queued"); queued.setQuotaRequired(true); queued.setCreditTransactionId(73L);
+        Files.write(queued.getInputPath(), new byte[] {1});
+        new ObjectMapper().writeValue(queued.getMetadataPath().toFile(), queued);
+        TranslationService service = new TranslationService(mock(PdfParseService.class), babel, config, new ObjectMapper(), quota);
+        service.initialize();
+        try {
+            assertEquals("error", service.getSession("refunded").getStatus());
+            verifyNoInteractions(babel);
+        } finally { service.shutdown(); }
+    }
+
+    @Test
     void refundsChargedRecoveredTaskWhenItsOriginalFileIsMissing() throws Exception {
         PdfParseService pdfParseService = mock(PdfParseService.class);
         BabelDocService babelDocService = mock(BabelDocService.class);

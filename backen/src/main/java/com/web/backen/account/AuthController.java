@@ -4,7 +4,7 @@ import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthService;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.QuotaService;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.matchmaking.MatchmakingTrialService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpHeaders;

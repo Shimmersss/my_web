@@ -1,4 +1,6 @@
-package com.web.backen.auth;
+package com.web.backen.settings;
+
+import com.web.backen.auth.AuthException;
 
 import com.web.backen.config.BabelDocConfig;
 import com.web.backen.config.LlmConfig;

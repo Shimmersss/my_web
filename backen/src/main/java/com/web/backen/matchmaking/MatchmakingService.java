@@ -1,11 +1,15 @@
 package com.web.backen.matchmaking;
 
+import com.web.backen.runtime.TaskCoordinator;
+import com.web.backen.runtime.RuntimePaths;
+import com.web.backen.runtime.AtomicTaskStore;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthException;
 import com.web.backen.auth.AuthUser;
 import com.web.backen.auth.QuotaService;
-import com.web.backen.auth.RuntimeConfigService;
+import com.web.backen.settings.RuntimeConfigService;
 import com.web.backen.ai.OpenAiImageClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -34,6 +38,19 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 @Service
 public class MatchmakingService {
+    private TaskCoordinator coordinator = TaskCoordinator.local();
+    private AtomicTaskStore snapshots = new AtomicTaskStore(new ObjectMapper());
+    private RuntimePaths runtimePaths = new RuntimePaths("");
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void infrastructure(TaskCoordinator coordinator, AtomicTaskStore snapshots, RuntimePaths runtimePaths) {
+        this.coordinator = coordinator; this.snapshots = snapshots; this.runtimePaths = runtimePaths;
+        coordinator.register("matchmaking", () -> Map.of("queued", tasks.values().stream().filter(t -> "queued".equals(t.status)).count(),
+                "running", tasks.values().stream().filter(t -> "running".equals(t.status)).count(),
+                "pendingCompensation", tasks.values().stream().filter(t -> t.compensationPending).count(),
+                "workerAvailable", worker != null && worker.isAlive()));
+    }
+
     private static final Logger log = LoggerFactory.getLogger(MatchmakingService.class);
     static final String REPORT_VERSION = "market-positioning-v3";
     private static final int QUEUE_CAPACITY = 3;
@@ -91,11 +108,18 @@ public class MatchmakingService {
         worker.start();
     }
 
-    @PreDestroy void shutdown() { if (worker != null) worker.interrupt(); }
+    @PreDestroy void shutdown() {
+        if (worker == null) return;
+        worker.interrupt();
+        try {
+            worker.join(10_000);
+            if (worker.isAlive()) throw new IllegalStateException("婚恋后台任务尚未停止，必须保留运行状态");
+        } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
+    }
 
     /** Import legacy snapshots before recovery; SQL becomes the sole source of truth. */
     private void recoverInterruptedTasks() {
-        File[] files = new File(storageDir).listFiles((d, name) -> name.endsWith(".json"));
+        File[] files = runtimePaths.resolve(storageDir).toFile().listFiles((d, name) -> name.endsWith(".json"));
         if (files != null) for (File file : files) {
             try {
                 MatchmakingTask task = decode(mapper.readValue(file, new TypeReference<Map<String, Object>>() {}));
@@ -305,6 +329,7 @@ public class MatchmakingService {
 
     // Synchronize admission with deletion/finalization; the service intentionally has one worker instance.
     public synchronized Map<String, Object> createTask(AuthUser user, Map<String, Object> body) {
+        try (var admission = coordinator.admit()) {
         cleanExpired();
         boolean busy = tasks.values().stream().anyMatch(t -> t.userId == user.id()
                 && ("queued".equals(t.status) || "running".equals(t.status)));
@@ -334,6 +359,8 @@ public class MatchmakingService {
         tasks.put(task.id, task);
         queue.add(task); // Admission is serialized, and the worker can only free capacity.
         return Map.of("taskId", task.id, "credits", trial ? 0 : quota.balance(user.id()));
+
+        }
     }
 
     public synchronized Map<String, Object> task(AuthUser user, String taskId) {

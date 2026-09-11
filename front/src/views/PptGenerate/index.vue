@@ -346,27 +346,10 @@
             <p class="failure-hint">返回生成界面后可以检查提示词、模板和资料，再次提交任务。</p>
           </section>
 
-          <section v-else-if="step === 'running'" class="panel progress-panel">
-            <div class="progress-title" role="status" aria-live="polite">
-              <n-icon size="32"><TimeOutline /></n-icon>
-              <div>
-                <h2>{{ runningTitle }}</h2>
-                <p v-if="queuePosition > 0">正在排队，第 {{ queuePosition }} 位</p>
-                <p v-else>{{ progressStageLabel }}</p>
-              </div>
-            </div>
-            <n-progress type="line" :percentage="Math.round(progress)" :processing="progress < 100" />
-            <div class="stage-grid">
-              <div v-for="item in stageItems" :key="item.key" :class="['stage-item', { active: item.key === progressStage }]">
-                <n-icon><component :is="item.icon" /></n-icon>
-                <span>{{ item.label }}</span>
-              </div>
-            </div>
-            <div class="actions">
-              <n-button @click="backToForm">返回表单</n-button>
-              <n-button type="error" secondary @click="cancelCurrentPpt">取消本次任务</n-button>
-            </div>
-          </section>
+          <TaskProgress v-else-if="step === 'running'" :running-title="runningTitle"
+            :queue-position="queuePosition" :progress-stage-label="progressStageLabel"
+            :progress="progress" :stage-items="stageItems" :progress-stage="progressStage"
+            @back="backToForm" @cancel="cancelCurrentPpt" />
 
           <section v-else class="panel result-panel result-panel--wide">
             <div class="result-toolbar">
@@ -491,6 +474,7 @@
 </template>
 
 <script setup>
+import TaskProgress from './components/TaskProgress.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useMessage } from 'naive-ui'
 import { NAlert, NButton, NEmpty, NIcon, NInput, NInputNumber, NProgress, NTag } from 'naive-ui'
@@ -517,6 +501,7 @@ import {
   cancelPptGenerationTask,
   revisePptGenerationTask
 } from '@/api'
+import { createTaskPoller } from '@/utils/taskPoller'
 import { apiUrl, BASE_URL } from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
 
@@ -565,7 +550,30 @@ const progressStage = ref('queued')
 const progressStageLabel = ref('等待后台生成')
 const queuePosition = ref(0)
 let eventSource = null
-let pollTimer = null
+let disposed = false
+const lifecycle = new AbortController()
+const statusPoller = createTaskPoller({
+  fetchTask: (id, options) => getPptGenerationStatus(id, taskAccessToken.value, options),
+  onError: text => { if (text) errorMsg.value = text },
+  onTask: async (task, context) => {
+    const previousStatus = activeTask.value?.status
+    setActiveTask(task)
+    if (task.status === 'completed') {
+      taskFailed.value = false
+      step.value = 'result'
+      if (previousStatus !== 'completed') {
+        await loadPreview()
+        if (!context.isCurrent()) return
+        message[task.qaValid === false ? 'warning' : 'success'](
+          task.qaValid === false ? `${outputFormatLabel(task)} 已交付，质量审查有提示` : `${outputFormatLabel(task)} 已生成`
+        )
+      }
+    } else if (['error', 'cancelled'].includes(task.status)) {
+      taskFailed.value = true
+      errorMsg.value = task.errorMessage || (task.status === 'cancelled' ? '任务已取消' : 'PPT 生成失败')
+    }
+  },
+})
 let streamGeneration = 0
 let previewGeneration = 0
 let previewAbortController = null
@@ -646,7 +654,7 @@ onMounted(async () => {
   await Promise.all([loadTemplates(), loadRecent(), loadQuotaSettings()])
   authWatchReady = true
   await restoreActiveTask()
-  window.addEventListener('message', handleEditorMessage)
+  if (!disposed) window.addEventListener('message', handleEditorMessage)
 })
 
 watch(outputFormat, () => {
@@ -665,6 +673,8 @@ watch([imageGenerationMode, imageGenerationCountMax], ([mode, maximum]) => {
 })
 
 onBeforeUnmount(() => {
+  disposed = true
+  lifecycle.abort()
   closeStream()
   stopPolling()
   clearPreview()
@@ -765,6 +775,8 @@ async function submitTask() {
 
 function openStream(id) {
   closeStream()
+  if (disposed) return
+  startPolling()
   const generation = ++streamGeneration
   const streamTaskId = id
   // Tasks are created behind the authenticated HttpOnly session; keep task tokens out of URLs/logs.
@@ -786,32 +798,15 @@ function openStream(id) {
     progressStageLabel.value = data.stageLabel || data.message || progressStageLabel.value
     queuePosition.value = 0
   })
-  eventSource.addEventListener('done', async () => {
+  eventSource.addEventListener('done', () => {
     if (generation !== streamGeneration || taskId.value !== streamTaskId) return
-    progress.value = 100
     closeStream()
-    await refreshStatus()
-    if (generation !== streamGeneration || taskId.value !== streamTaskId) return
-    await loadRecent()
-    if (generation !== streamGeneration || taskId.value !== streamTaskId) return
-    step.value = 'result'
-    await loadPreview()
-    if (generation !== streamGeneration || taskId.value !== streamTaskId) return
-    message[activeTask.value?.qaValid === false ? 'warning' : 'success'](
-      activeTask.value?.qaValid === false
-        ? `${outputFormatLabel(activeTask.value)} 已交付，质量审查有提示`
-        : `${outputFormatLabel(activeTask.value)} 已生成`
-    )
+    startPolling()
   })
-  eventSource.addEventListener('task-error', async event => {
+  eventSource.addEventListener('task-error', () => {
     if (generation !== streamGeneration || taskId.value !== streamTaskId) return
-    const data = parseEvent(event)
-    errorMsg.value = data.message || 'PPT 生成失败'
-    taskFailed.value = true
     closeStream()
-    await refreshStatus()
-    if (generation !== streamGeneration || taskId.value !== streamTaskId) return
-    await loadRecent()
+    startPolling()
   })
   eventSource.onerror = () => {
     if (generation !== streamGeneration) return
@@ -831,31 +826,7 @@ async function openRecent(item) {
     await loadPreview()
   } else {
     step.value = 'running'
-    if (item.status !== 'error') openStream(item.taskId)
-  }
-}
-
-async function refreshStatus() {
-  if (!taskId.value) return
-  const requestedTaskId = taskId.value
-  const requestedToken = taskAccessToken.value
-  try {
-    const res = await getPptGenerationStatus(requestedTaskId, requestedToken)
-    if (taskId.value !== requestedTaskId || taskAccessToken.value !== requestedToken) return
-    setActiveTask(res.data)
-    if (res.data.status === 'completed') {
-      taskFailed.value = false
-      stopPolling()
-      step.value = 'result'
-      await loadPreview()
-    } else if (res.data.status === 'error') {
-      taskFailed.value = true
-      stopPolling()
-      errorMsg.value = res.data.errorMessage || 'PPT 生成失败'
-    }
-  } catch (error) {
-    if (taskId.value !== requestedTaskId || taskAccessToken.value !== requestedToken) return
-    errorMsg.value = error.message || '任务状态恢复失败'
+    if (item.status !== 'error' || item.refundPending) openStream(item.taskId)
   }
 }
 
@@ -1188,7 +1159,8 @@ async function restoreActiveTask() {
   taskId.value = saved.taskId
   taskAccessToken.value = saved.accessToken || tokenForTask(saved.taskId)
   try {
-    const res = await getPptGenerationStatus(taskId.value, taskAccessToken.value)
+    const res = await getPptGenerationStatus(taskId.value, taskAccessToken.value, { signal: lifecycle.signal })
+    if (disposed) return
     setActiveTask(res.data)
     errorMsg.value = res.data.errorMessage || ''
     if (res.data.status === 'completed') {
@@ -1206,16 +1178,9 @@ async function restoreActiveTask() {
 }
 
 function startPolling() {
-  stopPolling()
-  pollTimer = window.setInterval(refreshStatus, 2500)
+  if (!disposed && taskId.value) statusPoller.start(taskId.value)
 }
-
-function stopPolling() {
-  if (pollTimer) {
-    window.clearInterval(pollTimer)
-    pollTimer = null
-  }
-}
+function stopPolling() { statusPoller.stop() }
 
 function closeStream() {
   streamGeneration += 1

@@ -41,6 +41,7 @@
           </section>
         </section>
 
+        <OperationsPanel />
         <div class="admin-workspace">
           <aside class="admin-index" aria-label="后台分区导航">
             <div class="admin-index__heading">
@@ -871,6 +872,7 @@
   </main>
 </template>
 <script setup>
+import OperationsPanel from "./components/OperationsPanel.vue";
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { NAlert, NInput, NInputNumber, NModal, NTag, useMessage } from "naive-ui";
 import {

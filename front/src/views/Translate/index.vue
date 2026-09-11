@@ -315,6 +315,7 @@
 </template>
 
 <script setup>
+import { createTaskPoller } from '@/utils/taskPoller'
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
@@ -387,7 +388,43 @@ const isGeneratingPdf = ref(false)
 const pdfPreviewUrl = ref('')
 const pdfPreviewBlob = ref(null)
 const pdfPreviewError = ref('')
-let eventSource = null
+let disposed = false
+const lifecycle = new AbortController()
+let restoreController = null
+let previewController = null
+const taskPoller = createTaskPoller({
+  fetchTask: getTranslationStatus,
+  onError: text => { if (text) errorMsg.value = text },
+  onTask: async (data, context) => {
+    translationProgress.value = Math.round(data.progress || 0)
+    queuePosition.value = data.queuePosition || 0
+    translationQps.value = data.qps || translationQps.value
+    requestedQps.value = data.requestedQps || requestedQps.value
+    resourceDowngraded.value = Boolean(data.resourceDowngraded)
+    progressStageLabel.value = data.status === 'queued'
+      ? `等待后台翻译，当前队列第 ${queuePosition.value || 1} 位`
+      : data.progressStageLabel || '正在处理...'
+    if (data.status === 'completed') {
+      const newlyCompleted = step.value !== 'result'
+      isGeneratingPdf.value = false
+      translationProgress.value = 100
+      progressStageLabel.value = '翻译完成'
+      step.value = 'result'
+      if (newlyCompleted) {
+        await loadPdfPreview()
+        if (context.isCurrent()) message.success('翻译完成！')
+      }
+    } else if (['error', 'cancelled'].includes(data.status)) {
+      isGeneratingPdf.value = false
+      errorMsg.value = data.errorMessage || (data.status === 'cancelled' ? '任务已取消' : '翻译失败')
+    }
+  },
+})
+function stopObservation() {
+  taskPoller.stop()
+  restoreController?.abort()
+  previewController?.abort()
+}
 let recentRefreshTimer = null
 const translationCreditPerPage = ref(1)
 const estimatedCredits = computed(() => Math.max(1, Number(endPage.value || 1) - Number(startPage.value || 1) + 1) * translationCreditPerPage.value)
@@ -521,127 +558,15 @@ async function handleStartTranslate() {
   }
 }
 
-// 开始 SSE 连接
+// Shared serial observation survives disconnects and keeps compensation visible.
 function startSSE() {
-  if (eventSource) {
-    eventSource.close()
-  }
-
-  eventSource = new EventSource(`/api/translate/stream/${taskId.value}`)
-
-  eventSource.addEventListener('done', () => {
-    isGeneratingPdf.value = false
-    translationProgress.value = 100
-    progressStageLabel.value = '翻译完成'
-    step.value = 'result'
-    eventSource?.close()
-    eventSource = null
-    message.success('翻译完成！')
-    loadPdfPreview()
-    loadRecentTranslations()
-  })
-
-  eventSource.addEventListener('layout', () => {
-    isGeneratingPdf.value = true
-    queuePosition.value = 0
-    progressStageLabel.value = isImageInput.value
-      ? '正在使用视觉模型识别图片文字并生成译文图像...'
-      : '正在使用 BabelDOC 分析版面、翻译并重建 PDF...'
-  })
-
-  eventSource.addEventListener('queued', (e) => {
-    try {
-      const data = JSON.parse(e.data)
-      queuePosition.value = data.queuePosition || 1
-      progressStageLabel.value = `等待后台翻译，当前队列第 ${queuePosition.value} 位`
-    } catch {
-      progressStageLabel.value = '等待后台翻译'
-    }
-  })
-
-  eventSource.addEventListener('progress', (e) => {
-    try {
-      const data = JSON.parse(e.data)
-      translationProgress.value = Math.round(data.progress || 0)
-      progressStageLabel.value = data.stageLabel || '处理中...'
-      translationQps.value = data.qps || translationQps.value
-      resourceDowngraded.value = Boolean(data.resourceDowngraded)
-    } catch (err) {
-      console.error('解析翻译进度失败:', err)
-    }
-  })
-
-  eventSource.addEventListener('task-error', (e) => {
-    try {
-      const data = JSON.parse(e.data)
-      errorMsg.value = data.message || '翻译过程中发生错误'
-    } catch {
-      if (step.value === 'translating') {
-        errorMsg.value = '翻译连接中断，请重试'
-      }
-    }
-    eventSource?.close()
-    eventSource = null
-  })
-
-  eventSource.onerror = () => {
-    if (step.value === 'translating') {
-      message.warning('连接中断，尝试重连...')
-      setTimeout(() => {
-        if (step.value === 'translating') {
-          reconnectSSE()
-        }
-      }, 2000)
-    }
-    eventSource?.close()
-    eventSource = null
-  }
+  if (!disposed && taskId.value) taskPoller.start(taskId.value)
 }
-
-// 断线重连
-async function reconnectSSE() {
-  try {
-    const res = await getTranslationStatus(taskId.value)
-    if (res.code === 200) {
-      const data = res.data
-      if (data.status === 'completed') {
-        translationProgress.value = 100
-        progressStageLabel.value = '翻译完成'
-        step.value = 'result'
-        message.success('翻译已完成')
-        loadPdfPreview()
-        return
-      }
-
-      if (data.status === 'error') {
-        errorMsg.value = data.errorMessage || '翻译失败'
-        loadRecentTranslations()
-        return
-      }
-
-      queuePosition.value = data.queuePosition || 0
-      translationProgress.value = Math.round(data.progress || 0)
-      translationQps.value = data.qps || translationQps.value
-      requestedQps.value = data.requestedQps || requestedQps.value
-      resourceDowngraded.value = Boolean(data.resourceDowngraded)
-      progressStageLabel.value = data.status === 'queued'
-        ? `等待后台翻译，当前队列第 ${queuePosition.value || 1} 位`
-        : data.progressStageLabel || '正在使用 BabelDOC 处理...'
-      setTimeout(() => {
-        if (step.value === 'translating') {
-          reconnectSSE()
-        }
-      }, 2000)
-    }
-  } catch {
-    errorMsg.value = '重连失败，请刷新页面重试'
-  }
-}
+function reconnectSSE() { startSSE() }
 
 // 复用已经上传的 PDF 和任务目录，只重新打开配置界面；后端允许 error 任务重新入队，避免用户再次上传大文件。
 function retryTranslation() {
-  eventSource?.close()
-  eventSource = null
+  stopObservation()
   errorMsg.value = ''
   isGeneratingPdf.value = false
   translationProgress.value = 0
@@ -655,7 +580,7 @@ async function cancelCurrentTranslation() {
   try {
     const res = await cancelTranslation(taskId.value)
     if (res.code !== 200) throw new Error(res.message || '取消失败')
-    eventSource?.close(); eventSource = null
+    stopObservation()
     if (typeof res.data?.credits !== 'undefined') auth.updateCredits(res.data.credits)
     message.success('翻译任务已取消')
     resetToUpload(); loadRecentTranslations()
@@ -678,13 +603,18 @@ function downloadPdf() {
 
 async function loadPdfPreview() {
   if (!taskId.value) return
+  previewController?.abort()
+  const request = new AbortController()
+  previewController = request
+  const requestedTask = taskId.value
   isLoadingPdfPreview.value = true
   pdfPreviewError.value = ''
 
   try {
     const blob = isImageInput.value
-      ? await getTranslatedImageBlob(taskId.value, pdfPreviewMode.value)
-      : await getTranslatedPdfBlob(taskId.value, pdfPreviewMode.value)
+      ? await getTranslatedImageBlob(requestedTask, pdfPreviewMode.value, { signal: request.signal })
+      : await getTranslatedPdfBlob(requestedTask, pdfPreviewMode.value, { signal: request.signal })
+    if (disposed || request.signal.aborted || taskId.value !== requestedTask) return
     if (pdfPreviewUrl.value) {
       URL.revokeObjectURL(pdfPreviewUrl.value)
     }
@@ -696,16 +626,16 @@ async function loadPdfPreview() {
       pdfPreviewBlob.value = blob
     }
   } catch (e) {
+    if (disposed || request.signal.aborted) return
     pdfPreviewError.value = e.message || (isImageInput.value ? '生成图片预览失败' : '生成 PDF 预览失败')
   } finally {
-    isLoadingPdfPreview.value = false
+    if (previewController === request) isLoadingPdfPreview.value = false
   }
 }
 
 // 重置到上传态
 function resetToUpload() {
-  eventSource?.close()
-  eventSource = null
+  stopObservation()
   if (pdfPreviewUrl.value) {
     URL.revokeObjectURL(pdfPreviewUrl.value)
   }
@@ -739,9 +669,11 @@ function continueWithNewTranslation() {
 }
 
 async function loadRecentTranslations() {
+  if (disposed || isLoadingRecent.value) return
   isLoadingRecent.value = true
   try {
-    const res = await getRecentTranslations()
+    const res = await getRecentTranslations({ signal: lifecycle.signal })
+    if (disposed) return
     if (res.code !== 200 || !Array.isArray(res.data)) {
       throw new Error(res.message || '服务器返回的翻译记录格式不正确')
     }
@@ -790,7 +722,12 @@ async function openRecentTask(item) {
 }
 
 async function restoreTask(savedTaskId, notify = false) {
-  const res = await getTranslationStatus(savedTaskId)
+  stopObservation()
+  if (disposed) return
+  const request = new AbortController()
+  restoreController = request
+  const res = await getTranslationStatus(savedTaskId, { signal: request.signal })
+  if (disposed || request.signal.aborted) return
   if (res.code !== 200) return
   const data = res.data
   if (taskId.value !== savedTaskId && pdfPreviewUrl.value) {
@@ -833,6 +770,7 @@ async function restoreTask(savedTaskId, notify = false) {
   } else {
     errorMsg.value = data.errorMessage || '翻译失败'
     step.value = 'translating'
+    if (data.refundPending) startSSE()
   }
 }
 
@@ -841,7 +779,12 @@ onMounted(async () => {
   await auth.refresh().catch(() => {})
   await loadQuotaSettings()
   await loadRecentTranslations()
-  recentRefreshTimer = window.setInterval(loadRecentTranslations, 5000)
+  if (disposed) return
+  const refreshRecent = async () => {
+    await loadRecentTranslations()
+    if (!disposed) recentRefreshTimer = window.setTimeout(refreshRecent, 5000)
+  }
+  recentRefreshTimer = window.setTimeout(refreshRecent, 5000)
   const requestedTaskId = String(route.query.taskId || '')
   const savedTaskId = requestedTaskId || sessionStorage.getItem('translateTaskId')
   if (savedTaskId) {
@@ -864,9 +807,11 @@ async function loadQuotaSettings() {
 }
 
 onBeforeUnmount(() => {
-  eventSource?.close()
+  disposed = true
+  lifecycle.abort()
+  stopObservation()
   if (recentRefreshTimer) {
-    window.clearInterval(recentRefreshTimer)
+    window.clearTimeout(recentRefreshTimer)
     recentRefreshTimer = null
   }
   if (pdfPreviewUrl.value) {

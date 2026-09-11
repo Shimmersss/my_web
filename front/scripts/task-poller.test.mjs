@@ -38,3 +38,24 @@ test('pending compensation remains observable; access errors stop retries', asyn
   assert.equal(s.pending.size, 0)
   assert.match(s.errors.at(-1), /访问已失效/)
 })
+
+test('all task terminal states wait for durable refunds before stopping', async () => {
+  for (const status of ['completed', 'failed', 'cancelled', 'error', 'done']) {
+    let calls = 0
+    const s = setup(async () => ({ data: { status, refundPending: ++calls === 1 } }))
+    s.poller.start('task'); await s.tick()
+    assert.equal(s.pending.size, 1)
+    await s.tick(); assert.equal(s.pending.size, 0)
+  }
+})
+test('async task handlers can reject stale side effects after switching tasks', async () => {
+  let finish, context
+  const pending = []
+  const poller = createTaskPoller({ fetchTask: async () => ({ data: { status: 'completed' } }),
+    onTask: async (_, current) => { context = current; await new Promise(resolve => { finish = resolve }) },
+    schedule: fn => { pending.push(fn); return pending.length }, cancel: () => {} })
+  poller.start('old'); const running = pending.shift()()
+  await Promise.resolve(); await Promise.resolve()
+  poller.start('new'); assert.equal(context.isCurrent(), false); assert.equal(context.signal.aborted, true)
+  finish(); await running
+})

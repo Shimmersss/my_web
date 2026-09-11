@@ -90,11 +90,12 @@
 <script setup>
 import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { NButton, NInput, NSelect, useMessage } from 'naive-ui'
+import { createTaskPoller } from '@/utils/taskPoller'
 import { useAuthStore } from '@/stores/auth'
 import { downloadUrl } from '@/utils/androidBridge'
 import {
   createImageGenerationTask, deleteImageGenerationTask, cancelImageGenerationTask, getRecentImageGenerations,
-  imageGenerationPreviewUrl, imageGenerationResultUrl, imageGenerationStreamUrl,
+  imageGenerationPreviewUrl, imageGenerationResultUrl, getImageGenerationStatus,
   deletePresentationImageAsset, getPresentationImageAssets, presentationImagePreviewUrl, presentationImageResultUrl
 } from '@/api'
 
@@ -112,7 +113,19 @@ const presentationAssets = ref([])
 const presentationRetention = ref({ maxPerUser: 20, maxTotal: 100 })
 const loadingPresentationAssets = ref(false)
 const localReferences = ref([])
-let eventSource = null
+let watchedTaskId = null
+let disposed = false
+const lifecycle = new AbortController()
+const taskPoller = createTaskPoller({
+  fetchTask: getImageGenerationStatus,
+  onError: text => { error.value = text },
+  onTask: task => {
+    current.value = task
+    const index = history.value.findIndex(item => item.taskId === task.taskId)
+    if (index >= 0) history.value[index] = task; else history.value.unshift(task)
+    if (task.status === 'failed') error.value = task.error || '生图失败，请稍后重试'
+  },
+})
 
 const fallbackCosts = { low: 2, medium: 4, high: 8 }
 const sizeOptions = [
@@ -124,8 +137,8 @@ const qualityOptions = computed(() => ['low', 'medium', 'high'].map(value => ({ 
 const parentTask = computed(() => history.value.find(task => task.taskId === form.parentTaskId))
 const canSubmit = computed(() => form.prompt.trim() && (form.mode === 'GENERATE' || form.referenceFiles.length || form.parentTaskId))
 
-onMounted(async () => { await auth.refresh().catch(() => {}); await Promise.all([loadHistory(), loadPresentationAssets()]) })
-onBeforeUnmount(() => { closeStream(); revokeLocalPreview() })
+onMounted(async () => { await auth.refresh().catch(() => {}); if (disposed) return; await Promise.all([loadHistory(), loadPresentationAssets()]) })
+onBeforeUnmount(() => { disposed = true; lifecycle.abort(); closeStream(); revokeLocalPreview() })
 
 function setMode(mode) { form.mode = mode; clearReference(); error.value = '' }
 function selectFiles(event) {
@@ -147,6 +160,7 @@ async function submit() {
   submitting.value = true; error.value = ''
   try {
     const response = await createImageGenerationTask(form)
+    if (disposed) return
     current.value = response.data.task
     auth.updateCredits(response.data.credits)
     history.value = [current.value, ...history.value.filter(item => item.taskId !== current.value.taskId)]
@@ -158,31 +172,23 @@ async function submit() {
 }
 
 function watchTask(taskId) {
-  closeStream(); eventSource = new EventSource(imageGenerationStreamUrl(taskId), { withCredentials: true })
-  eventSource.addEventListener('status', event => {
-    try {
-      const task = JSON.parse(event.data); current.value = task
-      const index = history.value.findIndex(item => item.taskId === task.taskId)
-      if (index >= 0) history.value[index] = task; else history.value.unshift(task)
-      if (['completed', 'failed'].includes(task.status)) {
-        closeStream(); loadHistory()
-        if (task.status === 'failed') error.value = task.error || '生图失败，请稍后重试'
-      }
-    } catch {}
-  })
-  eventSource.onerror = () => { closeStream(); loadHistory() }
+  closeStream()
+  if (disposed) return
+  watchedTaskId = taskId
+  taskPoller.start(taskId)
 }
-function closeStream() { if (eventSource) eventSource.close(); eventSource = null }
+function closeStream() { taskPoller.stop(); watchedTaskId = null }
 
 async function loadHistory() {
   loadingHistory.value = true
   try {
-    const response = await getRecentImageGenerations()
+    const response = await getRecentImageGenerations({ signal: lifecycle.signal })
+    if (disposed) return
     history.value = response.data?.tasks || []
     costs.value = response.data?.costs || {}
     auth.updateCredits(response.data?.credits)
-    const active = history.value.find(task => ['queued', 'generating'].includes(task.status))
-    if (active && !eventSource) { current.value = active; watchTask(active.taskId) }
+    const active = history.value.find(task => ['queued', 'generating'].includes(task.status) || task.refundPending)
+    if (active && !watchedTaskId) { current.value = active; watchTask(active.taskId) }
   } catch (e) { if (auth.isLoggedIn) error.value = e.message || '历史记录加载失败' }
   finally { loadingHistory.value = false }
 }
@@ -195,14 +201,14 @@ async function loadPresentationAssets() {
 function presentationPreviewUrl(assetId) { return `${presentationImagePreviewUrl(assetId)}?v=${Date.now()}` }
 function presentationResultUrl(assetId) { return presentationImageResultUrl(assetId) }
 async function removePresentationAsset(asset) { if (!window.confirm('删除此演示生图素材？已交付演示不会受影响。')) return; try { await deletePresentationImageAsset(asset.assetId); presentationAssets.value = presentationAssets.value.filter(item => item.assetId !== asset.assetId) } catch (e) { message.error(e.message || '删除失败') } }
-function selectTask(task) { current.value = task; error.value = task.status === 'failed' ? task.error : '' }
+function selectTask(task) { closeStream(); current.value = task; error.value = task.status === 'failed' ? task.error : ''; watchTask(task.taskId) }
 function isOwnTask(task) { return Number(task?.userId) === Number(auth.user?.id) }
 function continueEdit(task) { form.mode = 'EDIT'; form.parentTaskId = task.taskId; form.referenceFiles = []; revokeLocalPreview(); form.prompt = ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
 function regenerate(task) { form.mode = task.mode; form.prompt = task.prompt; form.size = task.size; form.quality = task.quality; form.referenceFiles = []; revokeLocalPreview(); form.parentTaskId = task.mode === 'EDIT' ? (task.parentTaskId || task.taskId) : ''; window.scrollTo({ top: 0, behavior: 'smooth' }) }
 function download(task) { downloadUrl(resultUrl(task.taskId), `gpt-image-${task.taskId}.png`, 'image/png') }
 function downloadPresentationAsset(asset) { downloadUrl(presentationResultUrl(asset.assetId), `presentation-image-${asset.assetId}.png`, 'image/png') }
 async function remove(task) { if (!window.confirm('删除这条创作记录和图片？')) return; try { await deleteImageGenerationTask(task.taskId); history.value = history.value.filter(item => item.taskId !== task.taskId); if (current.value?.taskId === task.taskId) current.value = null } catch (e) { message.error(e.message || '删除失败') } }
-async function cancelCurrent() { if (!current.value || !window.confirm('取消本次生图？未完成任务的额度将退回。')) return; try { const res = await cancelImageGenerationTask(current.value.taskId); if (res.code !== 200) throw new Error(res.message || '取消失败'); if (typeof res.data?.credits !== 'undefined') auth.updateCredits(res.data.credits); current.value = { ...current.value, status: 'cancelled' }; eventSource?.close(); eventSource = null; message.success('生图任务已取消'); loadHistory() } catch (e) { message.error(e.message || '取消失败') } }
+async function cancelCurrent() { if (!current.value || !window.confirm('取消本次生图？未完成任务的额度将退回。')) return; try { const res = await cancelImageGenerationTask(current.value.taskId); if (res.code !== 200) throw new Error(res.message || '取消失败'); if (typeof res.data?.credits !== 'undefined') auth.updateCredits(res.data.credits); current.value = { ...current.value, status: 'cancelled' }; watchTask(current.value.taskId); message.success('生图任务已取消'); loadHistory() } catch (e) { message.error(e.message || '取消失败') } }
 function resultUrl(taskId) { return `${imageGenerationResultUrl(taskId)}?v=${encodeURIComponent(history.value.find(t => t.taskId === taskId)?.updatedAt || '')}` }
 function previewUrl(taskId) { return `${imageGenerationPreviewUrl(taskId)}?v=${encodeURIComponent(history.value.find(t => t.taskId === taskId)?.updatedAt || '')}` }
 function shortPrompt(prompt) { return prompt?.length > 72 ? `${prompt.slice(0, 72)}…` : prompt }

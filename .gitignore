@@ -71,3 +71,10 @@ backen/**/.env*
 
 
 # Root README.md stays trackable for public project overview.
+
+!deploy/task_state.py
+!deploy/tests/
+!deploy/tests/test_task_state.py
+
+!deploy/release_backup.py
+!deploy/tests/test_release_backup.py

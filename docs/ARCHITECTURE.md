@@ -8,7 +8,7 @@
 
 已有基础值得保留：前端路由懒加载、同源 API 与 HttpOnly 会话、后端有界单 worker 队列、任务权限、婚恋 SQL 事务和可重试补偿、Zotero 完整快照发布、PPT 固定导出/真实渲染/质量门、GeckoView 可信源桥接。优化应围绕这些边界演进。
 
-## 首轮落地后的模块关系
+## 首轮落地后的模块关系（历史基线）
 
 下图表达主要允许依赖，不是所有类的调用图；箭头由调用方指向依赖方。
 
@@ -82,3 +82,13 @@ flowchart TD
 本轮没有改数据库格式、生产配置、资源阈值、前端或Android，也没有部署。分支中的Java类型变更需 clean 构建清除旧class。
 
 与原工作区关系探索改动合并时，检查新加的 `RelationshipReportAgent` 及相关测试：原 `com.web.backen.translate.LlmService` 引用改为 `com.web.backen.ai.LlmClient`；原 `com.web.backen.imagegen.OpenAiImageClient` 引用改为 `com.web.backen.ai.OpenAiImageClient`。在合并后的完整源码上重新运行测试，本分支通过不等于未提交功能已被验收。
+
+## 第二批实施状态（2026-09-11）
+
+`settings.RuntimeConfigService` 已从认证包独立；`runtime` 提供路径解析、进程树退出、原子快照及单实例资源许可。四类创建入口共享维护锁；root 可通过 `/api/admin/operations` 查看汇总，通过带 CSRF 的 `PUT /api/admin/operations/admission` 提交 `{"action":"pause"}` 或 `{"action":"resume"}`。管理员不能移除发布流程持有的锁。重任务许可为1，JVM AI HTTP客户端许可为2；后者不统计 Codex/BabelDOC 自己发出的网络请求，也不是分布式限流。
+
+翻译/PPT/生图的写盘失败会保留待补偿证据，定时重试持久化与退款；清理排除待补偿、未持久化和仍在退出的任务。损坏快照阻止启动，原始文件保留供恢复。停机中断标记不会阻止已取消任务保存快照，随后恢复中断标记。婚恋继续使用 SQL 恢复协议。
+
+前端 API 已按九个领域拆分并保留索引再导出；四类任务使用可取消串行轮询，终态仍有补偿时继续查询。PPT保留SSE进度提示；翻译和生图用状态接口恢复进度。预览请求切换/卸载时取消。
+
+本批已加入四模块发布扫描、SQL/运行文件/配置备份和CI工作流；复杂页面拆分仍有后续，部署整机演练、远端CI及真实混合产物验收仍按[完整实施计划](plans/2026-09-11-architecture-completion.md)推进，不能把单元测试或浏览器接口夹具当作生产验证。未部署。

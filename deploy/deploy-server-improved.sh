@@ -209,8 +209,13 @@ set +a
 mkdir -p "$INSTALL_DIR/.run"
 DEPLOYMENT_LOCK="${DEPLOYMENT_LOCK_PATH:-$INSTALL_DIR/.run/deployment.lock}"
 mkdir -p "$(dirname "$DEPLOYMENT_LOCK")"
-touch "$DEPLOYMENT_LOCK"
-cleanup_deployment_lock() { rm -f "$DEPLOYMENT_LOCK"; }
+[[ ! -e "$DEPLOYMENT_LOCK" ]] || die "Maintenance lock already exists; inspect its owner before deployment."
+( set -o noclobber; printf 'deployment\n' > "$DEPLOYMENT_LOCK" )
+INSTALL_MUTATED=0
+cleanup_deployment_lock() {
+  if [[ "$INSTALL_MUTATED" == "0" ]]; then rm -f "$DEPLOYMENT_LOCK"; fi
+}
+# Once files change, only the verified outer release flow may reopen admission.
 trap cleanup_deployment_lock EXIT
 
 [[ -n "${ROOT_PASSWORD:-}" && "${#ROOT_PASSWORD}" -ge 6 ]] || die "ROOT_PASSWORD in $ENV_FILE must be set and at least 6 characters."
@@ -240,39 +245,7 @@ if [[ -z "${LLM_API_KEY:-}" && -z "${BABELDOC_OPENAI_API_KEY:-}" ]]; then
 fi
 
 scan_active_tasks() {
-python3 - "$INSTALL_DIR" <<'PY'
-import glob
-import json
-import os
-import sys
-
-install_dir = sys.argv[1]
-working_dir = os.path.join(install_dir, "backen")
-
-def storage_path(env_name, default_value):
-    value = os.environ.get(env_name, default_value)
-    return os.path.normpath(value if os.path.isabs(value) else os.path.join(working_dir, value))
-
-checks = (
-    ("translation", os.path.join(storage_path("TRANSLATION_STORAGE_DIR", "../.run/translation-tasks"), "*/task.json"),
-     {"creating", "queued", "translating"}),
-    ("ppt", os.path.join(storage_path("PPT_GENERATION_STORAGE_DIR", "../.run/ppt-generation-tasks"), "*/task.json"),
-     {"creating", "queued", "generating"}),
-)
-active = []
-for kind, pattern, active_states in checks:
-    for metadata in glob.glob(pattern):
-        try:
-            with open(metadata, encoding="utf-8") as handle:
-                status = str(json.load(handle).get("status", "")).lower()
-        except (OSError, ValueError):
-            continue
-        if status in active_states:
-            active.append(f"{kind}:{os.path.basename(os.path.dirname(metadata))}:{status}")
-if active:
-    print("[x] Active heavy tasks block deployment: " + ", ".join(active), file=sys.stderr)
-    sys.exit(42)
-PY
+  python3 "$CURRENT_DIR/task_state.py" "$INSTALL_DIR"
 }
 
 # Let requests that passed the pre-lock check persist their "creating" marker,
@@ -284,7 +257,7 @@ fi
 
 if systemctl list-unit-files "$SERVICE_NAME.service" >/dev/null 2>&1; then
   info "Stopping existing backend service before replacing files..."
-  systemctl stop "$SERVICE_NAME.service" || true
+  systemctl stop "$SERVICE_NAME.service"
   if ! scan_active_tasks; then
     rm -f "$DEPLOYMENT_LOCK"
     systemctl start "$SERVICE_NAME.service" || true
@@ -292,6 +265,14 @@ if systemctl list-unit-files "$SERVICE_NAME.service" >/dev/null 2>&1; then
   fi
 fi
 
+RECOVERY_BACKUP="${RECOVERY_BACKUP:-$INSTALL_DIR/../.web-homepage-releases/recovery-$(date +%Y%m%d-%H%M%S)}"
+if ! python3 "$CURRENT_DIR/release_backup.py" "$INSTALL_DIR" "$ENV_FILE" "$RECOVERY_BACKUP"; then
+  systemctl start "$SERVICE_NAME.service" || true
+  exit 42
+fi
+info "Private SQL/runtime/configuration backup verified: $RECOVERY_BACKUP"
+
+INSTALL_MUTATED=1
 info "Installing files to $INSTALL_DIR..."
 mkdir -p "$INSTALL_DIR/backen" "$INSTALL_DIR/front" "$INSTALL_DIR/.run/logs"
 cp "$CURRENT_DIR/backen/backen.jar" "$INSTALL_DIR/backen/backen.jar.new"
@@ -455,6 +436,15 @@ ok "Environment file: $ENV_FILE"
 ok "Frontend root: $INSTALL_DIR/front/dist"
 INSTALL_SCRIPT
   chmod +x "$PACKAGE_ROOT/install-linux.sh"
+  cat > "$PACKAGE_ROOT/resume-admission.sh" <<'RESUME_SCRIPT'
+#!/usr/bin/env bash
+set -euo pipefail
+source "$CONFIG_DIR/web.env"
+lock="${DEPLOYMENT_LOCK_PATH:-$INSTALL_DIR/.run/deployment.lock}"
+[[ "$(cat "$lock")" == deployment ]] || exit 1
+rm -- "$lock"
+RESUME_SCRIPT
+  chmod +x "$PACKAGE_ROOT/resume-admission.sh"
 }
 
 build_release() {
@@ -495,6 +485,8 @@ build_release() {
 
   info "Collecting release files..."
   cp "$ROOT/backen/target/backen-0.0.1-SNAPSHOT.jar" "$PACKAGE_ROOT/backen/backen.jar"
+  cp "$ROOT/deploy/task_state.py" "$PACKAGE_ROOT/task_state.py"
+  cp "$ROOT/deploy/release_backup.py" "$PACKAGE_ROOT/release_backup.py"
   cp "$ROOT/backen/package.json" "$PACKAGE_ROOT/backen/package.json"
   cp "$ROOT/backen/package-lock.json" "$PACKAGE_ROOT/backen/package-lock.json"
   cp -R "$ROOT/backen/scripts" "$PACKAGE_ROOT/backen/scripts"
@@ -590,30 +582,9 @@ rollback_remote_release() {
   [[ "${DRY_RUN:-0}" == "1" ]] && return 0
   [[ "${INSTALL_ATTEMPTED:-0}" == "1" ]] || return 0
   [[ "${LOCAL_VERIFY_PASSED:-0}" != "1" ]] || return 0
-  warn "Install or local verification failed; attempting to restore server backup: $REMOTE_BACKUP"
-  "${SSH_TTY[@]}" \
-    "set -e; \
-    if [ -f '$REMOTE_BACKUP' ]; then \
-      sudo systemctl stop '$SERVICE_NAME.service' || true; \
-      preserve_run='$REMOTE_PARENT/.web-homepage-run-$VERSION'; \
-      sudo rm -rf \"\$preserve_run\"; \
-      if [ -d '$REMOTE_DIR/.run' ]; then sudo mv '$REMOTE_DIR/.run' \"\$preserve_run\"; fi; \
-      sudo rm -rf '$REMOTE_DIR'; \
-      sudo mkdir -p '$REMOTE_PARENT'; \
-      sudo tar -xzf '$REMOTE_BACKUP' -C '$REMOTE_PARENT'; \
-      if [ -d \"\$preserve_run\" ]; then sudo rm -rf '$REMOTE_DIR/.run'; sudo mv \"\$preserve_run\" '$REMOTE_DIR/.run'; fi; \
-      if [ -f '$REMOTE_PPT_TASK_ARCHIVE' ]; then \
-        sudo rm -rf '$REMOTE_DIR/.run/ppt-generation-tasks'; \
-        sudo mkdir -p '$REMOTE_DIR/.run'; \
-        sudo tar -xzf '$REMOTE_PPT_TASK_ARCHIVE' -C '$REMOTE_DIR/.run'; \
-      fi; \
-      sudo systemctl daemon-reload; \
-      sudo systemctl start '$SERVICE_NAME.service'; \
-      if command -v nginx >/dev/null 2>&1; then sudo nginx -t && sudo systemctl reload nginx || true; fi; \
-    else \
-      echo '[!] Backup archive missing: $REMOTE_BACKUP' >&2; \
-      exit 1; \
-    fi" || true
+  warn "Install or verification failed. Automatic data rollback is disabled: the new application may already have written SQL/runtime state."
+  warn "Preserve the current installation and recovery bundle. Follow DEPLOYMENT.md to select a consistent recovery point: $REMOTE_BACKUP.recovery"
+
 }
 
 on_exit() {
@@ -644,12 +615,12 @@ info "Installing release. sudo may ask for the server password..."
 INSTALL_ATTEMPTED=1
 set +e
 run_cmd "${SSH_TTY[@]}" \
-  "sudo env INSTALL_DIR='$REMOTE_DIR' CONFIG_DIR='$CONFIG_DIR' SERVICE_NAME='$SERVICE_NAME' NGINX_SITE_NAME='$NGINX_SITE_NAME' DOMAIN='$DOMAIN' FORCE_NGINX_CONFIG='$FORCE_NGINX_CONFIG' REQUIRE_MYSQL_CONFIG='$REQUIRE_MYSQL_CONFIG' PPT_PRE_CODEX_ARCHIVE='$REMOTE_PPT_TASK_ARCHIVE' bash '$REMOTE_PACKAGE/install-linux.sh'"
+  "sudo env INSTALL_DIR='$REMOTE_DIR' CONFIG_DIR='$CONFIG_DIR' SERVICE_NAME='$SERVICE_NAME' NGINX_SITE_NAME='$NGINX_SITE_NAME' DOMAIN='$DOMAIN' FORCE_NGINX_CONFIG='$FORCE_NGINX_CONFIG' REQUIRE_MYSQL_CONFIG='$REQUIRE_MYSQL_CONFIG' PPT_PRE_CODEX_ARCHIVE='$REMOTE_PPT_TASK_ARCHIVE' RECOVERY_BACKUP='$REMOTE_BACKUP.recovery' bash '$REMOTE_PACKAGE/install-linux.sh'"
 INSTALL_STATUS=$?
 set -e
 if [[ "$INSTALL_STATUS" -eq 42 ]]; then
   INSTALL_ATTEMPTED=0
-  warn "Deployment postponed because a translation or presentation task is active."
+  warn "Deployment postponed because a task is active, compensating, or cannot be verified."
   exit 42
 fi
 if [[ "$INSTALL_STATUS" -ne 0 ]]; then
@@ -676,10 +647,14 @@ LOCAL_VERIFY_PASSED=1
 info "Verifying public response: $PUBLIC_URL"
 run_cmd "${SSH[@]}" "curl -fsSI '$PUBLIC_URL' >/dev/null"
 
+info "Reopening admission after local and public verification..."
+run_cmd "${SSH_TTY[@]}" "sudo env INSTALL_DIR='$REMOTE_DIR' CONFIG_DIR='$CONFIG_DIR' bash '$REMOTE_PACKAGE/resume-admission.sh'"
+
 info "Cleaning extracted staging directory..."
 cleanup_remote_stage
 
 info "Pruning old release archives on server..."
+# Recovery bundles are deliberately retained for explicit review; no automatic SQL/runtime deletion.
 run_cmd "${SSH[@]}" \
   "set -e; \
   cd '$REMOTE_UPLOAD_DIR'; \
@@ -696,5 +671,6 @@ if [[ "$DRY_RUN" == "1" ]]; then
 else
   ok "Deployment completed: $PUBLIC_URL"
 fi
-ok "Server backup: $REMOTE_BACKUP"
+ok "Code backup: $REMOTE_BACKUP"
+ok "Private SQL/runtime/configuration recovery: $REMOTE_BACKUP.recovery"
 ok "Uploaded archive: $REMOTE_ARCHIVE"

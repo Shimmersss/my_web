@@ -119,6 +119,9 @@ CREATE TABLE IF NOT EXISTS matchmaking_reports (
     user_id BIGINT NOT NULL,
     report_payload MEDIUMTEXT NOT NULL,
     source_version VARCHAR(64) NOT NULL,
+    report_version VARCHAR(64) NULL,
+    title VARCHAR(64) NULL,
+    personality_label VARCHAR(160) NULL,
     total_score DOUBLE NULL,
     level VARCHAR(20) NULL,
     city VARCHAR(64) NULL,
@@ -168,5 +171,17 @@ CREATE TABLE IF NOT EXISTS matchmaking_tasks (
     id VARCHAR(36) PRIMARY KEY,
     user_id BIGINT NOT NULL,
     payload TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS matchmaking_tarot_draws (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    deck_version VARCHAR(64) NOT NULL,
+    cards_json TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    consumed_task_id VARCHAR(36) NULL,
+    consumed_report_id VARCHAR(36) NULL,
     FOREIGN KEY (user_id) REFERENCES users(id)
 );

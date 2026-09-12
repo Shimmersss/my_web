@@ -42,10 +42,16 @@ public class MimoMatchmakingReportAgent implements MatchmakingReportAgent {
     private final LlmService llm;
     private final RuntimeConfigService runtime;
     private final ObjectMapper mapper;
+    private final RelationshipReportAgent relationship;
 
-    public MimoMatchmakingReportAgent(LlmService llm, RuntimeConfigService runtime, ObjectMapper mapper) { this.llm = llm; this.runtime = runtime; this.mapper = mapper; }
+    public MimoMatchmakingReportAgent(LlmService llm, RuntimeConfigService runtime, ObjectMapper mapper) {
+        this.llm = llm; this.runtime = runtime; this.mapper = mapper;
+        this.relationship = new RelationshipReportAgent(llm, runtime, mapper);
+    }
 
     @Override public Map<String, Object> write(Map<String, Object> structuredInput) {
+        if (MatchmakingService.RELATIONSHIP_REPORT_VERSION.equals(String.valueOf(structuredInput.get("reportVersion"))))
+            return relationship.write(structuredInput);
         String payload;
         try { payload = mapper.writeValueAsString(structuredInput); }
         catch (Exception e) { throw new IllegalStateException("报告输入序列化失败", e); }

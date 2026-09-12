@@ -5,7 +5,12 @@
       <router-link class="back-link" to="/matchmaking-report">返回报告列表</router-link>
     </section>
     <section v-if="loading" class="notice">正在加载报告…</section>
-    <template v-if="report">
+    <RelationshipReportView
+      v-if="report && isRelationshipReport"
+      :report="report"
+      @delete="deleteReport"
+    />
+    <template v-else-if="report">
       <div class="report-layout">
         <aside class="report-cover">
           <div class="cover-inner">
@@ -252,6 +257,7 @@ import {
 } from "@/api";
 import { useAuthStore } from "@/stores/auth";
 import { trialDeleteWarning } from "@/utils/matchmakingTrial";
+import RelationshipReportView from "./RelationshipReportView.vue";
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
@@ -261,6 +267,9 @@ const loading = ref(true),
   copied = ref(false),
   selectedDim = ref(""),
   activeSection = ref("overview");
+const isRelationshipReport = computed(
+  () => report.value?.reportVersion === "relationship-exploration-v1",
+);
 const DIM_COLORS = ["#e58ca4", "#d9aa67", "#9fc3b0", "#88a9ca", "#b29acb"];
 const segments = computed(() => {
   const dimensions = report.value?.scores?.dimensions || [];

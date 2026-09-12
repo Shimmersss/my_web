@@ -22,9 +22,13 @@ public class MatchmakingSchemaMigration {
         addColumnIfMissing("matchmaking_reports", "level", "VARCHAR(20) NULL");
         addColumnIfMissing("matchmaking_reports", "city", "VARCHAR(64) NULL");
         addColumnIfMissing("matchmaking_reports", "has_image", "BOOLEAN NULL");
+        addColumnIfMissing("matchmaking_reports", "report_version", "VARCHAR(64) NULL");
+        addColumnIfMissing("matchmaking_reports", "title", "VARCHAR(64) NULL");
+        addColumnIfMissing("matchmaking_reports", "personality_label", "VARCHAR(160) NULL");
         ensureReportPayloadCapacity();
         ensureTrialCodesTable();
         addColumnIfMissing("matchmaking_trial_codes", "code_plain", "VARCHAR(64) NULL");
+        ensureTarotDrawsTable();
     }
 
     private void ensureTrialCodesTable() {
@@ -47,6 +51,22 @@ public class MatchmakingSchemaMigration {
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     FOREIGN KEY (guest_user_id) REFERENCES users(id),
                     FOREIGN KEY (created_by) REFERENCES users(id)
+                )
+                """);
+    }
+
+    private void ensureTarotDrawsTable() {
+        jdbc.execute("""
+                CREATE TABLE IF NOT EXISTS matchmaking_tarot_draws (
+                    id VARCHAR(36) PRIMARY KEY,
+                    user_id BIGINT NOT NULL,
+                    deck_version VARCHAR(64) NOT NULL,
+                    cards_json TEXT NOT NULL,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    expires_at TIMESTAMP NOT NULL,
+                    consumed_task_id VARCHAR(36) NULL,
+                    consumed_report_id VARCHAR(36) NULL,
+                    FOREIGN KEY (user_id) REFERENCES users(id)
                 )
                 """);
     }

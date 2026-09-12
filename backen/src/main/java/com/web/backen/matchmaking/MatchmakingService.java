@@ -33,9 +33,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
 @Service
+@org.springframework.context.annotation.DependsOn("matchmakingSchemaMigration")
 public class MatchmakingService {
     private static final Logger log = LoggerFactory.getLogger(MatchmakingService.class);
     static final String REPORT_VERSION = "market-positioning-v3";
+    static final String RELATIONSHIP_REPORT_VERSION = "relationship-exploration-v1";
+    static final String CONTENT_VERSION = "relationship-content-v1";
     private static final int QUEUE_CAPACITY = 3;
     private static final int MAX_LISTED_TASKS = 10;
     /** Terminal task snapshots only feed the "recent tasks" list; reports live in MySQL, so a day is enough. */
@@ -68,20 +71,29 @@ public class MatchmakingService {
     private final TransactionTemplate transactions;
     private final RuntimeConfigService runtime;
     private final MatchmakingTrialService trials;
+    private final MatchmakingTarotService tarot;
     private final String storageDir;
     private final LinkedBlockingQueue<MatchmakingTask> queue = new LinkedBlockingQueue<>(QUEUE_CAPACITY);
     private Thread worker;
     private final Map<String, MatchmakingTask> tasks = new ConcurrentHashMap<>();
 
+    @org.springframework.beans.factory.annotation.Autowired
     public MatchmakingService(JdbcTemplate jdbc, ObjectMapper mapper, MatchmakingReportAgent agent, QuotaService quota,
                               OpenAiImageClient imageClient, TransactionTemplate transactions,
                               RuntimeConfigService runtime,
-                              MatchmakingTrialService trials,
+                              MatchmakingTrialService trials, MatchmakingTarotService tarot,
                               @Value("${matchmaking.storage-dir:../.run/matchmaking-tasks}") String storageDir) {
         this.jdbc = jdbc; this.mapper = mapper; this.agent = agent; this.quota = quota;
         this.imageClient = imageClient; this.transactions = transactions != null ? transactions
                 : jdbc == null ? null : new TransactionTemplate(new DataSourceTransactionManager(jdbc.getDataSource())); this.runtime = runtime;
-        this.trials = trials; this.storageDir = storageDir;
+        this.trials = trials; this.tarot = tarot; this.storageDir = storageDir;
+    }
+
+    /** Compatibility constructor retained for focused legacy tests and callers. */
+    public MatchmakingService(JdbcTemplate jdbc, ObjectMapper mapper, MatchmakingReportAgent agent, QuotaService quota,
+                              OpenAiImageClient imageClient, TransactionTemplate transactions,
+                              RuntimeConfigService runtime, MatchmakingTrialService trials, String storageDir) {
+        this(jdbc, mapper, agent, quota, imageClient, transactions, runtime, trials, null, storageDir);
     }
 
     @PostConstruct void init() {
@@ -167,6 +179,10 @@ public class MatchmakingService {
     }
 
     private void run(MatchmakingTask task) {
+        if (isRelationshipTask(task)) {
+            runRelationship(task);
+            return;
+        }
         try {
             setStage(task, "scoring");
             Map<String, Object> profile = new LinkedHashMap<>(task.request); // Validated before transactional admission.
@@ -230,6 +246,86 @@ public class MatchmakingService {
         }
     }
 
+    private void runRelationship(MatchmakingTask task) {
+        try {
+            setStage(task, "scoring");
+            Map<String, Object> profile = new LinkedHashMap<>(task.request);
+            Map<String, Object> personality = RelationshipPersonality.summarize(
+                    string(profile, "personalityMode"), string(profile, "declaredType"), map(profile.get("personalityAnswers")));
+            List<Map<String, Object>> preferences = relationshipPreferences(profile);
+            Map<String, Object> draw = map(profile.get("tarot"));
+            setStage(task, "writing");
+            Map<String, Object> input = new LinkedHashMap<>();
+            input.put("reportVersion", RELATIONSHIP_REPORT_VERSION);
+            input.put("questionnaireVersion", string(profile, "questionnaireVersion"));
+            input.put("personalityVersion", string(profile, "personalityVersion"));
+            input.put("contentVersion", CONTENT_VERSION);
+            input.put("profile", relationshipAgentProfile(profile));
+            input.put("personality", personality);
+            input.put("personalityEvidence", RelationshipQuestionnaire.PERSONALITY_QUESTIONS.stream()
+                    .filter(q -> map(profile.get("personalityAnswers")).containsKey(q.id()))
+                    .map(q -> Map.of("id", q.id(), "question", q.prompt(), "answer",
+                            number(map(profile.get("personalityAnswers")), q.id()) == 1 ? q.left() : q.right())).toList());
+            input.put("relationshipPreferences", preferences);
+            input.put("tarot", draw);
+            input.put("titleCandidates", RelationshipQuestionnaire.catalogue().get("titles"));
+            Map<String, Object> narrative = agent.write(input);
+            String partnerImage = null;
+            if (task.includePartnerImage) {
+                setStage(task, "illustrating");
+                partnerImage = generatePartnerImage(profile, narrative);
+            }
+            setStage(task, "saving");
+            String reportId = UUID.randomUUID().toString();
+            String profileId = UUID.randomUUID().toString();
+            Instant expiry = Instant.now().plusSeconds(30L * 24 * 3600);
+            String profilePayload;
+            String reportPayload;
+            try {
+                profilePayload = mapper.writeValueAsString(safeRelationshipProfile(profile));
+                reportPayload = mapper.writeValueAsString(buildRelationshipReport(
+                        task, reportId, profile, personality, preferences, draw, narrative, partnerImage, expiry));
+            } catch (Exception e) { throw new IllegalStateException("关系报告序列化失败", e); }
+            synchronized (this) {
+                if (!tasks.containsKey(task.id) || !"running".equals(task.status)) return;
+                MatchmakingTask completed = MatchmakingTask.fromSnapshot(task.snapshot());
+                completed.reportId = reportId; completed.status = "done"; completed.stage = "done";
+                completed.updatedAt = Instant.now().toString(); completed.request = Map.of();
+                String savedPartnerImage = partnerImage;
+                transactions.executeWithoutResult(status -> {
+                    jdbc.update("INSERT INTO matchmaking_profiles(id,user_id,payload,expires_at) VALUES(?,?,?,?)",
+                            profileId, task.userId, profilePayload, Timestamp.from(expiry));
+                    Map<?, ?> identity = narrative.get("identity") instanceof Map<?, ?> m ? m : Map.of();
+                    String title = text(identity.containsKey("titleId") ? identity.get("titleId") : identity.get("title"));
+                    String label = text(personality.get("label"));
+                    jdbc.update("""
+                            INSERT INTO matchmaking_reports
+                              (id,profile_id,user_id,report_payload,source_version,report_version,title,personality_label,
+                               total_score,level,city,has_image,expires_at)
+                            VALUES(?,?,?,?,?,?,?,?,NULL,NULL,?,?,?)
+                            """, reportId, profileId, task.userId, reportPayload, CONTENT_VERSION,
+                            RELATIONSHIP_REPORT_VERSION, title.isBlank() ? null : title,
+                            label.isBlank() ? null : label, null, savedPartnerImage != null, Timestamp.from(expiry));
+                    if (tarot != null) tarot.markReport(task.tarotDrawId, task.id, reportId);
+                    if (task.trial) trials.markCompleted(task.userId, task.id, reportId);
+                    persist(completed);
+                });
+                task.reportId = completed.reportId; task.status = completed.status; task.stage = completed.stage;
+                task.updatedAt = completed.updatedAt; task.request = Map.of();
+            }
+            pruneReportsQuietly();
+        } catch (Exception e) {
+            String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage().replaceAll("[\\r\\n]+", " ");
+            log.warn("关系探索报告任务 {} 失败: {}", task.id, message.substring(0, Math.min(180, message.length())));
+            synchronized (this) {
+                if (!tasks.containsKey(task.id) || "error".equals(task.status)) return;
+                task.reportId = ""; task.status = "error"; task.stage = "error";
+                task.updatedAt = Instant.now().toString(); task.compensationPending = true;
+                settleFailure(task);
+            }
+        }
+    }
+
     private Map<String, Object> buildReport(MatchmakingTask task, String reportId, Map<String, Object> profile,
                                             Map<String, Object> context, Map<String, Object> ledger,
                                             Map<String, Object> scores, Map<String, Object> narrative,
@@ -241,6 +337,66 @@ public class MatchmakingService {
         if (partnerImage != null) report.put("partnerImage", partnerImage);
         report.put("createdAt", Instant.now().toString()); report.put("expiresAt", expiry.toString());
         return report;
+    }
+
+    private Map<String, Object> buildRelationshipReport(MatchmakingTask task, String reportId, Map<String, Object> profile,
+                                                        Map<String, Object> personality, List<Map<String, Object>> preferences,
+                                                        Map<String, Object> draw, Map<String, Object> narrative,
+                                                        String partnerImage, Instant expiry) {
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("id", reportId); report.put("reportVersion", RELATIONSHIP_REPORT_VERSION);
+        report.put("questionnaireVersion", string(profile, "questionnaireVersion"));
+        report.put("personalityVersion", string(profile, "personalityVersion"));
+        report.put("contentVersion", CONTENT_VERSION); report.put("deckVersion", TarotDeck.VERSION);
+        report.put("profile", safeRelationshipProfile(profile)); report.put("personality", personality);
+        report.put("relationshipPreferences", preferences); report.put("tarot", draw); report.put("narrative", narrative);
+        for (String key : List.of("identity", "tarotReadings", "relationshipManual", "recurringPatterns", "attraction", "nextSteps")) {
+            if (narrative.containsKey(key)) report.put(key, narrative.get(key));
+        }
+        if (!map(profile.get("lifeContext")).isEmpty()) report.put("lifeLedger", lifeLedger(profile));
+        if (partnerImage != null) report.put("partnerImage", partnerImage);
+        report.put("createdAt", Instant.now().toString()); report.put("expiresAt", expiry.toString());
+        return report;
+    }
+
+    private List<Map<String, Object>> relationshipPreferences(Map<String, Object> profile) {
+        Map<String, Object> answers = map(profile.get("relationshipAnswers"));
+        return RelationshipQuestionnaire.RELATIONSHIP_QUESTIONS.stream().map(question -> {
+            int value = (int) number(answers, question.id());
+            String tendency = value == 0 ? "两端都可能" : value < 0 ? question.left() : question.right();
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", question.id()); item.put("name", question.name()); item.put("answerValue", value);
+            item.put("tendencyLabel", tendency); item.put("left", question.left()); item.put("right", question.right());
+            return item;
+        }).toList();
+    }
+
+    private Map<String, Object> relationshipAgentProfile(Map<String, Object> profile) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (String key : List.of("relationshipStage", "explorationIntent", "personalityMode", "declaredType", "personalNote")) {
+            Object value = profile.get(key);
+            if (value != null && !String.valueOf(value).isBlank()) result.put(key, value);
+        }
+        if (!map(profile.get("lifeContext")).isEmpty()) result.put("lifeContext", profile.get("lifeContext"));
+        if (!map(profile.get("partnerPreferences")).isEmpty()) result.put("partnerPreferences", profile.get("partnerPreferences"));
+        return result;
+    }
+
+    private Map<String, Object> safeRelationshipProfile(Map<String, Object> profile) {
+        Map<String, Object> result = new LinkedHashMap<>(relationshipAgentProfile(profile));
+        result.remove("personalNote");
+        if (!string(profile, "personalNote").isBlank()) result.put("personalNote", string(profile, "personalNote"));
+        return result;
+    }
+
+    private Map<String, Object> lifeLedger(Map<String, Object> profile) {
+        Map<String, Object> context = map(profile.get("lifeContext"));
+        Map<String, Object> ledger = new LinkedHashMap<>();
+        ledger.put("city", context.getOrDefault("city", null));
+        ledger.put("workRhythm", context.getOrDefault("workRhythm", null));
+        ledger.put("livingExpectation", context.getOrDefault("livingExpectation", null));
+        ledger.put("missing", context.isEmpty() ? "未填写生活底稿" : "只展示你主动提供的生活信息");
+        return ledger;
     }
 
     private synchronized void setStage(MatchmakingTask task, String stage) {
@@ -269,6 +425,7 @@ public class MatchmakingService {
             transactions.executeWithoutResult(status -> {
                 if (task.trial) trials.markRetryable(task.userId, task.id);
                 else if (task.transactionId > 0) quota.refund(task.transactionId, "婚恋报告任务失败退款");
+                if (isRelationshipTask(task) && tarot != null) tarot.restoreAfterFailure(task.tarotDrawId, task.id);
                 task.compensationPending = false;
                 task.error = task.trial ? "报告生成未完成，可免费重试" : "报告生成未完成，积分已退还";
                 persist(task);
@@ -301,7 +458,21 @@ public class MatchmakingService {
             throw new IllegalStateException("婚恋任务记录不存在");
     }
 
-    public Map<String, Object> catalogue() { return MatchmakingBenchmarks.catalogue(); }
+    public Map<String, Object> catalogue() {
+        Map<String, Object> result = new LinkedHashMap<>(MatchmakingBenchmarks.catalogue());
+        result.putAll(RelationshipQuestionnaire.catalogue());
+        result.put("tarotDeckVersion", TarotDeck.VERSION);
+        return result;
+    }
+    public Map<String, Object> drawTarot(AuthUser user) {
+        if (tarot == null) throw new AuthException(503, "塔罗牌阵服务暂不可用");
+        if (runtime != null && !runtime.relationshipEnabled()) throw new AuthException(403, "关系探索报告暂未开放");
+        return tarot.draw(user.id());
+    }
+    public Map<String, Object> currentTarot(AuthUser user) {
+        if (tarot == null) { Map<String, Object> empty = new LinkedHashMap<>(); empty.put("draw", null); return empty; }
+        return tarot.current(user.id());
+    }
 
     // Synchronize admission with deletion/finalization; the service intentionally has one worker instance.
     public synchronized Map<String, Object> createTask(AuthUser user, Map<String, Object> body) {
@@ -309,10 +480,12 @@ public class MatchmakingService {
         boolean busy = tasks.values().stream().anyMatch(t -> t.userId == user.id()
                 && ("queued".equals(t.status) || "running".equals(t.status)));
         if (!user.isMatchmakingTrial() && busy) throw new AuthException(429, "已有报告在生成中，请等待完成后再提交");
-        Map<String, Object> profile = validate(body);
-        MatchmakingBenchmarks.context(string(profile, "city"));
-        boolean imageOn = Boolean.TRUE.equals(body.get("includePartnerImage"))
-                || "true".equalsIgnoreCase(String.valueOf(body.get("includePartnerImage")));
+        boolean relationship = body != null && RELATIONSHIP_REPORT_VERSION.equals(string(body, "reportVersion"));
+        if (relationship && runtime != null && !runtime.relationshipEnabled())
+            throw new AuthException(403, "关系探索报告暂未开放");
+        Map<String, Object> profile = relationship ? validateRelationship(body) : validate(body);
+        if (!relationship) MatchmakingBenchmarks.context(string(profile, "city"));
+        boolean imageOn = Boolean.TRUE.equals(profile.get("includePartnerImage"));
         if (queue.remainingCapacity() == 0) throw new AuthException(503, "生成队列已满，请稍后再试");
         boolean trial = user.isMatchmakingTrial();
         String taskId = UUID.randomUUID().toString();
@@ -326,14 +499,20 @@ public class MatchmakingService {
                 cost = quota.matchmakingCreditPerReport() + (imageOn ? quota.imageCredit("medium") : 0);
                 transactionId = quota.spend(user.id(), cost, "MATCHMAKING_REPORT", taskId, "婚恋个人报告生成");
             }
+            Map<String, Object> request = new LinkedHashMap<>(profile);
+            if (relationship) {
+                if (tarot == null) throw new AuthException(503, "塔罗牌阵服务暂不可用");
+                request.put("tarot", tarot.consume(user.id(), string(profile, "drawId"), taskId));
+            }
             MatchmakingTask created = new MatchmakingTask(taskId, user.id(), transactionId, cost, trial, imageOn,
-                    new LinkedHashMap<>(profile));
+                    relationship ? RELATIONSHIP_REPORT_VERSION : REPORT_VERSION,
+                    relationship ? string(profile, "drawId") : "", request);
             insertTask(created);
             return created;
         });
         tasks.put(task.id, task);
         queue.add(task); // Admission is serialized, and the worker can only free capacity.
-        return Map.of("taskId", task.id, "credits", trial ? 0 : quota.balance(user.id()));
+        return Map.of("taskId", task.id, "credits", trial ? 0 : quota.balance(user.id()), "reportVersion", task.reportVersion);
     }
 
     public synchronized Map<String, Object> task(AuthUser user, String taskId) {
@@ -351,7 +530,8 @@ public class MatchmakingService {
     public List<Map<String, Object>> reportSummaries(AuthUser user) {
         cleanExpired();
         String select = """
-                SELECT r.id, r.user_id, u.username, tc.code_suffix, r.city, r.total_score, r.level, r.has_image, r.created_at
+                SELECT r.id, r.user_id, u.username, tc.code_suffix, r.city, r.total_score, r.level, r.has_image,
+                       r.report_version, r.title, r.personality_label, r.created_at
                 FROM matchmaking_reports r JOIN users u ON u.id=r.user_id
                 LEFT JOIN matchmaking_trial_codes tc ON tc.guest_user_id=r.user_id
                 """;
@@ -365,6 +545,8 @@ public class MatchmakingService {
                     Map<String, Object> summary = new LinkedHashMap<>();
                     summary.put("id", row.get("id")); summary.put("city", row.get("city"));
                     summary.put("total", row.get("total_score")); summary.put("level", row.get("level"));
+                    summary.put("reportVersion", row.get("report_version")); summary.put("title", row.get("title"));
+                    summary.put("personalityLabel", row.get("personality_label"));
                     String ownerLabel = ownerLabel(row);
                     summary.put("ownerUsername", ownerLabel); summary.put("ownerLabel", ownerLabel);
                     summary.put("viewerCanDelete", ((Number) row.get("user_id")).longValue() == user.id());
@@ -407,6 +589,7 @@ public class MatchmakingService {
             if (profiles.isEmpty()) throw new AuthException(404, "报告不存在或已过期");
             jdbc.update("DELETE FROM matchmaking_reports WHERE id=? AND user_id=?", reportId, user.id());
             jdbc.update("DELETE FROM matchmaking_profiles WHERE id=? AND user_id=?", profiles.get(0), user.id());
+            if (tarot != null) tarot.deleteForReport(reportId);
             for (MatchmakingTask task : associated) jdbc.update("DELETE FROM matchmaking_tasks WHERE id=?", task.id);
         });
         associated.forEach(t -> tasks.remove(t.id));
@@ -435,6 +618,7 @@ public class MatchmakingService {
             jdbc.update("DELETE FROM matchmaking_reports WHERE user_id=?", user.id());
             jdbc.update("DELETE FROM matchmaking_profiles WHERE user_id=?", user.id());
             jdbc.update("DELETE FROM matchmaking_tasks WHERE user_id=?", user.id());
+            if (tarot != null) tarot.deleteForUser(user.id());
         });
         for (MatchmakingTask task : owned) {
             task.request = Map.of(); task.status = "error";
@@ -446,16 +630,21 @@ public class MatchmakingService {
     public Map<String, Object> status(AuthUser user) {
         if (user.isMatchmakingTrial()) {
             return Map.of("creditCost", 0, "credits", 0, "retentionDays", 30,
-                    "imageLowCredits", 0, "imageMediumCredits", 0, "matchmakingTrial", true);
+                    "imageLowCredits", 0, "imageMediumCredits", 0, "matchmakingTrial", true,
+                    "relationshipEnabled", relationshipEnabled());
         }
         return Map.of("creditCost", quota.matchmakingCreditPerReport(), "credits", quota.balance(user.id()), "retentionDays", 30,
-                "imageLowCredits", quota.imageCredit("low"), "imageMediumCredits", quota.imageCredit("medium"));
+                "imageLowCredits", quota.imageCredit("low"), "imageMediumCredits", quota.imageCredit("medium"),
+                "relationshipEnabled", relationshipEnabled());
     }
+    private boolean relationshipEnabled() { return runtime != null && runtime.relationshipEnabled(); }
+    private boolean isRelationshipTask(MatchmakingTask task) { return RELATIONSHIP_REPORT_VERSION.equals(task.reportVersion); }
     /** Runs independently of user traffic so the 30-day retention promise is enforceable. */
     @Scheduled(cron = "0 15 3 * * *", zone = "Asia/Shanghai")
     public void cleanExpired() {
         jdbc.update("DELETE FROM matchmaking_reports WHERE expires_at<=CURRENT_TIMESTAMP");
         jdbc.update("DELETE FROM matchmaking_profiles WHERE expires_at<=CURRENT_TIMESTAMP");
+        if (tarot != null) tarot.cleanExpired();
         pruneReportsByConfiguredLimits();
     }
 
@@ -484,6 +673,7 @@ public class MatchmakingService {
         for (Map<String, Object> report : removed) {
             jdbc.update("DELETE FROM matchmaking_reports WHERE id=?", report.get("id"));
             jdbc.update("DELETE FROM matchmaking_profiles WHERE id=?", report.get("profile_id"));
+            if (tarot != null) tarot.deleteForReport(String.valueOf(report.get("id")));
         }
     }
 
@@ -505,7 +695,13 @@ public class MatchmakingService {
 
     Map<String, Object> validate(Map<String, Object> body) {
         if (body == null) throw new AuthException(400, "资料不能为空");
+        String requestedVersion = string(body, "reportVersion");
+        if (!requestedVersion.isBlank() && !REPORT_VERSION.equals(requestedVersion)
+                && !RELATIONSHIP_REPORT_VERSION.equals(requestedVersion))
+            throw new AuthException(400, "不支持的报告版本");
+        if (RELATIONSHIP_REPORT_VERSION.equals(requestedVersion)) return validateRelationship(body);
         Map<String, Object> p = new LinkedHashMap<>();
+        p.put("includePartnerImage", booleanValue(body.get("includePartnerImage"), false));
         p.put("city", required(body, "city", 24)); p.put("education", required(body, "education", 40));
         p.put("studyStatus", optional(body, "studyStatus", 40)); p.put("industry", required(body, "industry", 60));
         p.put("workYears", decimal(body, "workYears", 0, 50));
@@ -539,6 +735,130 @@ public class MatchmakingService {
         p.put("personality", validatePersonality(body.get("personality")));
         for (String key : List.of("savings", "housingCost", "debtPayment", "familySupport")) p.put(key, money(body, key, 0, 20_000_000));
         return p;
+    }
+
+    private Map<String, Object> validateRelationship(Map<String, Object> body) {
+        Map<String, Object> p = new LinkedHashMap<>();
+        p.put("reportVersion", RELATIONSHIP_REPORT_VERSION);
+        p.put("questionnaireVersion", exact(body, "questionnaireVersion", RelationshipQuestionnaire.QUESTIONNAIRE_VERSION));
+        p.put("personalityVersion", RelationshipQuestionnaire.PERSONALITY_VERSION);
+        p.put("relationshipStage", oneOf(body, "relationshipStage", RelationshipQuestionnaire.STAGES));
+        p.put("explorationIntent", oneOf(body, "explorationIntent", RelationshipQuestionnaire.INTENTS));
+        String mode = oneOf(body, "personalityMode", RelationshipQuestionnaire.MODES);
+        p.put("personalityMode", mode);
+        String declaredType = optional(body, "declaredType", 4).toUpperCase();
+        if ("selfReported".equals(mode)) {
+            if (!RelationshipQuestionnaire.DECLARED_TYPES.contains(declaredType)) throw new AuthException(400, "请选择有效的四字母人格类型");
+            p.put("declaredType", declaredType);
+        } else if (!declaredType.isBlank()) throw new AuthException(400, "当前人格路径不接收自填类型");
+        p.put("personalityAnswers", validatePersonality28(body.get("personalityAnswers"), "questionnaire".equals(mode)));
+        p.put("relationshipAnswers", validateRelationshipAnswers(body.get("relationshipAnswers")));
+        p.put("personalNote", optional(body, "personalNote", 200));
+        p.put("includePartnerImage", booleanValue(body.get("includePartnerImage"), false));
+        Map<String, Object> partnerPreferences = validatePartnerPreferences(body.get("partnerPreferences"));
+        p.put("partnerPreferences", partnerPreferences);
+        p.put("portraitGender", partnerPreferences.getOrDefault("gender", ""));
+        p.put("portraitAgeBand", partnerPreferences.getOrDefault("ageBand", ""));
+        p.put("portraitStyle", partnerPreferences.getOrDefault("style", ""));
+        p.put("portraitHair", partnerPreferences.getOrDefault("hair", ""));
+        p.put("portraitScene", partnerPreferences.getOrDefault("scene", ""));
+        p.put("lifeContext", validateLifeContext(body.get("lifeContext")));
+        String drawId = optional(body, "drawId", 36);
+        if (drawId.isBlank()) throw new AuthException(400, "请先完成三张抽牌");
+        p.put("drawId", drawId);
+        return p;
+    }
+
+    private String exact(Map<String, Object> body, String key, String expected) {
+        String value = optional(body, key, 80);
+        if (!expected.equals(value)) throw new AuthException(400, key + "版本不匹配");
+        return value;
+    }
+
+    private String oneOf(Map<String, Object> body, String key, Set<String> allowed) {
+        String value = optional(body, key, 80);
+        if (!allowed.contains(value)) throw new AuthException(400, key + "选项无效");
+        return value;
+    }
+
+    private Map<String, Object> validatePersonality28(Object raw, boolean required) {
+        Map<String, Object> answers = new LinkedHashMap<>();
+        if (raw == null) {
+            if (required) throw new AuthException(400, "请完成 16 题关系人格倾向问卷");
+            return answers;
+        }
+        if (!(raw instanceof Map<?, ?> values)) throw new AuthException(400, "人格问卷格式无效");
+        if (!required && !values.isEmpty()) throw new AuthException(400, "当前人格路径不接收问卷答案");
+        if (!required) return answers;
+        Set<String> allowed = RelationshipQuestionnaire.PERSONALITY_QUESTIONS.stream()
+                .map(RelationshipQuestionnaire.PersonalityQuestion::id).collect(java.util.stream.Collectors.toSet());
+        for (Object key : values.keySet()) if (!allowed.contains(String.valueOf(key))) throw new AuthException(400, "人格问卷包含未知题目");
+        for (RelationshipQuestionnaire.PersonalityQuestion question : RelationshipQuestionnaire.PERSONALITY_QUESTIONS) {
+            Object value = values.get(question.id());
+            if (value == null) throw new AuthException(400, "请完成 " + question.id() + "");
+            int number = integer(value, question.id());
+            if (number != 1 && number != 2) throw new AuthException(400, question.id() + "选项无效");
+            answers.put(question.id(), number);
+        }
+        return answers;
+    }
+
+    private Map<String, Object> validateRelationshipAnswers(Object raw) {
+        if (!(raw instanceof Map<?, ?> values)) throw new AuthException(400, "关系偏好问卷格式无效");
+        Set<String> allowed = Set.copyOf(RelationshipQuestionnaire.RELATIONSHIP_IDS);
+        for (Object key : values.keySet()) if (!allowed.contains(String.valueOf(key))) throw new AuthException(400, "关系偏好包含未知题目");
+        Map<String, Object> answers = new LinkedHashMap<>();
+        for (String id : RelationshipQuestionnaire.RELATIONSHIP_IDS) {
+            Object value = values.get(id);
+            if (value == null) throw new AuthException(400, "请完成 " + id);
+            int number = integer(value, id);
+            if (number < -2 || number > 2) throw new AuthException(400, id + "选项无效");
+            answers.put(id, number);
+        }
+        return answers;
+    }
+
+    private Map<String, Object> validatePartnerPreferences(Object raw) {
+        if (raw == null) return new LinkedHashMap<>();
+        if (!(raw instanceof Map<?, ?> values)) throw new AuthException(400, "伴侣偏好格式无效");
+        Map<String, Set<String>> allowed = Map.of(
+                "gender", Set.of("男", "女", "不指定"), "ageBand", Set.of("22-26岁", "27-31岁", "32-36岁", "36岁以上", "不指定"),
+                "style", Set.of("温柔亲切", "干练知性", "阳光活力", "沉稳安静", "不指定"),
+                "hair", Set.of("长发", "短发", "扎发或盘发", "不指定"),
+                "scene", Set.of("日常休闲", "职业装", "咖啡馆约会", "户外自然", "不指定"));
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (Object key : values.keySet()) if (!allowed.containsKey(String.valueOf(key))) throw new AuthException(400, "伴侣偏好包含未知字段");
+        allowed.forEach((key, choices) -> {
+            String value = values.get(key) == null ? "" : String.valueOf(values.get(key)).trim();
+            if (!value.isBlank() && !choices.contains(value)) throw new AuthException(400, "伴侣偏好" + key + "无效");
+            if (!value.isBlank()) result.put(key, value);
+        });
+        return result;
+    }
+
+    private Map<String, Object> validateLifeContext(Object raw) {
+        if (raw == null) return new LinkedHashMap<>();
+        if (!(raw instanceof Map<?, ?> values)) throw new AuthException(400, "生活底稿格式无效");
+        Set<String> allowed = Set.of("city", "workRhythm", "livingExpectation", "housingStatus", "cohabitationExpectation");
+        Map<String, Object> result = new LinkedHashMap<>();
+        for (Object key : values.keySet()) if (!allowed.contains(String.valueOf(key))) throw new AuthException(400, "生活底稿包含未知字段");
+        for (String key : allowed) {
+            Object value = values.get(key);
+            if (value == null) continue;
+            String text = String.valueOf(value).trim();
+            if (text.length() > 80) throw new AuthException(400, "生活底稿字段过长");
+            if (!text.isBlank()) result.put(key, text);
+        }
+        return result;
+    }
+
+    private int integer(Object raw, String key) {
+        if (raw instanceof Boolean) throw new AuthException(400, key + "数值无效");
+        try {
+            double number = Double.parseDouble(String.valueOf(raw));
+            if (!Double.isFinite(number) || number != Math.rint(number)) throw new NumberFormatException();
+            return (int) number;
+        } catch (Exception e) { throw new AuthException(400, key + "数值无效"); }
     }
     private Map<String, Object> validatePersonality(Object raw) {
         Map<String, Object> answers = new LinkedHashMap<>();
@@ -647,7 +967,17 @@ public class MatchmakingService {
     private double optionalDecimal(Map<String,Object> m,String k,double min,double max) { String raw=m.get(k)==null?"":m.get(k).toString().trim(); return raw.isBlank()?0:decimal(m,k,min,max); }
     private double money(Map<String,Object> m,String k,double min,double max) { return decimal(m,k,min,max); }
     private double decimal(Map<String,Object> m,String k,double min,double max) { try { double value=m.get(k)==null||m.get(k).toString().isBlank()?0:Double.parseDouble(m.get(k).toString()); if(!Double.isFinite(value)||value<min||value>max) throw new NumberFormatException(); return value; } catch(Exception e) { throw new AuthException(400,k+"数值无效"); } }
-    private String string(Map<String,Object> m,String key) { return String.valueOf(m.getOrDefault(key,"")); }
-    private double number(Map<String,Object> m,String key) { return ((Number)m.getOrDefault(key,0)).doubleValue(); }
+    private Map<String, Object> map(Object value) {
+        if (!(value instanceof Map<?, ?> raw)) return new LinkedHashMap<>();
+        Map<String, Object> result = new LinkedHashMap<>();
+        raw.forEach((key, item) -> result.put(String.valueOf(key), item));
+        return result;
+    }
+    private boolean booleanValue(Object value, boolean fallback) {
+        return value == null ? fallback : (value instanceof Boolean b ? b : Boolean.parseBoolean(String.valueOf(value)));
+    }
+    private String text(Object value) { return value == null ? "" : String.valueOf(value).replaceAll("[\\r\\n]+", " ").trim(); }
+    private String string(Map<String,Object> m,String key) { return m == null || m.get(key) == null ? "" : String.valueOf(m.get(key)); }
+    private double number(Map<String,Object> m,String key) { return m.get(key) instanceof Number n ? n.doubleValue() : 0d; }
     private double round(double value) { return Math.round(value * 100d) / 100d; }
 }

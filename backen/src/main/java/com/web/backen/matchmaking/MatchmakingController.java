@@ -18,6 +18,14 @@ public class MatchmakingController {
     public MatchmakingController(MatchmakingService service, AuthService auth, RuntimeConfigService runtime, QuotaService quota, MatchmakingTrialService trials) { this.service=service; this.auth=auth; this.runtime=runtime; this.quota=quota; this.trials=trials; }
     @GetMapping("/catalogue") public Map<String,Object> catalogue() { return ok(service.catalogue()); }
     @GetMapping("/status") public Map<String,Object> status(HttpServletRequest request) { return ok(service.status(access(request))); }
+    @PostMapping("/tarot-draws") public ResponseEntity<?> draw(HttpServletRequest request) {
+        try { AuthUser user=access(request); auth.requireCsrf(request); return ResponseEntity.ok(ok(service.drawTarot(user))); }
+        catch(AuthException e) { return error(e); }
+    }
+    @GetMapping("/tarot-draws/current") public ResponseEntity<?> currentDraw(HttpServletRequest request) {
+        try { return ResponseEntity.ok(ok(service.currentTarot(access(request)))); }
+        catch(AuthException e) { return error(e); }
+    }
     @PostMapping("/reports") public ResponseEntity<?> create(@RequestBody Map<String,Object> body, HttpServletRequest request) {
         try { AuthUser user=access(request); auth.requireCsrf(request); return ResponseEntity.ok(ok(service.createTask(user,body))); }
         catch(AuthException e) { return error(e); }

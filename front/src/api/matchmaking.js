@@ -9,6 +9,12 @@ export function getMatchmakingCatalogue() {
 export function getMatchmakingStatus() {
   return get("/matchmaking/status");
 }
+export function drawMatchmakingTarot() {
+  return post("/matchmaking/tarot-draws", {});
+}
+export function getCurrentMatchmakingTarot() {
+  return get("/matchmaking/tarot-draws/current");
+}
 export function getLatestMatchmakingReport() {
   return get("/matchmaking/reports/latest");
 }

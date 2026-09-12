@@ -858,7 +858,7 @@
             </div>
           </section>
         </div>
-      <section id="matchmaking-panel" class="admin-panel"><div class="panel-title"><div><span class="eyebrow">MATCHMAKING REPORT PROVIDER</span><h2>婚恋报告 / Mimo API</h2></div><button class="primary" @click="saveMatchmakingSettings">保存婚恋报告配置</button></div><p class="panel-desc">默认继承「LLM 通用模型」的 Mimo 配置。填写并保存后，只会覆盖婚恋报告节目；密钥不会返回浏览器。</p><div class="provider-card"><div class="provider-head"><div><h3>专属文本模型</h3><span>不联网检索，仅整理已校验的匿名化条件账本。</span></div><n-tag :type="matchmakingApiHint !== '未配置' ? 'success' : 'warning'" size="small" :bordered="false">{{ matchmakingApiHint }}</n-tag></div><n-input v-model:value="matchmakingForm.baseUrl" placeholder="Base URL" /><label class="provider-protocol field-gap">接口协议<select v-model="matchmakingForm.protocol"><option value="auto">自动识别（推荐）</option><option value="openai">OpenAI Chat Completions</option><option value="claude">Claude Messages</option></select></label><n-input v-model:value="matchmakingForm.model" class="field-gap" placeholder="模型名称" /><n-input v-model:value="matchmakingForm.apiKey" class="field-gap" type="password" show-password-on="click" :placeholder="matchmakingApiHint === '未配置' ? '输入 Key' : '留空保留当前 Key'" /><div class="provider-actions"><button class="small" :disabled="testingProvider === 'matchmaking'" @click="testMatchmakingConnection">{{ testingProvider === 'matchmaking' ? '测试中…' : '测试连通性' }}</button><span v-if="testResults.matchmaking" class="test-result" :class="testResults.matchmaking.type">{{ testResults.matchmaking.text }}<em v-if="testResults.matchmaking.latencyMs"> · {{ testResults.matchmaking.latencyMs }} ms</em></span></div></div></section>
+      <section id="matchmaking-panel" class="admin-panel"><div class="panel-title"><div><span class="eyebrow">MOONLIT SALON PROVIDER</span><h2>月下会客厅 / 关系探索报告</h2></div><button class="primary" @click="saveMatchmakingSettings">保存会客厅配置</button></div><p class="panel-desc">默认继承「LLM 通用模型」的 Mimo 配置。密钥不会返回浏览器；入口只由 root 开放或关闭。</p><div class="provider-card"><div class="provider-head"><div><h3>关系探索文本模型</h3><span>不联网检索，只整理用户主动提供的关系线索。</span></div><n-tag :type="matchmakingApiHint !== '未配置' ? 'success' : 'warning'" size="small" :bordered="false">{{ matchmakingApiHint }}</n-tag></div><label class="provider-protocol field-gap"><input v-model="matchmakingForm.relationshipEnabled" type="checkbox" /> 开放“月下会客厅 · 关系探索报告”新建入口</label><n-input v-model:value="matchmakingForm.baseUrl" placeholder="Base URL" /><label class="provider-protocol field-gap">接口协议<select v-model="matchmakingForm.protocol"><option value="auto">自动识别（推荐）</option><option value="openai">OpenAI Chat Completions</option><option value="claude">Claude Messages</option></select></label><n-input v-model:value="matchmakingForm.model" class="field-gap" placeholder="模型名称" /><n-input v-model:value="matchmakingForm.apiKey" class="field-gap" type="password" show-password-on="click" :placeholder="matchmakingApiHint === '未配置' ? '输入 Key' : '留空保留当前 Key'" /><div class="provider-actions"><button class="small" :disabled="testingProvider === 'matchmaking'" @click="testMatchmakingConnection">{{ testingProvider === 'matchmaking' ? '测试中…' : '测试连通性' }}</button><span v-if="testResults.matchmaking" class="test-result" :class="testResults.matchmaking.type">{{ testResults.matchmaking.text }}<em v-if="testResults.matchmaking.latencyMs"> · {{ testResults.matchmaking.latencyMs }} ms</em></span></div></div></section>
       <section id="matchmaking-billing-panel" class="admin-panel"><div class="panel-title"><div><span class="eyebrow">MATCHMAKING BILLING</span><h2>婚恋报告积分</h2></div><button class="primary" @click="saveSettings">保存计费规则</button></div><p class="panel-desc">每份专属报告在模型成功生成后扣除一次积分；调用、结构校验或保存失败会自动退款。</p><div class="form-grid"><label>婚恋报告 / 份<n-input-number v-model:value="settings.matchmakingCreditPerReport" :min="1" /></label></div></section>
           </div>
         </div>
@@ -933,6 +933,7 @@ const matchmakingForm = reactive({
   model: "",
   apiKey: "",
   protocol: "auto",
+  relationshipEnabled: false,
 });
 const matchmakingApiHint = ref("未配置");
 const pptRetentionForm = reactive({ maxPerUser: 5, maxTotal: 20 });
@@ -1033,6 +1034,7 @@ function applyMatchmakingSettings(setting) {
   matchmakingForm.baseUrl = setting.baseUrl || "";
   matchmakingForm.model = setting.model || "";
   matchmakingForm.protocol = String(setting.protocol || "auto").toLowerCase();
+  matchmakingForm.relationshipEnabled = Boolean(setting.relationshipEnabled);
   matchmakingForm.apiKey = "";
   matchmakingApiHint.value = setting.apiKeyHint || "未配置";
 }

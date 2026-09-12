@@ -81,6 +81,17 @@ class MatchmakingProfileValidationTest {
         assertEquals("低于所在省居民人均可支配收入", lowerSignals.get("incomePosition"));
     }
 
+    @Test void preservesLegacyImageChoiceForBothVersionForms() {
+        for (String version : java.util.List.of("", MatchmakingService.REPORT_VERSION)) {
+            for (Object selected : java.util.List.of(true, "true")) {
+                Map<String, Object> body = baseBody();
+                body.put("reportVersion", version); body.put("includePartnerImage", selected);
+                assertEquals(true, service.validate(body).get("includePartnerImage"));
+            }
+        }
+        assertEquals(false, service.validate(baseBody()).get("includePartnerImage"));
+    }
+
     private Map<String, Object> baseBody() {
         Map<String, Object> body = new HashMap<>();
         body.put("city", "上海"); body.put("education", "硕士"); body.put("industry", "互联网");

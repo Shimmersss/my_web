@@ -227,7 +227,7 @@ const allMenuOptions = computed(() => [
     key: 'ImageGenerate'
   },
   {
-    label: '婚恋报告',
+    label: '月下会客厅',
     key: 'Matchmaking'
   },
   {

@@ -56,7 +56,7 @@
               <p class="section-kicker">02 / 快速入口</p>
               <h2 id="workflow-title">站内工具</h2>
             </div>
-            <a href="/matchmaking-report" @click.prevent="navigateTo('/matchmaking-report')">打开婚恋报告 <span aria-hidden="true">→</span></a>
+            <a href="/matchmaking-report" @click.prevent="navigateTo('/matchmaking-report')">打开月下会客厅 <span aria-hidden="true">→</span></a>
           </div>
 
           <nav class="workflow-list" aria-label="研究工作流入口">
@@ -145,7 +145,7 @@ const tools = [
   { title: '论文翻译', description: '保留版式输出双语 PDF', path: '/translate', icon: DocumentTextOutline },
   { title: 'PPT 生成', description: '从论文生成答辩材料', path: '/contact', icon: SchoolOutline },
   { title: 'GPT 生图', description: '生成图片或用参考图继续创作', path: '/image-generate', icon: ImagesOutline },
-  { title: '婚恋定位体检', description: '生成五维定位与沟通报告', path: '/matchmaking-report', icon: HeartOutline },
+  { title: '月下会客厅', description: '抽三张牌，探索你的关系倾向与下一步', path: '/matchmaking-report', icon: HeartOutline },
   { title: '开源项目', description: '浏览 GitHub 仓库与 README', path: '/news', icon: LogoGithub },
   { title: '留言板', description: '留下建议或查看站内交流', path: '/guestbook', icon: ChatbubbleEllipsesOutline }
 ]

@@ -1,0 +1,37 @@
+{
+  "version": "major-22-v1",
+  "orientation": "upright",
+  "source": {
+    "dataset": "Tarotoo Tarot Card Meanings Dataset",
+    "repository": "https://github.com/Tarotoo-com/tarotoo-tarot-dataset",
+    "commit": "8cee2b1abf399a90e760307ee4c447c4d0505cdd",
+    "license": "MIT",
+    "originalFieldPaths": {"sourceId": "id", "name": "name", "keywords": "keywords_upright", "meaning": "meaning_upright"},
+    "historicalReference": "https://en.wikisource.org/wiki/The_Pictorial_Key_to_the_Tarot/Part_3",
+    "historicalVerification": "not-completed"
+  },
+  "cards": [
+    {"id":"major-00","sourceId":0,"name":"愚者","keywordsZh":["开始","自发","开放"],"relationshipMeaningZh":"给关系留一点好奇和轻盈，先从真实的小邀请开始。"},
+    {"id":"major-01","sourceId":1,"name":"魔术师","keywordsZh":["行动","资源","表达"],"relationshipMeaningZh":"你手边已有表达在意的方式；清楚说出意图，比猜测更能让靠近发生。"},
+    {"id":"major-02","sourceId":2,"name":"女祭司","keywordsZh":["直觉","内在","安静"],"relationshipMeaningZh":"有些感受还在心里成形。先分辨直觉与想象，再选择合适的时机表达。"},
+    {"id":"major-03","sourceId":3,"name":"皇后","keywordsZh":["照顾","丰盛","创造"],"relationshipMeaningZh":"关系需要被照料，也需要彼此拥有舒服的生长空间。"},
+    {"id":"major-04","sourceId":4,"name":"皇帝","keywordsZh":["稳定","边界","担当"],"relationshipMeaningZh":"清楚的边界和可兑现的安排能带来安全感，但不要让安排替代倾听。"},
+    {"id":"major-05","sourceId":5,"name":"教皇","keywordsZh":["传统","价值","共识"],"relationshipMeaningZh":"共同看重的生活原则值得被说清；共识不是服从，而是一起确认。"},
+    {"id":"major-06","sourceId":6,"name":"恋人","keywordsZh":["连接","选择","对齐"],"relationshipMeaningZh":"吸引力之外还有选择：你可以在心动时也保留对彼此节奏的诚实。"},
+    {"id":"major-07","sourceId":7,"name":"战车","keywordsZh":["方向","推进","自控"],"relationshipMeaningZh":"靠近需要方向感。把想要推进的事拆成一次具体、可回应的邀约。"},
+    {"id":"major-08","sourceId":8,"name":"力量","keywordsZh":["耐心","勇气","温柔"],"relationshipMeaningZh":"温柔不是退让，而是有勇气照顾感受，也有勇气说出边界。"},
+    {"id":"major-09","sourceId":9,"name":"隐士","keywordsZh":["独处","反思","内在指引"],"relationshipMeaningZh":"独处能帮你整理需要，但也可以给对方一个明确的回音，避免安静被误解。"},
+    {"id":"major-10","sourceId":10,"name":"命运之轮","keywordsZh":["变化","周期","转折"],"relationshipMeaningZh":"关系节奏会变化；关注当下可选择的回应，不把偶然当成命定答案。"},
+    {"id":"major-11","sourceId":11,"name":"正义","keywordsZh":["诚实","平衡","责任"],"relationshipMeaningZh":"把事实、感受和彼此的责任分开说，关系会更容易找到公平的落点。"},
+    {"id":"major-12","sourceId":12,"name":"倒吊人","keywordsZh":["暂停","换位","放下"],"relationshipMeaningZh":"暂停不是停滞。换一个角度看清在意之处，再决定要不要继续推进。"},
+    {"id":"major-13","sourceId":13,"name":"死神","keywordsZh":["结束","更新","释放"],"relationshipMeaningZh":"一段旧的互动方式可以结束，给新的表达留下位置；它不预示灾难或固定结果。"},
+    {"id":"major-14","sourceId":14,"name":"节制","keywordsZh":["平衡","耐心","融合"],"relationshipMeaningZh":"舒服的关系常由小幅调整累积而来，既保留自己，也为对方留出余地。"},
+    {"id":"major-15","sourceId":15,"name":"恶魔","keywordsZh":["牵引","依赖","模式"],"relationshipMeaningZh":"强烈牵引值得被看见，也值得检查是否仍有选择和边界；不把吸引力等同于承诺。"},
+    {"id":"major-16","sourceId":16,"name":"高塔","keywordsZh":["松动","揭示","重建"],"relationshipMeaningZh":"旧结构松动时先保护事实和感受，再一起决定哪些规则需要重建；不把变化解释成惩罚。"},
+    {"id":"major-17","sourceId":17,"name":"星星","keywordsZh":["希望","修复","信任"],"relationshipMeaningZh":"希望可以落在可验证的小行动上，让信任慢慢重新获得，而不是只靠想象。"},
+    {"id":"major-18","sourceId":18,"name":"月亮","keywordsZh":["不确定","想象","辨认"],"relationshipMeaningZh":"不确定感会放大猜测。把能确认的问题说出来，给想象和事实各自留位置。"},
+    {"id":"major-19","sourceId":19,"name":"太阳","keywordsZh":["温暖","清晰","喜悦"],"relationshipMeaningZh":"坦率的快乐和清楚的回应会让关系更有光；分享具体开心的时刻，而不是只给结论。"},
+    {"id":"major-20","sourceId":20,"name":"审判","keywordsZh":["觉察","更新","重新选择"],"relationshipMeaningZh":"回看一次互动是为了获得新的选择，不是给自己或别人定罪。"},
+    {"id":"major-21","sourceId":21,"name":"世界","keywordsZh":["完成","整合","共同里程碑"],"relationshipMeaningZh":"阶段性的完整感来自双方都能参与的生活实践，继续保留各自的空间。"}
+  ]
+}

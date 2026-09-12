@@ -44,13 +44,13 @@ const routes = [
     path: '/matchmaking-report',
     name: 'MatchmakingReport',
     component: () => import('@/views/MatchmakingReport/index.vue'),
-    meta: { title: '婚恋条件报告', visibility: 'Matchmaking', trialEntry: true }
+    meta: { title: '月下会客厅', visibility: 'Matchmaking', trialEntry: true }
   },
   {
     path: '/matchmaking-report/:reportId',
     name: 'MatchmakingReportDetail',
     component: () => import('@/views/MatchmakingReport/ReportView.vue'),
-    meta: { title: '婚恋定位报告', visibility: 'Matchmaking' }
+    meta: { title: '月下会客厅 · 关系探索报告', visibility: 'Matchmaking' }
   },
   {
     path: '/publications',

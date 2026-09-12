@@ -673,7 +673,10 @@ run_cmd "${SSH[@]}" \
   find . -maxdepth 1 -type f -name 'web-homepage-backup-[0-9]*.tar.gz' -printf '%T@ %p\n' \
     | sort -rn | awk 'NR>$REMOTE_RELEASE_KEEP {print substr(\$0, index(\$0,\$2))}' \
     | xargs -r rm -f --; \
-  du -sh '$REMOTE_UPLOAD_DIR'"
+  # Recovery bundles intentionally contain root-readable SQL/runtime/configuration
+  # material. Their permissions must not turn a completed release into a false
+  # failure merely because the unprivileged release account cannot traverse them.
+  du -sh '$REMOTE_UPLOAD_DIR' 2>/dev/null || true"
 
 if [[ "$DRY_RUN" == "1" ]]; then
   ok "Dry run completed. No files were uploaded or installed."

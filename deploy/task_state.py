@@ -14,10 +14,12 @@ def disk_tasks(root):
     specs = [('TRANSLATION_STORAGE_DIR', 'translation-tasks'),
              ('PPT_GENERATION_STORAGE_DIR', 'ppt-generation-tasks'),
              ('IMAGE_GENERATION_STORAGE_DIR', 'image-generation-tasks')]
+    specs.append(('MATCHMAKING_STORAGE_DIR', 'matchmaking-tasks'))
     for env, directory in specs:
         path = Path(os.environ.get(env, '../.run/' + directory))
         if not path.is_absolute(): path = (backend / path).resolve()
-        for metadata in path.glob('*/task.json'):
+        pattern = '*.json' if env == 'MATCHMAKING_STORAGE_DIR' else '*/task.json'
+        for metadata in path.glob(pattern):
             with metadata.open(encoding='utf-8') as handle:
                 yield json.load(handle)
 
@@ -51,6 +53,8 @@ def mysql_command(program, args, output=None):
 
 def sql_tasks():
     # JSON is stored as TEXT; fetch payloads without passing private data to argv/logs.
+    exists = mysql_command('mysql', ['--batch', '--skip-column-names', '-e', "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name='matchmaking_tasks'"])
+    if exists.strip() == b'0': return
     raw = mysql_command('mysql', ['--batch', '--skip-column-names', '--raw', '-e', 'SELECT payload FROM matchmaking_tasks'])
     for line in raw.decode('utf-8').splitlines():
         yield json.loads(line)

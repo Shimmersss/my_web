@@ -255,7 +255,9 @@ if ! scan_active_tasks; then
   exit 42
 fi
 
-if systemctl list-unit-files "$SERVICE_NAME.service" >/dev/null 2>&1; then
+WAS_RUNNING=0
+if systemctl is-active --quiet "$SERVICE_NAME.service"; then WAS_RUNNING=1; fi
+if systemctl cat "$SERVICE_NAME.service" >/dev/null 2>&1; then
   info "Stopping existing backend service before replacing files..."
   systemctl stop "$SERVICE_NAME.service"
   if ! scan_active_tasks; then
@@ -267,8 +269,11 @@ fi
 
 RECOVERY_BACKUP="${RECOVERY_BACKUP:-$INSTALL_DIR/../.web-homepage-releases/recovery-$(date +%Y%m%d-%H%M%S)}"
 if ! python3 "$CURRENT_DIR/release_backup.py" "$INSTALL_DIR" "$ENV_FILE" "$RECOVERY_BACKUP"; then
-  systemctl start "$SERVICE_NAME.service" || true
-  exit 42
+  if [[ "$WAS_RUNNING" == "1" ]] && ! systemctl start "$SERVICE_NAME.service"; then
+    INSTALL_MUTATED=1
+    die "Backup failed and previous service could not restart; maintenance lock retained."
+  fi
+  exit 43
 fi
 info "Private SQL/runtime/configuration backup verified: $RECOVERY_BACKUP"
 
@@ -356,7 +361,7 @@ SERVICE_UNIT
 
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME.service" >/dev/null
-rm -f "$DEPLOYMENT_LOCK"
+# Keep admission closed until the outer release verification succeeds.
 systemctl start "$SERVICE_NAME.service"
 
 if [[ -d "/etc/systemd/system/$SERVICE_NAME.service.d" ]]; then
@@ -531,7 +536,11 @@ build_release() {
   info "Creating archive..."
   # macOS tar otherwise stores AppleDouble/xattr metadata. GNU tar on the
   # Linux host treats those records as warnings and may return a failing status.
-  (cd "$RELEASE_DIR" && COPYFILE_DISABLE=1 COPY_EXTENDED_ATTRIBUTES_DISABLE=1 tar -czf "$archive" web-homepage)
+  local tar_metadata_flags=()
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    tar_metadata_flags=(--no-xattrs --no-acls --no-fflags --disable-copyfile)
+  fi
+  (cd "$RELEASE_DIR" && COPYFILE_DISABLE=1 COPY_EXTENDED_ATTRIBUTES_DISABLE=1 tar "${tar_metadata_flags[@]}" -czf "$archive" web-homepage)
 
   ARCHIVE="$archive"
   ARCHIVE_NAME="$(basename "$ARCHIVE")"

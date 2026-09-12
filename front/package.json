@@ -14,7 +14,7 @@
     "check:pdf-preview": "node scripts/check-pdf-preview.mjs",
     "check:android-webview": "node scripts/check-android-webview.mjs",
     "preview": "vite preview",
-    "test:task-poller": "node --test scripts/task-poller.test.mjs scripts/request.test.mjs"
+    "test:task-poller": "node --test scripts/task-poller.test.mjs scripts/request.test.mjs scripts/ppt-preview.test.mjs"
   },
   "dependencies": {
     "@vicons/ionicons5": "^0.12.0",

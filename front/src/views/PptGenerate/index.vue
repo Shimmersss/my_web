@@ -474,10 +474,12 @@
 </template>
 
 <script setup>
+import { usePptEditor } from "./composables/usePptEditor.js";
+import { usePptPreview } from "./composables/usePptPreview.js";
 import TaskProgress from './components/TaskProgress.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useMessage } from 'naive-ui'
-import { NAlert, NButton, NEmpty, NIcon, NInput, NInputNumber, NProgress, NTag } from 'naive-ui'
+
 import {
   ColorPaletteOutline,
   DocumentTextOutline,
@@ -488,19 +490,7 @@ import {
   SparklesOutline,
   TimeOutline
 } from '@vicons/ionicons5'
-import {
-  createPptGenerationTask,
-  downloadGeneratedPpt,
-  getQuotaSettings,
-  getPptHtmlPreview,
-  getPptPreview,
-  getPptPreviewImage,
-  getPptGenerationStatus,
-  getPptTemplates,
-  getRecentPptGenerations,
-  cancelPptGenerationTask,
-  revisePptGenerationTask
-} from '@/api'
+import { createPptGenerationTask, downloadGeneratedPpt, getQuotaSettings, getPptGenerationStatus, getPptTemplates, getRecentPptGenerations, cancelPptGenerationTask, revisePptGenerationTask } from "@/api";
 import { createTaskPoller } from '@/utils/taskPoller'
 import { apiUrl, BASE_URL } from '@/utils/request'
 import { useAuthStore } from '@/stores/auth'
@@ -529,22 +519,16 @@ const recentScope = ref('own')
 const recentRetention = ref({ maxPerUser: 5, maxTotal: 20 })
 const errorMsg = ref('')
 const activeTask = ref(null)
-const previewData = ref(null)
-const previewImageUrls = ref({})
-const htmlPreviewUrl = ref('')
-const previewLoading = ref(false)
-const previewError = ref('')
 const revisionPrompt = ref('')
 const revisionSubmitting = ref(false)
-const editorVisible = ref(false)
-const editorExpanded = ref(false)
-const editorStatus = ref('正在加载项目编辑器…')
 const taskFailed = ref(false)
 const templatePreviewIndex = ref(0)
 const templatePreviewImageErrors = ref(new Set())
-const previewSelectedIndex = ref(0)
+
 const taskId = ref('')
 const taskAccessToken = ref('')
+const { previewData, previewImageUrls, htmlPreviewUrl, previewLoading, previewError, previewSelectedIndex, previewSlides, selectedPreviewSlide, loadPreview, clearPreview } = usePptPreview({ taskId, taskAccessToken, activeTask, outputFormatLabel });
+const { editorVisible, editorExpanded, editorStatus, editorUrl, toggleEditor } = usePptEditor({ taskId, activeTask, rememberTaskToken, clearPreview, setActiveTask, step, openStream, loadRecent });
 const progress = ref(0)
 const progressStage = ref('queued')
 const progressStageLabel = ref('等待后台生成')
@@ -575,8 +559,6 @@ const statusPoller = createTaskPoller({
   },
 })
 let streamGeneration = 0
-let previewGeneration = 0
-let previewAbortController = null
 let authWatchReady = false
 let pendingIdempotencyKey = ''
 const PPT_TASK_TOKENS_KEY = 'ppt-generation-task-tokens-v2'
@@ -604,10 +586,10 @@ const fontOptions = [
   { value: 'Source Han Sans SC', label: '思源黑体' },
   { value: 'SimSun', label: '宋体' }
 ]
-const previewSlides = computed(() => previewData.value?.slides || [])
+
 const formatTemplates = computed(() => templates.value.filter(item => !Array.isArray(item.formats) || item.formats.includes(outputFormat.value)))
 const selectedTemplate = computed(() => formatTemplates.value.find(item => item.key === templateKey.value) || formatTemplates.value[0] || null)
-const selectedPreviewSlide = computed(() => previewSlides.value[previewSelectedIndex.value] || null)
+
 const motionModeLabels = { auto: '自动动效', subtle: '克制动效', expressive: '强调动效', off: '无动效' }
 const preferenceSummary = computed(() => {
   const parts = [
@@ -622,7 +604,7 @@ const preferenceSummary = computed(() => {
 })
 // Vite dev server only serves the vendored editor reliably through its explicit static file.
 // A trailing directory route falls back to the app SPA and used to show the site home page.
-const editorUrl = computed(() => taskId.value ? `/pptd-editor/upstream/index.html?taskId=${encodeURIComponent(taskId.value)}` : '')
+
 const templatePreviewSlides = computed(() => buildTemplatePreviewSlides(selectedTemplate.value))
 const templateGroups = computed(() => {
   const groups = new Map()
@@ -654,7 +636,6 @@ onMounted(async () => {
   await Promise.all([loadTemplates(), loadRecent(), loadQuotaSettings()])
   authWatchReady = true
   await restoreActiveTask()
-  if (!disposed) window.addEventListener('message', handleEditorMessage)
 })
 
 watch(outputFormat, () => {
@@ -678,7 +659,6 @@ onBeforeUnmount(() => {
   closeStream()
   stopPolling()
   clearPreview()
-  window.removeEventListener('message', handleEditorMessage)
 })
 
 watch(() => auth.user?.id || null, (nextId, previousId) => {
@@ -862,75 +842,6 @@ function markTemplatePreviewImageError(index, templateKeyValue = selectedTemplat
   templatePreviewImageErrors.value = next
 }
 
-async function loadPreview() {
-  clearPreview()
-  previewError.value = ''
-  if (!taskId.value || activeTask.value?.status !== 'completed') return
-  const requestedTaskId = taskId.value
-  const requestedToken = taskAccessToken.value
-  const generation = ++previewGeneration
-  const controller = new AbortController()
-  previewAbortController = controller
-  previewLoading.value = true
-  try {
-    const res = await getPptPreview(requestedTaskId, requestedToken, { signal: controller.signal })
-    if (generation !== previewGeneration || taskId.value !== requestedTaskId || taskAccessToken.value !== requestedToken) return
-    const data = res.data || {}
-    data.slides = Array.isArray(data.slides) ? data.slides : []
-    previewData.value = data
-    previewSelectedIndex.value = Math.min(previewSelectedIndex.value, Math.max(0, data.slides.length - 1))
-    const imageFiles = [...new Set(data.slides.map(slide => slide.imageFile).filter(Boolean))].slice(0, 24)
-    const loaded = await Promise.all(imageFiles.map(async fileName => {
-      try {
-        const url = await getPptPreviewImage(requestedTaskId, fileName, requestedToken, { signal: controller.signal })
-        if (generation !== previewGeneration || taskId.value !== requestedTaskId || taskAccessToken.value !== requestedToken) {
-          URL.revokeObjectURL(url)
-          return null
-        }
-        return [fileName, url]
-      } catch {
-        return null
-      }
-    }))
-    if (generation !== previewGeneration || taskId.value !== requestedTaskId || taskAccessToken.value !== requestedToken) return
-    previewImageUrls.value = Object.fromEntries(loaded.filter(Boolean))
-    if (outputFormatLabel(activeTask.value) === 'HTML') {
-      const url = await getPptHtmlPreview(requestedTaskId, requestedToken, { signal: controller.signal })
-      if (generation !== previewGeneration || taskId.value !== requestedTaskId || taskAccessToken.value !== requestedToken) {
-        URL.revokeObjectURL(url)
-        return
-      }
-      if (htmlPreviewUrl.value) URL.revokeObjectURL(htmlPreviewUrl.value)
-      htmlPreviewUrl.value = url
-    }
-  } catch (error) {
-    if (error?.name === 'AbortError') return
-    if (generation !== previewGeneration || taskId.value !== requestedTaskId) return
-    previewError.value = error.message || '网页预览加载失败'
-  } finally {
-    if (generation === previewGeneration) {
-      previewLoading.value = false
-      previewAbortController = null
-    }
-  }
-}
-
-function clearPreview() {
-  previewGeneration += 1
-  previewLoading.value = false
-  if (previewAbortController) {
-    previewAbortController.abort()
-    previewAbortController = null
-  }
-  Object.values(previewImageUrls.value || {}).forEach(url => URL.revokeObjectURL(url))
-  previewImageUrls.value = {}
-  if (htmlPreviewUrl.value) URL.revokeObjectURL(htmlPreviewUrl.value)
-  htmlPreviewUrl.value = ''
-  previewData.value = null
-  previewError.value = ''
-  previewSelectedIndex.value = 0
-}
-
 function buildTemplatePreviewSlides(template) {
   const name = template?.name || '学术蓝'
   const design = template?.design || 'academic'
@@ -1076,37 +987,6 @@ async function downloadPptdProject() {
   try { await downloadGeneratedPpt(taskId.value, taskAccessToken.value, 'pptx', 'pptd') }
   catch (error) { errorMsg.value = error.message || 'PPTD 项目下载失败' }
 }
-
-function handleEditorMessage(event) {
-  if (event.origin !== window.location.origin) return
-  if (event.data?.type === 'pptd-editor-ready') {
-    editorStatus.value = `项目已加载：v${event.data?.version || activeTask.value?.version || 1}。可直接在画布中编辑，保存会创建新版本。`
-    return
-  }
-  if (event.data?.type === 'pptd-editor-close') {
-    editorVisible.value = false
-    editorExpanded.value = false
-    return
-  }
-  if (event.data?.type !== 'pptd-version-created') return
-  const task = event.data.task
-  if (!task?.taskId) return
-  rememberTaskToken(task.taskId, task.accessToken)
-  editorVisible.value = false
-  editorExpanded.value = false
-  clearPreview()
-  setActiveTask(task)
-  step.value = 'running'
-  openStream(task.taskId)
-  loadRecent()
-}
-
-function toggleEditor() {
-  editorVisible.value = !editorVisible.value
-  if (editorVisible.value) editorStatus.value = '正在加载项目编辑器…'
-  else editorExpanded.value = false
-}
-
 function resetForm() {
   prompt.value = ''
   researchMode.value = 'auto'
@@ -1149,7 +1029,7 @@ async function cancelCurrentPpt() {
     if (res.code !== 200) throw new Error(res.message || '取消失败')
     if (typeof res.data?.credits !== 'undefined') auth.updateCredits(res.data.credits)
     message.success('演示生成任务已取消')
-    backToForm(); loadRecentTasks()
+    backToForm(); loadRecent()
   } catch (error) { message.error(error.message || '取消失败') }
 }
 

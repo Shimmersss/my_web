@@ -135,7 +135,7 @@ Important groups / 主要配置组：
 - `BABELDOC_*`
 - `PPT_GENERATION_*`
 - `ROOT_USERNAME`, `ROOT_PASSWORD`
-- `DB_URL`, `DB_DRIVER`, `DB_USERNAME`, `DB_PASSWORD` for production MySQL
+- `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` for production MySQL; the JDBC driver is inferred from the URL
 
 本地 `.env.local` 若配置 `127.0.0.1:3306` 的 MySQL，`project.sh start/stop` 会联动 Homebrew `mysql` 服务；需要显式绕过数据库服务时设置 `PROJECT_DB_MODE=h2`。
 

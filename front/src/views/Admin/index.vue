@@ -872,26 +872,13 @@
   </main>
 </template>
 <script setup>
+import { useAccountManagement } from "./composables/useAccountManagement.js";
+import { useProviderSettings } from "./composables/useProviderSettings.js";
 import OperationsPanel from "./components/OperationsPanel.vue";
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { NAlert, NInput, NInputNumber, NModal, NTag, useMessage } from "naive-ui";
-import {
-  adjustUserCredits,
-  createInviteCode,
-  createMatchmakingTrialCode,
-  deleteAdminGuestbookEntry,
-  deleteInviteCode,
-  getAdminAccounts,
-  getAdminGuestbookEntries,
-  requestGithubRankingRefresh,
-  testAdminApiSettings,
-  updateAdminApiSettings,
-  updateAdminUserStatus,
-  updateInviteStatus,
-  updateMatchmakingTrialCode,
-  updateQuotaSettings,
-} from "@/api";
-import { trialCodeStatus as resolveTrialCodeStatus } from "@/utils/matchmakingTrial";
+import { useMessage } from "naive-ui";
+import { deleteAdminGuestbookEntry, getAdminAccounts, getAdminGuestbookEntries, requestGithubRankingRefresh, testAdminApiSettings, updateAdminApiSettings, updateQuotaSettings } from "@/api";
+
 import { useAuthStore } from "@/stores/auth";
 const visibilityForm = reactive({
   Publications: "PUBLIC",
@@ -914,23 +901,9 @@ const visibilityItems = [
 const auth = useAuthStore();
 const message = useMessage();
 const errorMsg = ref("");
-const testingProvider = ref("");
+
 const rankingRefreshLoading = ref(false);
-const testResults = reactive({});
-const apiKeyHints = reactive({
-  llm: "未配置",
-  matchmaking: "未配置",
-  research: "未配置",
-  babeldoc: "未配置",
-  zotero: "未配置",
-});
-const users = ref([]);
-const invites = ref([]);
-const trialCodes = ref([]);
-const trialExpiresAt = ref(defaultTrialExpiry());
-const createdTrialCode = ref("");
-const trialCodeModalOpen = ref(false);
-const transactions = ref([]);
+
 const guestbookEntries = ref([]);
 const guestbookType = ref("all");
 const guestbookPage = ref(1);
@@ -942,7 +915,7 @@ const stats = reactive({
   creditsIssued: 0,
   creditsSpent: 0,
 });
-const adjustForms = reactive({});
+
 const settings = reactive({
   translationCreditPerPage: 1,
   pptCreditPerTask: 10,
@@ -953,22 +926,8 @@ const settings = reactive({
   dailyCheckinEnabled: true,
   dailyCheckinCredits: 2,
 });
-const inviteForm = reactive({
-  code: "",
-  credits: 10,
-  maxUses: 1,
-  expiresAt: "",
-});
-const apiForm = reactive({
-  llm: { baseUrl: "", model: "", apiKey: "", protocol: "auto" },
-  babeldoc: { baseUrl: "", model: "", apiKey: "" },
-  zotero: { baseUrl: "", userId: "", apiKey: "" },
-  research: {
-    baseUrl: "https://api.tavily.com/search",
-    apiKey: "",
-    maxSearches: 4,
-  },
-});
+
+
 const matchmakingForm = reactive({
   baseUrl: "",
   model: "",
@@ -992,21 +951,14 @@ const rankingForm = reactive({
   monthlyLimit: 10,
   aiSummaryEnabled: true,
 });
-const providerCards = [
-  {
-    key: "llm",
-    name: "LLM 通用模型",
-    description: "翻译、GitHub 摘要与通用文本任务（演示生成不使用）",
-  },
-  {
-    key: "research",
-    name: "Tavily 联网研究与配图",
-    description:
-      "为 PPTX/HTML 提供网页研究及图片候选，开放素材源同时补充可复用图片",
-  },
-  { key: "babeldoc", name: "BabelDOC 翻译", description: "PDF 排版翻译链路" },
-  { key: "zotero", name: "Zotero 文献库", description: "文献缓存与附件代理" },
-];
+
+const {
+  users, invites, trialCodes, trialExpiresAt, createdTrialCode, trialCodeModalOpen,
+  transactions, adjustForms, inviteForm, createInvite, createTrialCode,
+  copyCreatedTrialCode, copyTrialCode, toggleTrialCode, trialCodeStatus,
+  defaultTrialExpiry, toggleInvite, deleteInvite, toggleUser, adjustCredits, inviteStatus,
+} = useAccountManagement({ message, errorMsg, loadDashboard });
+
 const statCards = computed(() => [
   {
     label: "用户总数",
@@ -1029,6 +981,11 @@ const statCards = computed(() => [
     hint: "翻译、PPT 与生图任务",
   },
 ]);
+
+const {
+  testingProvider, testResults, apiKeyHints, apiForm, providerCards,
+  saveApiSettings, testApiConnection, applyProviderSettings,
+} = useProviderSettings({ message, errorMsg, rankingForm, applyApiSettings });
 
 function formatAdminNumber(value) {
   return new Intl.NumberFormat("zh-CN").format(Number(value || 0));
@@ -1057,18 +1014,7 @@ async function loadDashboard() {
   }
 }
 function applyApiSettings(d = {}) {
-  for (const k of ["llm", "research", "babeldoc", "zotero"])
-    if (d[k]) {
-      apiForm[k].baseUrl = d[k].baseUrl || "";
-      if ("model" in apiForm[k]) apiForm[k].model = d[k].model || "";
-      if (k === "zotero") apiForm.zotero.userId = d[k].userId || "";
-      if (k === "research")
-        apiForm.research.maxSearches = Number(d[k].maxSearches || 4);
-      apiForm[k].apiKey = "";
-      apiKeyHints[k] = d[k].apiKeyHint || "未配置";
-    }
-  if (d.llm?.protocol)
-    apiForm.llm.protocol = String(d.llm.protocol).toLowerCase();
+  applyProviderSettings(d);
   applyMatchmakingSettings(d.matchmaking);
   if (d.githubRanking) Object.assign(rankingForm, d.githubRanking);
   if (d.pptRetention) Object.assign(pptRetentionForm, d.pptRetention);
@@ -1112,34 +1058,7 @@ async function testMatchmakingConnection() {
     testingProvider.value = "";
   }
 }
-async function saveApiSettings() {
-  try {
-    applyApiSettings(
-      (await updateAdminApiSettings({ ...apiForm, githubRanking: rankingForm }))
-        .data,
-    );
-    message.success("API 配置已保存");
-  } catch (e) {
-    errorMsg.value = e.message || "API 配置保存失败";
-  }
-}
-async function testApiConnection(provider) {
-  testingProvider.value = provider;
-  testResults[provider] = { type: "info", text: "正在测试…" };
-  try {
-    const result =
-      (await testAdminApiSettings(provider, apiForm[provider])).data || {};
-    testResults[provider] = {
-      type: "success",
-      text: result.message || "连接成功",
-      latencyMs: result.latencyMs,
-    };
-  } catch (e) {
-    testResults[provider] = { type: "error", text: e.message || "连接失败" };
-  } finally {
-    testingProvider.value = "";
-  }
-}
+
 async function saveSettings() {
   try {
     Object.assign(settings, (await updateQuotaSettings(settings)).data || {});
@@ -1148,105 +1067,11 @@ async function saveSettings() {
     errorMsg.value = e.message || "保存失败";
   }
 }
-async function createInvite() {
-  try {
-    const code = (await createInviteCode(inviteForm)).data.code;
-    await navigator.clipboard?.writeText(code).catch(() => {});
-    message.success(`邀请码 ${code} 已生成`);
-    inviteForm.code = "";
-    inviteForm.expiresAt = "";
-    await loadDashboard();
-  } catch (e) {
-    errorMsg.value = e.message || "邀请码生成失败";
-  }
-}
-async function createTrialCode() {
-  try {
-    const expiresAt = trialExpiresAt.value ? new Date(trialExpiresAt.value).toISOString() : "";
-    const result = (await createMatchmakingTrialCode(expiresAt)).data || {};
-    createdTrialCode.value = result.code || "";
-    await navigator.clipboard?.writeText(createdTrialCode.value).catch(() => {});
-    trialCodeModalOpen.value = true;
-    await loadDashboard();
-  } catch (e) {
-    errorMsg.value = e.message || "婚恋内测邀请码生成失败";
-  }
-}
-async function copyCreatedTrialCode() {
-  await copyTrialCode(createdTrialCode.value);
-}
-async function copyTrialCode(code) {
-  if (!code) return;
-  await navigator.clipboard?.writeText(code).catch(() => {});
-  message.success("邀请码已复制");
-}
-async function toggleTrialCode(code) {
-  try {
-    const expiresAt = code.expiresAt ? new Date(code.expiresAt).toISOString() : "";
-    const result = await updateMatchmakingTrialCode(code.id, !code.enabled, expiresAt);
-    trialCodes.value = result.data || [];
-  } catch (e) {
-    errorMsg.value = e.message || "婚恋内测邀请码状态更新失败";
-  }
-}
-function trialCodeStatus(code) { return resolveTrialCodeStatus(code); }
-function defaultTrialExpiry() {
-  const date = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  const offset = date.getTimezoneOffset() * 60 * 1000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
+
 function formatDate(value) {
   if (!value) return "—";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? "—" : new Intl.DateTimeFormat("zh-CN", { dateStyle: "short", timeStyle: "short" }).format(date);
-}
-async function toggleInvite(i) {
-  try {
-    await updateInviteStatus(
-      i.id,
-      !i.enabled,
-      i.expires_at ? new Date(i.expires_at).toISOString() : "",
-    );
-    await loadDashboard();
-  } catch (e) {
-    errorMsg.value = e.message || "邀请码状态更新失败";
-  }
-}
-async function deleteInvite(i) {
-  if (!window.confirm(`确定删除未使用的邀请码 ${i.code} 吗？此操作不可恢复。`))
-    return;
-  try {
-    await deleteInviteCode(i.id);
-    message.success("邀请码已删除");
-    await loadDashboard();
-  } catch (e) {
-    errorMsg.value = e.message || "邀请码删除失败";
-  }
-}
-async function toggleUser(u) {
-  try {
-    await updateAdminUserStatus(u.id, !u.enabled);
-    await loadDashboard();
-  } catch (e) {
-    errorMsg.value = e.message || "用户状态更新失败";
-  }
-}
-async function adjustCredits(id) {
-  const amount = Number(adjustForms[id] || 0);
-  if (!amount) return;
-  try {
-    await adjustUserCredits({ userId: id, amount, note: "root 后台调整" });
-    adjustForms[id] = 0;
-    await loadDashboard();
-  } catch (e) {
-    errorMsg.value = e.message || "额度调整失败";
-  }
-}
-function inviteStatus(i) {
-  if (!i.enabled) return "已撤销";
-  if (i.used_count >= i.max_uses) return "已用尽";
-  if (i.expires_at && new Date(i.expires_at) <= new Date()) return "已过期";
-  return "可使用";
 }
 
 async function loadGuestbook(nextPage = 1) {

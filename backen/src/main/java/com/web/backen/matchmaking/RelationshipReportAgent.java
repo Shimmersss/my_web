@@ -33,7 +33,7 @@ final class RelationshipReportAgent {
             identity 是 {titleId,headline,introduction}，titleId 必须从 titleCandidates 选一个且不超过12字，headline 40-90字，introduction 40-180字。
             tarotReadings 恰好3条，顺序必须对应 present、shadow、next；每条为 {slot,cardId,interpretation,evidenceIds}，interpretation 40-100字。
             relationshipManual 恰好5条，顺序为 r01-r05；每条为 {dimensionId,preference,misunderstanding,expression,evidenceIds}，每项100-160字左右。
-            recurringPatterns 恰好3条，每条为 {trigger,reaction,misunderstanding,alternative,evidenceIds}，写出触发→反应→误会→替代方式，每条120-200字左右。
+            recurringPatterns 恰好3条，每条为 {trigger,reaction,misunderstanding,alternative,evidenceIds}，写出触发→反应→误会→替代方式；每条合计120-200字左右，字段可用简短但完整的关系场景表述。
             attraction 为 {spark,sustainable,friction,evidenceIds}，每项100-180字左右，不筛选具体对象。
             nextSteps 为 {scripts,experiment}；scripts 恰好3条，每条 {scenario,words,explanation}，experiment 是一个60-120字的小行动。
             只描述关系探索，不输出市场价值、胜率、匹配概率、人格优劣、诊断或确定性结果。
@@ -148,7 +148,7 @@ final class RelationshipReportAgent {
             Map<?, ?> raw = object(item, "recurringPatterns item");
             Map<String, Object> row = new LinkedHashMap<>();
             for (String key : List.of("trigger", "reaction", "misunderstanding", "alternative"))
-                row.put(key, required(raw.get(key), 20, 220, "recurringPatterns." + key));
+                row.put(key, required(raw.get(key), 4, 220, "recurringPatterns." + key));
             row.put("evidenceIds", evidence(raw.get("evidenceIds"), "recurringPatterns.evidenceIds"));
             result.add(row);
         }

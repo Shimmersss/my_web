@@ -63,6 +63,24 @@ class RelationshipReportAgentTest {
         assertNotNull(parse.invoke(agent, invalid, withAnswer));
     }
 
+    @Test void acceptsConciseButCompletePatternParts() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        RelationshipReportAgent agent = new RelationshipReportAgent(null, null, mapper);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> report = mapper.readValue(validJson(), Map.class);
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> patterns = (List<Map<String, Object>>) report.get("recurringPatterns");
+        for (Map<String, Object> pattern : patterns) {
+            pattern.put("trigger", "回复变慢");
+            pattern.put("reaction", "先暂停一下");
+            pattern.put("misunderstanding", "把沉默读成拒绝");
+            pattern.put("alternative", "先说明感受");
+        }
+        var parse = RelationshipReportAgent.class.getDeclaredMethod("parse", String.class, Map.class);
+        parse.setAccessible(true);
+        assertNotNull(parse.invoke(agent, mapper.writeValueAsString(report), input()));
+    }
+
     private Map<String, Object> input() {
         List<Map<String, Object>> cards = List.of(
                 TarotDeck.view(TarotDeck.byId("major-00"), "present"),

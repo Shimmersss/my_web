@@ -18,6 +18,7 @@ final class RelationshipReportAgent {
     private static final Logger log = LoggerFactory.getLogger(RelationshipReportAgent.class);
     private static final int MAX_TOKENS = 10000;
     private static final int MAX_ATTEMPTS = 3;
+    private static final long RETRY_BACKOFF_MILLIS = 750;
     private static final Set<String> EVIDENCE = java.util.stream.Stream.concat(
             RelationshipQuestionnaire.PERSONALITY_QUESTIONS.stream().map(RelationshipQuestionnaire.PersonalityQuestion::id),
             RelationshipQuestionnaire.RELATIONSHIP_IDS.stream()).collect(java.util.stream.Collectors.toUnmodifiableSet());
@@ -61,6 +62,7 @@ final class RelationshipReportAgent {
             } catch (Exception e) {
                 last = e;
                 log.warn("关系探索报告第 {} 次输出不可用: {}", attempt + 1, concise(e));
+                if (attempt + 1 < MAX_ATTEMPTS) pauseBeforeRetry(attempt);
             }
         }
         throw new IllegalStateException("关系探索报告未能生成符合格式的内容，请稍后重试", last);
@@ -234,6 +236,13 @@ final class RelationshipReportAgent {
         int first = text.indexOf('{'), last = text.lastIndexOf('}');
         if (first < 0 || last <= first) throw new IllegalArgumentException("未找到 JSON 对象");
         return text.substring(first, last + 1);
+    }
+    private void pauseBeforeRetry(int completedAttempt) {
+        try { Thread.sleep(RETRY_BACKOFF_MILLIS * (completedAttempt + 1)); }
+        catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("关系探索报告任务已中断", e);
+        }
     }
     private String concise(Exception e) {
         String message = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();

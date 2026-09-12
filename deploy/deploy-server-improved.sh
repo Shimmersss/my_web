@@ -351,7 +351,7 @@ Restart=always
 RestartSec=5
 SuccessExitStatus=143
 MemoryAccounting=yes
-MemoryHigh=2200M
+MemoryHigh=2600M
 MemoryMax=2800M
 TasksMax=256
 

@@ -16,6 +16,8 @@ class InstallContract(unittest.TestCase):
         installed = scripts['INSTALL_SCRIPT'].split('INSTALL_MUTATED=1\ninfo "Installing files', 1)[1]
         self.assertNotRegex(installed, r'rm\s+-f\s+"\$DEPLOYMENT_LOCK"')
         self.assertIn('systemctl start "$SERVICE_NAME.service"', installed)
+        self.assertIn('MemoryHigh=2600M', installed)
+        self.assertIn('MemoryMax=2800M', installed)
         self.assertIn('== deployment', scripts['RESUME_SCRIPT'])
 
 if __name__ == '__main__': unittest.main()

@@ -14,7 +14,7 @@ public class BabelDocConfig {
     private String openaiModel = "mimo-v2.5-pro";
     private int timeoutSeconds = 21600;
     private int qps = 2;
-    private int resourceCgroupLimitMiB = 2600;
+    private int resourceCgroupLimitMiB = 2400;
     private int resourceMinAvailableMiB = 400;
     private int resourceMaxSwapUsedMiB = 1200;
     private int maxPagesPerChunk = 5;

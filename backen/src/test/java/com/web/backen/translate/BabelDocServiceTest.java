@@ -33,6 +33,7 @@ class BabelDocServiceTest {
     @Test
     void defaultsToFivePagesPerChunk() {
         assertEquals(5, new BabelDocConfig().getMaxPagesPerChunk());
+        assertEquals(2400, new BabelDocConfig().getResourceCgroupLimitMiB());
     }
 
     @Test

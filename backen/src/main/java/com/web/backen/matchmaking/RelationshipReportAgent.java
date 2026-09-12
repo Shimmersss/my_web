@@ -13,16 +13,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-/** Mimo-compatible writer and hard validator for relationship-exploration-v1. */
+/** Mimo-compatible writer that normalises model JSON into the relationship-exploration-v1 contract. */
 final class RelationshipReportAgent {
     private static final Logger log = LoggerFactory.getLogger(RelationshipReportAgent.class);
     private static final int MAX_TOKENS = 10000;
     private static final int MAX_ATTEMPTS = 3;
     private static final long RETRY_BACKOFF_MILLIS = 750;
-    private static final Set<String> EVIDENCE = java.util.stream.Stream.concat(
-            RelationshipQuestionnaire.PERSONALITY_QUESTIONS.stream().map(RelationshipQuestionnaire.PersonalityQuestion::id),
-            RelationshipQuestionnaire.RELATIONSHIP_IDS.stream()).collect(java.util.stream.Collectors.toUnmodifiableSet());
-    private static final Set<String> TOP_LEVEL = Set.of("identity", "tarotReadings", "relationshipManual", "recurringPatterns", "attraction", "nextSteps");
     private static final String SYSTEM = """
             你为“月下会客厅”撰写中文关系探索报告。输入是用户自愿填写的关系阶段、关系偏好、本站固定的关系人格倾向和三张已抽定的正位大阿尔卡那牌。
             人格与牌面提供一种观察关系的视角，不是科学测量、心理诊断、命运预言或对任何人的价值判断。
@@ -39,7 +35,7 @@ final class RelationshipReportAgent {
             nextSteps 为 {scripts,experiment}；scripts 恰好3条，每条 {scenario,words,explanation}，experiment 是一个60-120字的小行动。
             只描述关系探索，不输出市场价值、胜率、匹配概率、人格优劣、诊断或确定性结果。
             """;
-    private static final String RETRY = "\n上次输出未通过服务端结构校验。只修复字段、顺序、条数、长度或 evidenceIds，重新输出完整 JSON；不要解释，不要改变输入。";
+    private static final String RETRY = "\n上次输出未能解析为完整 JSON。请重新输出完整 JSON 对象；不要解释，不要改变输入。";
     private final LlmClient llm;
     private final RuntimeConfigService runtime;
     private final ObjectMapper mapper;
@@ -72,163 +68,146 @@ final class RelationshipReportAgent {
         Map<String, Object> raw;
         try { raw = mapper.readValue(jsonObject(response), new TypeReference<>() {}); }
         catch (Exception e) { throw new IllegalArgumentException("关系报告输出不是完整 JSON", e); }
-        if (!TOP_LEVEL.equals(raw.keySet())) throw new IllegalArgumentException("关系报告顶层字段无效");
+        Set<String> actualEvidence = actualEvidence(input);
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("identity", identity(raw.get("identity")));
-        result.put("tarotReadings", tarotReadings(raw.get("tarotReadings")));
-        result.put("relationshipManual", relationshipManual(raw.get("relationshipManual")));
-        result.put("recurringPatterns", recurringPatterns(raw.get("recurringPatterns")));
-        result.put("attraction", threePart(raw.get("attraction"), "attraction"));
+        result.put("identity", identity(raw.get("identity"), input));
+        result.put("tarotReadings", tarotReadings(raw.get("tarotReadings"), input, actualEvidence));
+        result.put("relationshipManual", relationshipManual(raw.get("relationshipManual"), actualEvidence));
+        result.put("recurringPatterns", recurringPatterns(raw.get("recurringPatterns"), actualEvidence));
+        result.put("attraction", attraction(raw.get("attraction"), actualEvidence));
         result.put("nextSteps", nextSteps(raw.get("nextSteps")));
-        validateTitle(result, input);
-        validateTarot(result, input);
-        Set<String> actualEvidence = new java.util.HashSet<>();
-        for (String key : List.of("personalityEvidence", "relationshipPreferences")) {
-            if (input.get(key) instanceof List<?> rows) for (Object row : rows)
-                if (row instanceof Map<?, ?> item && item.get("id") instanceof String id) actualEvidence.add(id);
-        }
-        validateEvidenceTree(result, actualEvidence);
         return result;
     }
 
-    private void validateEvidenceTree(Object node, Set<String> actual) {
-        if (node instanceof Map<?, ?> map) {
-            if (map.get("evidenceIds") instanceof List<?> ids && !actual.containsAll(ids))
-                throw new IllegalArgumentException("报告引用了本次未提供的回答");
-            map.values().forEach(value -> validateEvidenceTree(value, actual));
-        } else if (node instanceof List<?> list) list.forEach(value -> validateEvidenceTree(value, actual));
+    private Set<String> actualEvidence(Map<String, Object> input) {
+        Set<String> result = new java.util.LinkedHashSet<>();
+        for (String key : List.of("personalityEvidence", "relationshipPreferences"))
+            for (Map<?, ?> row : rows(input.get(key))) {
+                String id = text(row.get("id"), "", 16);
+                if (!id.isBlank()) result.add(id);
+            }
+        return result;
     }
 
-    private Map<String, Object> identity(Object value) {
-        Map<?, ?> raw = object(value, "identity");
+    private Map<String, Object> identity(Object value, Map<String, Object> input) {
+        Map<?, ?> raw = map(value);
+        String fallbackTitle = rows(input.get("titleCandidates")).isEmpty() ? "关系探索" : "";
+        if (input.get("titleCandidates") instanceof List<?> candidates && !candidates.isEmpty()) fallbackTitle = text(candidates.get(0), "关系探索", 12);
+        String title = text(raw.containsKey("titleId") ? raw.get("titleId") : raw.get("title"), fallbackTitle, 12);
+        if (input.get("titleCandidates") instanceof List<?> candidates && !candidates.isEmpty()) {
+            String candidateTitle = title;
+            boolean titleMatched = candidates.stream().anyMatch(candidate -> candidateTitle.equals(String.valueOf(candidate)));
+            if (!titleMatched) title = fallbackTitle;
+        }
         Map<String, Object> result = new LinkedHashMap<>();
-        Object title = raw.containsKey("titleId") ? raw.get("titleId") : raw.get("title");
-        result.put("titleId", required(title, 12, "identity.titleId"));
-        result.put("headline", required(raw.get("headline"), 40, 90, "identity.headline"));
-        result.put("introduction", required(raw.get("introduction"), 40, 180, "identity.introduction"));
+        result.put("titleId", title);
+        result.put("headline", text(raw.get("headline"), "把感受、需要和下一步放回真实关系里慢慢看。", 180));
+        result.put("introduction", text(raw.get("introduction"), "这份探索只为帮助你整理当下的关系线索，不替你下结论。", 400));
         return result;
     }
 
-    private List<Map<String, Object>> tarotReadings(Object value) {
+    private List<Map<String, Object>> tarotReadings(Object value, Map<String, Object> input, Set<String> actualEvidence) {
+        Map<String, Map<?, ?>> bySlot = new LinkedHashMap<>();
+        for (Map<?, ?> row : rows(value)) bySlot.putIfAbsent(text(row.get("slot"), "", 16), row);
         List<Map<String, Object>> result = new ArrayList<>();
-        if (value instanceof List<?> list) for (Object item : list) {
-            Map<?, ?> raw = object(item, "tarotReadings item");
+        Map<?, ?> tarot = map(input.get("tarot"));
+        for (Map<?, ?> card : rows(tarot.get("cards"))) {
+            String slot = text(card.get("slot"), "", 16);
+            String cardId = text(card.get("cardId"), "", 32);
+            Map<?, ?> raw = bySlot.getOrDefault(slot, Map.of());
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("slot", required(raw.get("slot"), 16, "tarotReadings.slot"));
-            row.put("cardId", required(raw.get("cardId"), 16, "tarotReadings.cardId"));
-            row.put("interpretation", required(raw.get("interpretation"), 40, 100, "tarotReadings.interpretation"));
-            row.put("evidenceIds", evidence(raw.get("evidenceIds"), "tarotReadings.evidenceIds"));
+            row.put("slot", slot); row.put("cardId", cardId);
+            row.put("interpretation", text(raw.get("interpretation"), "把这张牌当作一次观察关系节奏与表达方式的提醒。", 400));
+            row.put("evidenceIds", evidence(raw.get("evidenceIds"), actualEvidence, "r01"));
             result.add(row);
         }
-        if (result.size() != 3) throw new IllegalArgumentException("tarotReadings 必须恰好 3 条");
-        if (!List.of("present", "shadow", "next").equals(result.stream().map(row -> row.get("slot")).toList()))
-            throw new IllegalArgumentException("tarotReadings 顺序无效");
         return result;
     }
 
-    private List<Map<String, Object>> relationshipManual(Object value) {
+    private List<Map<String, Object>> relationshipManual(Object value, Set<String> actualEvidence) {
+        Map<String, Map<?, ?>> byDimension = new LinkedHashMap<>();
+        List<Map<?, ?>> source = rows(value);
+        for (Map<?, ?> row : source) byDimension.putIfAbsent(text(row.get("dimensionId"), "", 16), row);
         List<Map<String, Object>> result = new ArrayList<>();
-        if (value instanceof List<?> list) for (Object item : list) {
-            Map<?, ?> raw = object(item, "relationshipManual item");
+        for (int index = 0; index < RelationshipQuestionnaire.RELATIONSHIP_IDS.size(); index++) {
+            String dimensionId = RelationshipQuestionnaire.RELATIONSHIP_IDS.get(index);
+            Map<?, ?> raw = byDimension.getOrDefault(dimensionId, index < source.size() ? source.get(index) : Map.of());
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("dimensionId", required(raw.get("dimensionId"), 8, "relationshipManual.dimensionId"));
-            row.put("preference", required(raw.get("preference"), 20, 180, "relationshipManual.preference"));
-            row.put("misunderstanding", required(raw.get("misunderstanding"), 20, 180, "relationshipManual.misunderstanding"));
-            row.put("expression", required(raw.get("expression"), 20, 180, "relationshipManual.expression"));
-            row.put("evidenceIds", evidence(raw.get("evidenceIds"), "relationshipManual.evidenceIds"));
+            row.put("dimensionId", dimensionId);
+            row.put("preference", text(raw.get("preference"), "留意这个维度里你真正想靠近的方式。", 400));
+            row.put("misunderstanding", text(raw.get("misunderstanding"), "当信息不足时，先确认彼此的意思，再决定如何回应。", 400));
+            row.put("expression", text(raw.get("expression"), "试着用具体感受和可执行的请求来表达自己。", 400));
+            row.put("evidenceIds", evidence(raw.get("evidenceIds"), actualEvidence, dimensionId));
             result.add(row);
         }
-        if (result.size() != 5) throw new IllegalArgumentException("relationshipManual 必须恰好 5 条");
-        if (!RelationshipQuestionnaire.RELATIONSHIP_IDS.equals(result.stream().map(row -> String.valueOf(row.get("dimensionId"))).toList()))
-            throw new IllegalArgumentException("relationshipManual 顺序无效");
         return result;
     }
 
-    private List<Map<String, Object>> recurringPatterns(Object value) {
+    private List<Map<String, Object>> recurringPatterns(Object value, Set<String> actualEvidence) {
+        List<Map<?, ?>> source = rows(value);
         List<Map<String, Object>> result = new ArrayList<>();
-        if (value instanceof List<?> list) for (Object item : list) {
-            Map<?, ?> raw = object(item, "recurringPatterns item");
+        for (int index = 0; index < 3; index++) {
+            Map<?, ?> raw = index < source.size() ? source.get(index) : Map.of();
             Map<String, Object> row = new LinkedHashMap<>();
-            for (String key : List.of("trigger", "reaction", "misunderstanding", "alternative"))
-                row.put(key, required(raw.get(key), 4, 220, "recurringPatterns." + key));
-            row.put("evidenceIds", evidence(raw.get("evidenceIds"), "recurringPatterns.evidenceIds"));
+            row.put("trigger", text(raw.get("trigger"), "感到关系节奏不确定时", 400));
+            row.put("reaction", text(raw.get("reaction"), "先留意自己最直接的感受", 400));
+            row.put("misunderstanding", text(raw.get("misunderstanding"), "不要急着替对方的沉默或忙碌下结论", 400));
+            row.put("alternative", text(raw.get("alternative"), "把猜测换成温和而具体的确认", 400));
+            row.put("evidenceIds", evidence(raw.get("evidenceIds"), actualEvidence, "r01"));
             result.add(row);
         }
-        if (result.size() != 3) throw new IllegalArgumentException("recurringPatterns 必须恰好 3 条");
         return result;
     }
 
-    private Map<String, Object> threePart(Object value, String field) {
-        Map<?, ?> raw = object(value, field);
+    private Map<String, Object> attraction(Object value, Set<String> actualEvidence) {
+        Map<?, ?> raw = map(value);
         Map<String, Object> result = new LinkedHashMap<>();
-        for (String key : List.of("spark", "sustainable", "friction")) result.put(key, required(raw.get(key), 20, 200, field + "." + key));
-        result.put("evidenceIds", evidence(raw.get("evidenceIds"), field + ".evidenceIds"));
+        result.put("spark", text(raw.get("spark"), "吸引往往从被看见、被理解和相处自然开始。", 400));
+        result.put("sustainable", text(raw.get("sustainable"), "能持续的关系需要把期待、边界和生活节奏说清楚。", 400));
+        result.put("friction", text(raw.get("friction"), "当需求不一致时，先谈感受和具体安排，而不是急着判断对错。", 400));
+        result.put("evidenceIds", evidence(raw.get("evidenceIds"), actualEvidence, "r02"));
         return result;
     }
 
     private Map<String, Object> nextSteps(Object value) {
-        Map<?, ?> raw = object(value, "nextSteps");
-        Object scriptsRaw = raw.get("scripts");
+        Map<?, ?> raw = map(value);
+        List<Map<?, ?>> source = rows(raw.get("scripts"));
         List<Map<String, Object>> scripts = new ArrayList<>();
-        if (scriptsRaw instanceof List<?> list) for (Object item : list) {
-            Map<?, ?> script = object(item, "nextSteps script");
+        for (int index = 0; index < 3; index++) {
+            Map<?, ?> script = index < source.size() ? source.get(index) : Map.of();
             Map<String, Object> row = new LinkedHashMap<>();
-            row.put("scenario", required(script.get("scenario"), 4, 120, "nextSteps.scenario"));
-            row.put("words", required(script.get("words"), 10, 180, "nextSteps.words"));
-            row.put("explanation", required(script.get("explanation"), 20, 180, "nextSteps.explanation"));
+            row.put("scenario", text(script.get("scenario"), "当你想确认彼此的节奏时", 200));
+            row.put("words", text(script.get("words"), "我想更了解你的想法，也愿意说说我现在的感受。", 400));
+            row.put("explanation", text(script.get("explanation"), "把关系从猜测带回可以一起回应的具体对话。", 400));
             scripts.add(row);
         }
-        if (scripts.size() != 3) throw new IllegalArgumentException("nextSteps.scripts 必须恰好 3 条");
         Map<String, Object> result = new LinkedHashMap<>(); result.put("scripts", scripts);
-        result.put("experiment", required(raw.get("experiment"), 20, 140, "nextSteps.experiment"));
+        result.put("experiment", text(raw.get("experiment"), "挑一个轻松的时刻，把最近最在意的一件小事说具体，并给对方留下回应的空间。", 400));
         return result;
     }
 
-    private void validateTitle(Map<String, Object> result, Map<String, Object> input) {
-        Object candidates = input.get("titleCandidates");
-        Object identityValue = result.get("identity");
-        Object title = identityValue instanceof Map<?, ?> identity ? identity.get("titleId") : null;
-        if (candidates instanceof List<?> list && !list.isEmpty()
-                && list.stream().noneMatch(candidate -> String.valueOf(candidate).equals(String.valueOf(title))))
-            throw new IllegalArgumentException("identity.titleId 不在候选列表");
-    }
-
-    private void validateTarot(Map<String, Object> result, Map<String, Object> input) {
-        Map<?, ?> tarot = input.get("tarot") instanceof Map<?, ?> value ? value : Map.of();
-        Map<String, String> expected = new LinkedHashMap<>();
-        if (tarot.get("cards") instanceof List<?> cards) for (Object card : cards) {
-            if (card instanceof Map<?, ?> row) expected.put(String.valueOf(row.get("slot")), String.valueOf(row.get("cardId")));
+    private List<String> evidence(Object value, Set<String> actualEvidence, String fallback) {
+        List<String> result = new ArrayList<>();
+        if (value instanceof List<?> ids) for (Object id : ids) {
+            String candidate = text(id, "", 16);
+            if (actualEvidence.contains(candidate) && !result.contains(candidate)) result.add(candidate);
+            if (result.size() == 8) break;
         }
-        List<?> readings = (List<?>) result.get("tarotReadings");
-        for (Object item : readings) {
-            Map<?, ?> reading = (Map<?, ?>) item;
-            String slot = String.valueOf(reading.get("slot"));
-            String cardId = String.valueOf(reading.get("cardId"));
-            if (!cardId.equals(expected.get(slot)) || TarotDeck.byId(cardId) == null)
-                throw new IllegalArgumentException("tarotReadings 不能改写服务端牌阵");
-        }
-    }
-
-    private List<String> evidence(Object value, String field) {
-        if (!(value instanceof List<?> list) || list.isEmpty() || list.size() > 8) throw new IllegalArgumentException(field + " 无效");
-        List<String> result = list.stream().map(String::valueOf).toList();
-        if (result.stream().anyMatch(id -> !EVIDENCE.contains(id))) throw new IllegalArgumentException(field + " 含未知证据");
+        if (result.isEmpty() && actualEvidence.contains(fallback)) result.add(fallback);
+        if (result.isEmpty() && !actualEvidence.isEmpty()) result.add(actualEvidence.iterator().next());
         return result;
     }
 
-    private Map<?, ?> object(Object value, String field) {
-        if (!(value instanceof Map<?, ?> map)) throw new IllegalArgumentException(field + " 必须是对象");
-        return map;
+    private Map<?, ?> map(Object value) { return value instanceof Map<?, ?> map ? map : Map.of(); }
+    private List<Map<?, ?>> rows(Object value) {
+        List<Map<?, ?>> result = new ArrayList<>();
+        if (value instanceof List<?> list) for (Object item : list) if (item instanceof Map<?, ?> map) result.add(map);
+        return result;
     }
-    private String required(Object value, int max, String field) {
-        return required(value, 1, max, field);
-    }
-    private String required(Object value, int min, int max, String field) {
-        String text = value == null ? "" : String.valueOf(value).replaceAll("[\\r\\n]+", " ").trim();
-        if (text.isBlank()) throw new IllegalArgumentException("报告缺少 " + field);
-        if (text.length() < min) throw new IllegalArgumentException(field + " 长度不足");
-        if (text.length() > max) throw new IllegalArgumentException(field + " 超出长度");
-        return text;
+    private String text(Object value, String fallback, int max) {
+        String result = value == null ? "" : String.valueOf(value).replaceAll("[\\r\\n]+", " ").trim();
+        if (result.isBlank()) result = fallback;
+        return result.length() > max ? result.substring(0, max) : result;
     }
     private String jsonObject(String value) {
         String text = value == null ? "" : value.trim();

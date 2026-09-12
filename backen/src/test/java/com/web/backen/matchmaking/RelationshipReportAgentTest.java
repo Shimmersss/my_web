@@ -37,7 +37,7 @@ class RelationshipReportAgentTest {
     }
 
     @Test
-    void retriesWhenModelChangesTheServerOwnedCard() throws Exception {
+    void keepsServerOwnedCardsWhenModelChangesThem() throws Exception {
         LlmClient llm = mock(LlmClient.class);
         RuntimeConfigService runtime = mock(RuntimeConfigService.class);
         when(runtime.matchmakingLlmUrl()).thenReturn("https://llm.example");
@@ -48,19 +48,21 @@ class RelationshipReportAgentTest {
                 .thenReturn(validJson().replace("major-02", "major-21"));
         RelationshipReportAgent agent = new RelationshipReportAgent(llm, runtime, new ObjectMapper());
 
-        assertThrows(IllegalStateException.class, () -> agent.write(input()));
-        verify(llm, times(3)).completeWithConfig(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), eq(10000));
+        Map<String, Object> report = agent.write(input());
+        assertEquals("major-02", ((Map<?, ?>) ((List<?>) report.get("tarotReadings")).get(2)).get("cardId"));
+        verify(llm).completeWithConfig(anyString(), anyString(), anyString(), anyString(), anyString(), anyString(), eq(10000));
     }
 
-    @Test void rejectsEvidenceMissingFromThisRequest() throws Exception {
+    @Test void removesEvidenceMissingFromThisRequest() throws Exception {
         RelationshipReportAgent agent = new RelationshipReportAgent(null, null, new ObjectMapper());
         var parse = RelationshipReportAgent.class.getDeclaredMethod("parse", String.class, Map.class);
         parse.setAccessible(true);
         String invalid = validJson().replace("\"r01\"]", "\"p01\"]");
-        assertThrows(java.lang.reflect.InvocationTargetException.class, () -> parse.invoke(agent, invalid, input()));
-        Map<String, Object> withAnswer = new LinkedHashMap<>(input());
-        withAnswer.put("personalityEvidence", List.of(Map.of("id", "p01", "answer", "实际回答")));
-        assertNotNull(parse.invoke(agent, invalid, withAnswer));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> report = (Map<String, Object>) parse.invoke(agent, invalid, input());
+        @SuppressWarnings("unchecked")
+        List<String> evidence = (List<String>) ((Map<?, ?>) ((List<?>) report.get("relationshipManual")).get(0)).get("evidenceIds");
+        assertEquals(List.of("r01"), evidence);
     }
 
     @Test void acceptsConciseButCompletePatternParts() throws Exception {
@@ -79,6 +81,20 @@ class RelationshipReportAgentTest {
         var parse = RelationshipReportAgent.class.getDeclaredMethod("parse", String.class, Map.class);
         parse.setAccessible(true);
         assertNotNull(parse.invoke(agent, mapper.writeValueAsString(report), input()));
+    }
+
+    @Test void normalizesPartialModelJsonInsteadOfRejectingIt() throws Exception {
+        ObjectMapper mapper = new ObjectMapper();
+        RelationshipReportAgent agent = new RelationshipReportAgent(null, null, mapper);
+        var parse = RelationshipReportAgent.class.getDeclaredMethod("parse", String.class, Map.class);
+        parse.setAccessible(true);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> report = (Map<String, Object>) parse.invoke(agent,
+                "{\"identity\":{\"headline\":\"简短回应\"},\"unexpected\":true}", input());
+        assertEquals(3, ((List<?>) report.get("tarotReadings")).size());
+        assertEquals(5, ((List<?>) report.get("relationshipManual")).size());
+        assertEquals(3, ((List<?>) report.get("recurringPatterns")).size());
+        assertEquals(3, ((List<?>) ((Map<?, ?>) report.get("nextSteps")).get("scripts")).size());
     }
 
     private Map<String, Object> input() {

@@ -72,6 +72,10 @@ export function logoutAccount() {
   return post("/auth/logout", {});
 }
 
+export function changeOwnPassword(currentPassword, newPassword) {
+  return put("/auth/password", { currentPassword, newPassword });
+}
+
 export function claimDailyCheckin() {
   return post("/auth/daily-checkin", {});
 }
@@ -367,6 +371,10 @@ export function updateAdminUserStatus(id, enabled) {
     method: "PATCH",
     body: JSON.stringify({ enabled }),
   });
+}
+
+export function resetAdminUserPassword(id, password) {
+  return put(`/admin/accounts/users/${id}/password`, { password });
 }
 
 export async function getGithubProjectReadme(fullName) {

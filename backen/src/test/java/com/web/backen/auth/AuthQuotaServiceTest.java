@@ -40,6 +40,42 @@ class AuthQuotaServiceTest {
     }
 
     @Test
+    void passwordResetUsesBcryptAndEndsExistingSessions() {
+        TestServices services = newServices();
+        services.quota().createInvite(1L, "reset-password", 0, 1);
+        AuthUser user = services.auth().register("alice", "original-password", "reset-password");
+        AuthService.AuthSession session = services.auth().login("alice", "original-password");
+
+        services.auth().resetPassword(user.id(), "replacement-password");
+
+        assertTrue(services.auth().currentUser(requestWithSession(session)).isEmpty());
+        assertEquals(0, services.jdbc().queryForObject("SELECT COUNT(*) FROM user_sessions WHERE user_id=?", Integer.class, user.id()));
+        assertEquals(401, assertThrows(AuthException.class,
+                () -> services.auth().login("alice", "original-password")).getStatus());
+        assertEquals("alice", services.auth().login("alice", "replacement-password").user().username());
+        assertEquals(400, assertThrows(AuthException.class,
+                () -> services.auth().resetPassword(user.id(), "too-short")).getStatus());
+    }
+
+    @Test
+    void userCanChangeOwnPasswordOnlyWithCurrentPassword() {
+        TestServices services = newServices();
+        services.quota().createInvite(1L, "self-password", 0, 1);
+        AuthUser user = services.auth().register("bob", "original-password", "self-password");
+        AuthService.AuthSession first = services.auth().login("bob", "original-password");
+        AuthService.AuthSession second = services.auth().login("bob", "original-password");
+
+        assertEquals(400, assertThrows(AuthException.class,
+                () -> services.auth().changeOwnPassword(user.id(), "incorrect-password", "replacement-password")).getStatus());
+        AuthService.AuthSession replacement = services.auth().changeOwnPassword(user.id(), "original-password", "replacement-password");
+
+        assertTrue(services.auth().currentUser(requestWithSession(first)).isEmpty());
+        assertTrue(services.auth().currentUser(requestWithSession(second)).isEmpty());
+        assertTrue(services.auth().currentUser(requestWithSession(replacement)).isPresent());
+        assertEquals(1, services.jdbc().queryForObject("SELECT COUNT(*) FROM user_sessions WHERE user_id=?", Integer.class, user.id()));
+    }
+
+    @Test
     void inviteRegistrationConsumesInviteAndRejectsReuse() {
         TestServices services = newServices();
         services.quota().createInvite(1L, "invite-one", 12, 1);

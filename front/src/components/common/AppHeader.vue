@@ -43,6 +43,7 @@
             <n-button v-if="!auth.isMatchmakingTrial" size="small" secondary :disabled="!auth.dailyCheckin?.enabled && !auth.dailyCheckin?.claimed" @click="handleDailyCheckin">
               {{ auth.dailyCheckin?.claimed ? '今日牌' : '签到' }}
             </n-button>
+            <n-button v-if="!auth.isMatchmakingTrial" size="small" text @click="openPasswordModal">改密码</n-button>
             <n-button size="small" text @click="handleLogout">退出</n-button>
           </div>
 
@@ -79,6 +80,7 @@
             <n-button v-if="!auth.isMatchmakingTrial" block secondary :disabled="!auth.dailyCheckin?.enabled && !auth.dailyCheckin?.claimed" @click="handleDailyCheckin">
               {{ auth.dailyCheckin?.claimed ? '查看今日牌' : `每日签到 +${auth.dailyCheckin?.credits || 0}` }}
             </n-button>
+            <n-button v-if="!auth.isMatchmakingTrial" block secondary @click="openPasswordModal">修改密码</n-button>
             <n-button block secondary @click="handleLogout">退出登录</n-button>
           </template>
           <n-button v-else block type="primary" @click="openLogin">登录 / 注册</n-button>
@@ -100,6 +102,17 @@
             {{ authMode === 'login' ? '登录' : '注册' }}
           </n-button>
         </div>
+      </form>
+    </n-modal>
+
+    <n-modal v-model:show="passwordModalOpen" preset="dialog" title="修改密码">
+      <form class="auth-form" @submit.prevent="submitPasswordChange">
+        <n-input v-model:value="passwordForm.currentPassword" type="password" :input-props="currentPasswordInputProps" placeholder="当前密码" />
+        <n-input v-model:value="passwordForm.newPassword" type="password" :input-props="newPasswordInputProps" placeholder="新密码（至少 10 位）" />
+        <n-input v-model:value="passwordForm.confirmPassword" type="password" :input-props="confirmPasswordInputProps" placeholder="再次输入新密码" />
+        <n-alert v-if="passwordError" type="error" :title="passwordError" />
+        <p class="password-change-note">修改后会退出其他设备上的登录会话。</p>
+        <div class="auth-actions"><n-button attr-type="submit" type="primary" :loading="passwordSubmitting">保存新密码</n-button></div>
       </form>
     </n-modal>
 
@@ -148,6 +161,9 @@ const authModalOpen = ref(false)
 const authMode = ref('login')
 const authSubmitting = ref(false)
 const authError = ref('')
+const passwordModalOpen = ref(false)
+const passwordSubmitting = ref(false)
+const passwordError = ref('')
 const downloadReminderOpen = ref(false)
 const dailyTarotOpen = ref(false)
 const dailyTarotCard = ref(null)
@@ -156,6 +172,7 @@ const authForm = reactive({
   password: '',
   inviteCode: ''
 })
+const passwordForm = reactive({ currentPassword: '', newPassword: '', confirmPassword: '' })
 const usernameInputProps = {
   id: 'shimmer-login-username',
   name: 'username',
@@ -172,6 +189,9 @@ const passwordInputProps = computed(() => ({
   enterkeyhint: authMode.value === 'login' ? 'go' : 'next',
   'aria-label': '密码'
 }))
+const currentPasswordInputProps = { autocomplete: 'current-password', 'aria-label': '当前密码' }
+const newPasswordInputProps = { autocomplete: 'new-password', 'aria-label': '新密码' }
+const confirmPasswordInputProps = { autocomplete: 'new-password', 'aria-label': '确认新密码' }
 const inviteInputProps = {
   id: 'shimmer-register-invite',
   name: 'inviteCode',
@@ -289,6 +309,15 @@ function openLogin() {
   authModalOpen.value = true
 }
 
+function openPasswordModal() {
+  mobileMenuOpen.value = false
+  passwordError.value = ''
+  passwordForm.currentPassword = ''
+  passwordForm.newPassword = ''
+  passwordForm.confirmPassword = ''
+  passwordModalOpen.value = true
+}
+
 function toggleAuthMode() {
   authMode.value = authMode.value === 'login' ? 'register' : 'login'
   authError.value = ''
@@ -315,6 +344,28 @@ async function submitAuth() {
     authError.value = error.message || '操作失败'
   } finally {
     authSubmitting.value = false
+  }
+}
+
+async function submitPasswordChange() {
+  passwordError.value = ''
+  if (passwordForm.newPassword.length < 10) {
+    passwordError.value = '新密码至少 10 位'
+    return
+  }
+  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    passwordError.value = '两次输入的新密码不一致'
+    return
+  }
+  passwordSubmitting.value = true
+  try {
+    await auth.changePassword(passwordForm.currentPassword, passwordForm.newPassword)
+    passwordModalOpen.value = false
+    message.success('密码已更新，其他设备已退出登录')
+  } catch (error) {
+    passwordError.value = error.message || '密码修改失败'
+  } finally {
+    passwordSubmitting.value = false
   }
 }
 

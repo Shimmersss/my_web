@@ -1,0 +1,87 @@
+{
+  "cardId": "major-18",
+  "date": "2026-09-15",
+  "tool": "built-in-image_gen",
+  "source": "front/public/tarot/major-18.webp",
+  "sourceSha256": "d1edd42c282b099d85a9bbe5856dcefc3e1a7ceca4e90f8d4a4d17645d7d9d93",
+  "jobs": [
+    {
+      "level": 2,
+      "status": "generated-candidate-awaiting-user-review",
+      "output": "lv2-art-v01.png",
+      "sha256": "aa4659f62fce27c0df22615e4d9619a2ff1e86777a2d9a29f296b5b8aa45a29a",
+      "dimensions": [
+        1024,
+        1536
+      ],
+      "alpha": false,
+      "inputs": [
+        {
+          "path": "lv1-original.webp",
+          "sha256": "d1edd42c282b099d85a9bbe5856dcefc3e1a7ceca4e90f8d4a4d17645d7d9d93"
+        }
+      ],
+      "promptReference": "prompts.json#/prompts/lv2"
+    },
+    {
+      "level": 3,
+      "status": "generated-candidate-awaiting-user-review",
+      "output": "lv3-art-v01.png",
+      "sha256": "574651466f7645fead1db065d1a15c640bb10ff5d6c667666afb1d16c63a75e1",
+      "dimensions": [
+        1024,
+        1536
+      ],
+      "alpha": false,
+      "inputs": [
+        {
+          "path": "lv2-art-v01.png",
+          "sha256": "aa4659f62fce27c0df22615e4d9619a2ff1e86777a2d9a29f296b5b8aa45a29a"
+        },
+        {
+          "path": "lv1-original.webp",
+          "sha256": "d1edd42c282b099d85a9bbe5856dcefc3e1a7ceca4e90f8d4a4d17645d7d9d93"
+        }
+      ],
+      "promptReference": "prompts.json#/prompts/lv3"
+    },
+    {
+      "level": 4,
+      "status": "generated-candidate-awaiting-user-review",
+      "output": "lv4-art-v01.png",
+      "sha256": "ca081cc4ed28547c9f0cd3a27ec2e40364d12246a0241c9c2337c88217636c9a",
+      "dimensions": [
+        1024,
+        1536
+      ],
+      "alpha": false,
+      "inputs": [
+        {
+          "path": "lv3-art-v01.png",
+          "sha256": "574651466f7645fead1db065d1a15c640bb10ff5d6c667666afb1d16c63a75e1"
+        }
+      ],
+      "promptReference": "prompts.json#/prompts/lv4"
+    },
+    {
+      "level": 5,
+      "status": "blocked-usage_limit_reached",
+      "output": null,
+      "sha256": null,
+      "dimensions": null,
+      "alpha": null,
+      "inputs": [
+        {
+          "path": "lv4-art-v01.png",
+          "sha256": "ca081cc4ed28547c9f0cd3a27ec2e40364d12246a0241c9c2337c88217636c9a"
+        },
+        {
+          "path": "lv1-original.webp",
+          "sha256": "d1edd42c282b099d85a9bbe5856dcefc3e1a7ceca4e90f8d4a4d17645d7d9d93"
+        }
+      ],
+      "promptReference": "prompts.json#/prompts/lv5"
+    }
+  ],
+  "review": "Static candidates visually inspected; core subjects retained. Lv3 gate is more prominent than planned, pending user review. No alpha layers, animation, production integration or deployment. Lv5 request failed with usage_limit_reached; no output exists."
+}

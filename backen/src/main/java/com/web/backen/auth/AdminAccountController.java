@@ -248,6 +248,17 @@ public class AdminAccountController {
         } catch (AuthException e) { return error(e); }
     }
 
+    @PutMapping("/users/{id}/password")
+    public ResponseEntity<?> resetUserPassword(HttpServletRequest request, @PathVariable long id,
+                                               @RequestBody Map<String, Object> body) {
+        try {
+            authService.requireCsrf(request);
+            authService.requireRoot(request);
+            authService.resetPassword(id, value(body.get("password")));
+            return ResponseEntity.ok(Map.of("code", 200, "message", "密码已重置，已退出该账户的所有登录会话"));
+        } catch (AuthException e) { return error(e); }
+    }
+
     private ResponseEntity<?> error(AuthException e) {
         return ResponseEntity.status(e.getStatus()).body(Map.of("code", e.getStatus(), "message", e.getMessage()));
     }

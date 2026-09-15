@@ -64,7 +64,24 @@ public class AuthController {
         authService.logout(request);
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, authService.clearCookie().toString())
-                .body(okBody(null));
+                    .body(okBody(null));
+    }
+
+    @PutMapping("/password")
+    public ResponseEntity<?> changePassword(HttpServletRequest request, @RequestBody Map<String, Object> body) {
+        try {
+            authService.requireCsrf(request);
+            AuthUser user = authService.requireUser(request);
+            AuthService.AuthSession session = authService.changeOwnPassword(user.id(),
+                    value(body.get("currentPassword")), value(body.get("newPassword")));
+            Map<String, Object> data = userData(session.user());
+            data.put("csrfToken", session.csrfToken());
+            return ResponseEntity.ok()
+                    .header(HttpHeaders.SET_COOKIE, authService.sessionCookie(session.token(), session.expiresAt()).toString())
+                    .body(okBody(data));
+        } catch (AuthException e) {
+            return error(e);
+        }
     }
 
     @GetMapping("/quota-settings")

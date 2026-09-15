@@ -788,7 +788,7 @@
                     <th>角色</th>
                     <th>余额</th>
                     <th>状态</th>
-                    <th>调整</th>
+                    <th>积分调整</th>
                     <th>操作</th>
                   </tr>
                 </thead>
@@ -801,19 +801,18 @@
                     <td>
                       <n-input-number
                         v-model:value="adjustForms[user.id]"
+                        class="credit-adjust-input"
                         size="small"
                       />
                     </td>
                     <td>
-                      <button class="small" @click="adjustCredits(user.id)">
-                        应用</button
-                      ><button
-                        v-if="user.role !== 'ROOT'"
-                        class="small danger"
-                        @click="toggleUser(user)"
-                      >
-                        {{ user.enabled ? "停用" : "启用" }}
-                      </button>
+                      <div class="user-actions">
+                        <button class="small" @click="adjustCredits(user.id)">应用</button>
+                        <button class="small" @click="openPasswordReset(user)">重置密码</button>
+                        <button v-if="user.role !== 'ROOT'" class="small danger" @click="toggleUser(user)">
+                          {{ user.enabled ? "停用" : "启用" }}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 </tbody>
@@ -867,6 +866,15 @@
         <code class="trial-code-once">{{ createdTrialCode }}</code>
         <template #action><button class="primary" @click="copyCreatedTrialCode">复制邀请码</button><button class="small" @click="trialCodeModalOpen = false">我已保存</button></template>
       </n-modal>
+      <n-modal v-model:show="passwordResetModalOpen" preset="dialog" :title="`重置 ${passwordResetTarget?.username || ''} 的密码`" :mask-closable="!passwordResetSubmitting">
+        <form class="password-reset-form" @submit.prevent="resetPassword">
+          <p>新密码至少 10 位。保存后，该账户当前所有登录会话都会退出。</p>
+          <n-input v-model:value="passwordResetForm.password" type="password" show-password-on="click" :disabled="passwordResetSubmitting" :input-props="{ autocomplete: 'new-password', 'aria-label': '新密码' }" placeholder="输入新密码" />
+          <n-input v-model:value="passwordResetForm.confirmPassword" type="password" show-password-on="click" :disabled="passwordResetSubmitting" :input-props="{ autocomplete: 'new-password', 'aria-label': '确认新密码' }" placeholder="再次输入新密码" />
+          <n-alert v-if="passwordResetError" type="error" :title="passwordResetError" />
+          <div class="password-reset-actions"><button type="button" class="small" :disabled="passwordResetSubmitting" @click="passwordResetModalOpen = false">取消</button><button type="submit" class="primary" :disabled="passwordResetSubmitting">{{ passwordResetSubmitting ? "重置中…" : "确认重置" }}</button></div>
+        </form>
+      </n-modal>
     </div>
   </main>
 </template>
@@ -882,6 +890,7 @@ import {
   getAdminAccounts,
   getAdminGuestbookEntries,
   requestGithubRankingRefresh,
+  resetAdminUserPassword,
   testAdminApiSettings,
   updateAdminApiSettings,
   updateAdminUserStatus,
@@ -941,6 +950,11 @@ const stats = reactive({
   creditsSpent: 0,
 });
 const adjustForms = reactive({});
+const passwordResetModalOpen = ref(false);
+const passwordResetSubmitting = ref(false);
+const passwordResetTarget = ref(null);
+const passwordResetError = ref("");
+const passwordResetForm = reactive({ password: "", confirmPassword: "" });
 const settings = reactive({
   translationCreditPerPage: 1,
   pptCreditPerTask: 10,
@@ -1240,6 +1254,37 @@ async function adjustCredits(id) {
     await loadDashboard();
   } catch (e) {
     errorMsg.value = e.message || "额度调整失败";
+  }
+}
+function openPasswordReset(user) {
+  passwordResetTarget.value = user;
+  passwordResetForm.password = "";
+  passwordResetForm.confirmPassword = "";
+  passwordResetError.value = "";
+  passwordResetModalOpen.value = true;
+}
+async function resetPassword() {
+  const user = passwordResetTarget.value;
+  if (!user) return;
+  if (passwordResetForm.password.length < 10) {
+    passwordResetError.value = "新密码至少 10 位";
+    return;
+  }
+  if (passwordResetForm.password !== passwordResetForm.confirmPassword) {
+    passwordResetError.value = "两次输入的新密码不一致";
+    return;
+  }
+  passwordResetSubmitting.value = true;
+  passwordResetError.value = "";
+  try {
+    await resetAdminUserPassword(user.id, passwordResetForm.password);
+    passwordResetModalOpen.value = false;
+    message.success("密码已重置，已退出该账户的所有登录会话");
+    if (auth.user?.id === user.id) await auth.refresh();
+  } catch (e) {
+    passwordResetError.value = e.message || "密码重置失败";
+  } finally {
+    passwordResetSubmitting.value = false;
   }
 }
 function inviteStatus(i) {
@@ -2424,6 +2469,10 @@ code {
   min-width: 0;
 }
 
+.account-grid {
+  grid-template-columns: 1fr;
+}
+
 .guestbook-content {
   max-width: 360px;
   white-space: normal;
@@ -2432,6 +2481,32 @@ code {
 
 .user-table-wrap {
   max-height: 430px;
+}
+
+.credit-adjust-input {
+  width: 108px;
+}
+
+.user-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.password-reset-form {
+  display: grid;
+  gap: 12px;
+}
+
+.password-reset-form p {
+  margin: 0;
+  color: var(--desk-muted);
+  line-height: 1.6;
+}
+
+.password-reset-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .pagination-controls {

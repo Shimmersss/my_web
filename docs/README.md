@@ -11,6 +11,8 @@
 
 ## 规格与实施记录
 
+- [22 张塔罗闪卡独立养成与视觉升级](plans/2026-09-15-tarot-card-progression.md)：养成方向已认可；五级视觉、专属母题与 AI 补充素材为讨论稿，尚未实现。
+- [塔罗 AI 生图执行手册](plans/2026-09-15-tarot-ai-art-direction.md)与[44 条完整提示词](plans/2026-09-15-tarot-ai-prompts.json)：已逐张查看 22 张原图，包含五级场景进化、保留项、拆层与验收；提示词完成，尚未生成升级图。
 - [月下会客厅：关系人格与塔罗报告完整交接](plans/2026-09-10-moonlit-personality-tarot-handoff.md)：面向 Luna Max 的产品、问卷、牌阵、接口、事务、视觉、验收与部署方案；本地实现已完成，生产开关仍关闭。
 - [人格来源审查](plans/personality-source-review.md)：28 题来源、编码、边界和未确认事项。
 - [关系探索素材记录](plans/2026-09-10-moonlit-relationship-assets.md)：22 张原创牌面与来源映射。

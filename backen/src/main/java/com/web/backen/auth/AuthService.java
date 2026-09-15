@@ -178,6 +178,29 @@ public class AuthService {
                         rs.getBoolean("enabled")), id);
     }
 
+    /** A root-initiated reset always ends existing sessions for the affected account. */
+    @Transactional
+    public void resetPassword(long userId, String password) {
+        validatePassword(password);
+        int updated = jdbc.update("UPDATE users SET password_hash=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                passwordEncoder.encode(password), userId);
+        if (updated == 0) throw new AuthException(404, "用户不存在");
+        jdbc.update("DELETE FROM user_sessions WHERE user_id=?", userId);
+    }
+
+    /** Changes an authenticated user's password and replaces every existing session with a new one. */
+    @Transactional
+    public AuthSession changeOwnPassword(long userId, String currentPassword, String newPassword) {
+        validatePassword(newPassword);
+        String hash = jdbc.queryForList("SELECT password_hash FROM users WHERE id=?", String.class, userId)
+                .stream().findFirst().orElseThrow(() -> new AuthException(404, "用户不存在"));
+        if (!passwordEncoder.matches(currentPassword == null ? "" : currentPassword, hash)) {
+            throw new AuthException(400, "当前密码错误");
+        }
+        resetPassword(userId, newPassword);
+        return createSessionForUser(userId);
+    }
+
     @Transactional
     public AuthUser createInternalTrialUser(String username) {
         String cleanUsername = normalizeUsername(username);

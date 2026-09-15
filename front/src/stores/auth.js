@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { claimDailyCheckin, getCurrentUser, getSiteSettings, getUnreadNotificationCount, loginAccount, logoutAccount, redeemMatchmakingTrial, registerAccount } from '@/api'
+import { changeOwnPassword, claimDailyCheckin, getCurrentUser, getSiteSettings, getUnreadNotificationCount, loginAccount, logoutAccount, redeemMatchmakingTrial, registerAccount } from '@/api'
 
 export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
@@ -85,6 +85,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  async function changePassword(currentPassword, newPassword) {
+    const response = await changeOwnPassword(currentPassword, newPassword)
+    applyUser(response.data)
+    return user.value
+  }
+
   function updateCredits(value) {
     if (user.value) user.value = { ...user.value, credits: Number(value || 0) }
   }
@@ -116,5 +122,5 @@ export const useAuthStore = defineStore('auth', () => {
   function clearAuthPrompt() { authPrompt.value = '' }
   function consumePendingPath() { const path = pendingPath.value; pendingPath.value = ''; authPrompt.value = ''; return path }
 
-  return { user, loading, isLoggedIn, isRoot, isMatchmakingTrial, credits, dailyCheckin, visibility, unreadNotifications, authPrompt, canView, requestLogin, requestPermissionDenied, clearAuthPrompt, consumePendingPath, refresh, refreshUnreadNotifications, login, register, redeemTrial, logout, updateCredits, checkIn }
+  return { user, loading, isLoggedIn, isRoot, isMatchmakingTrial, credits, dailyCheckin, visibility, unreadNotifications, authPrompt, canView, requestLogin, requestPermissionDenied, clearAuthPrompt, consumePendingPath, refresh, refreshUnreadNotifications, login, register, redeemTrial, logout, changePassword, updateCredits, checkIn }
 })

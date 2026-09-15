@@ -116,6 +116,11 @@ export function getMatchmakingTask(taskId, options = {}) {
 export function getMatchmakingReports() {
   return get("/matchmaking/reports");
 }
+export function getMatchmakingReportArchive(page = 1, pageSize = 10, owner = "") {
+  const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (owner) params.set("owner", owner);
+  return get(`/matchmaking/reports/archive?${params.toString()}`);
+}
 export function getMatchmakingReport(reportId) {
   return get(`/matchmaking/reports/${reportId}`);
 }
@@ -127,6 +132,12 @@ export function deleteMatchmakingData() {
 }
 export function redeemMatchmakingTrial(code) {
   return post("/matchmaking/trial/redeem", { code });
+}
+export function drawMatchmakingTarot() {
+  return post("/matchmaking/tarot-draws", {});
+}
+export function getCurrentMatchmakingTarot() {
+  return get("/matchmaking/tarot-draws/current");
 }
 
 // ==================== 留言板与站内通知 API ====================

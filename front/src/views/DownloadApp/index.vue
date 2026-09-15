@@ -78,19 +78,19 @@ async function copyPageUrl() {
 </script>
 
 <style scoped>
-.download-page { min-height: calc(100vh - 80px); padding: 42px 16px 72px; background: #eee9df; color: #302d28; }
-.download-card { max-width: 680px; margin: 0 auto; padding: 34px; border: 1px solid #cfc4b2; background: #faf7f0; box-shadow: 0 18px 46px rgba(70, 55, 34, .09); }
+.download-page { min-height: calc(100vh - 80px); padding: 42px 16px 72px; background: var(--desk-bg); color: var(--desk-text); }
+.download-card { max-width: 680px; margin: 0 auto; padding: 34px; border: 1px solid #cfc4b2; background: var(--desk-surface); box-shadow: 0 18px 46px rgba(70, 55, 34, .09); }
 .eyebrow { margin: 0 0 10px; color: #a03f30; font-size: 11px; font-weight: 700; letter-spacing: .15em; }
 h1 { margin: 0; font: 500 42px/1.15 Georgia, serif; }
-.lead { margin: 16px 0 26px; color: #6c6459; line-height: 1.75; }
-.release-panel { display: grid; gap: 16px; padding: 22px; border: 1px solid #d9cebc; background: #fffdf8; }
+.lead { margin: 16px 0 26px; color: var(--desk-muted); line-height: 1.75; }
+.release-panel { display: grid; gap: 16px; padding: 22px; border: 1px solid var(--desk-border); background: var(--desk-surface); }
 .release-panel div { display: grid; gap: 4px; }
 .release-panel small, .address-panel small { color: #8b7e6d; font-size: 12px; }
 .release-panel strong { font-size: 22px; }
 .release-panel p { margin: 0; line-height: 1.7; }
 .release-panel a { text-decoration: none; }
-.address-panel { display: grid; gap: 10px; margin-top: 20px; padding: 18px; border-left: 3px solid #b83126; background: #f2ede4; }
+.address-panel { display: grid; gap: 10px; margin-top: 20px; padding: 18px; border-left: 3px solid var(--desk-accent); background: var(--desk-soft); }
 .address-panel code { overflow-wrap: anywhere; font-size: 14px; }
-ul { margin: 24px 0 0; padding-left: 20px; color: #6c6459; line-height: 1.9; }
+ul { margin: 24px 0 0; padding-left: 20px; color: var(--desk-muted); line-height: 1.9; }
 @media (max-width: 600px) { .download-page { padding: 22px 10px 54px; } .download-card { padding: 22px 18px; } h1 { font-size: 34px; } }
 </style>

@@ -880,7 +880,7 @@ onBeforeUnmount(() => {
 @use '@/assets/styles/variables' as *;
 
 .translate-page {
-  background: #eee9df;
+  background: var(--desk-bg);
 }
 
 .container {
@@ -892,17 +892,17 @@ onBeforeUnmount(() => {
 
 .quota-line {
   margin-top: 6px;
-  color: #8f2a22;
+  color: var(--desk-accent);
   font-size: 14px;
 }
 
 .recent-section {
   margin-top: 28px;
   padding: 20px 24px;
-  border: 1px solid #d2cabc;
+  border: 1px solid var(--desk-border);
   border-radius: 2px;
-  background: #fbf9f3;
-  box-shadow: 2px 3px 0 rgba(95, 86, 65, 0.1);
+  background: var(--desk-surface);
+  box-shadow: var(--desk-shadow);
 }
 
 .recent-header {
@@ -921,7 +921,7 @@ onBeforeUnmount(() => {
   p {
     margin: 4px 0 0;
     font-size: 13px;
-    color: #888;
+    color: var(--desk-subtle);
   }
 }
 
@@ -943,7 +943,7 @@ onBeforeUnmount(() => {
   padding: 12px 14px;
   border: 1px solid #edf0f3;
   border-radius: 10px;
-  background: #fff;
+  background: var(--desk-surface);
   overflow: hidden;
   text-align: left;
   cursor: pointer;
@@ -974,7 +974,7 @@ onBeforeUnmount(() => {
 
   span {
     font-size: 12px;
-    color: #888;
+    color: var(--desk-subtle);
   }
 }
 
@@ -983,7 +983,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 8px;
   font-size: 12px;
-  color: #888;
+  color: var(--desk-subtle);
 }
 
 /* ===== 上传态 ===== */
@@ -1002,7 +1002,7 @@ onBeforeUnmount(() => {
   padding: 60px 40px;
   border: 2px dashed #d0d7de;
   border-radius: 2px;
-  background: #fbf9f3;
+  background: var(--desk-surface);
   text-align: center;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -1010,9 +1010,9 @@ onBeforeUnmount(() => {
   &:hover,
   &.dragging {
     border-color: $primary-color;
-    background: #f3eadf;
+    background: var(--desk-tint);
     transform: translateY(-2px);
-    box-shadow: 2px 3px 0 rgba(95, 86, 65, 0.1);
+    box-shadow: var(--desk-shadow);
   }
 
   &:focus-visible {
@@ -1060,10 +1060,10 @@ onBeforeUnmount(() => {
 .config-card {
   width: 100%;
   max-width: 480px;
-  background: #fbf9f3;
-  border: 1px solid #d2cabc;
+  background: var(--desk-surface);
+  border: 1px solid var(--desk-border);
   border-radius: 2px;
-  box-shadow: 2px 3px 0 rgba(95, 86, 65, 0.1);
+  box-shadow: var(--desk-shadow);
   overflow: hidden;
 }
 
@@ -1072,7 +1072,7 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 16px;
   padding: 24px 28px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--desk-soft);
 
   h2 {
     font-size: 18px;
@@ -1084,7 +1084,7 @@ onBeforeUnmount(() => {
 
   p {
     font-size: 14px;
-    color: #888;
+    color: var(--desk-subtle);
     margin: 4px 0 0;
   }
 }
@@ -1116,7 +1116,7 @@ onBeforeUnmount(() => {
 }
 
 .range-sep {
-  color: #888;
+  color: var(--desk-subtle);
   font-size: 14px;
 }
 
@@ -1158,13 +1158,13 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   border-radius: 999px;
-  color: #b83126;
+  color: var(--desk-accent);
   background: #ffe1dc;
   box-shadow: inset 0 0 0 8px rgba(255, 255, 255, 0.66);
 }
 
 .failure-eyebrow {
-  color: #b83126;
+  color: var(--desk-accent);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -1221,7 +1221,7 @@ onBeforeUnmount(() => {
 }
 
 .progress-section {
-  background: #fff;
+  background: var(--desk-surface);
   border-radius: 16px;
   padding: 32px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
@@ -1242,7 +1242,7 @@ onBeforeUnmount(() => {
 
   p {
     font-size: 14px;
-    color: #888;
+    color: var(--desk-subtle);
     margin: 4px 0 0;
   }
 }
@@ -1252,7 +1252,7 @@ onBeforeUnmount(() => {
 
   .progress-text {
     font-size: 14px;
-    color: #666;
+    color: var(--desk-muted);
     margin: 8px 0 0;
     text-align: center;
   }
@@ -1261,17 +1261,17 @@ onBeforeUnmount(() => {
 .preview-list {
   max-height: 400px;
   overflow-y: auto;
-  border-top: 1px solid #f0f0f0;
+  border-top: 1px solid var(--desk-soft);
   padding-top: 16px;
 }
 
 .preview-item {
   padding: 12px 0;
-  border-bottom: 1px solid #f5f5f5;
+  border-bottom: 1px solid var(--desk-soft);
 
   .preview-original {
     font-size: 13px;
-    color: #999;
+    color: var(--desk-subtle);
     margin-bottom: 6px;
     line-height: 1.5;
     display: -webkit-box;
@@ -1289,7 +1289,7 @@ onBeforeUnmount(() => {
 
 /* ===== 结果态 ===== */
 .result-section {
-  background: #fff;
+  background: var(--desk-surface);
   border-radius: 16px;
   padding: 24px 32px;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
@@ -1303,7 +1303,7 @@ onBeforeUnmount(() => {
   gap: 12px;
   margin-bottom: 24px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #f0f0f0;
+  border-bottom: 1px solid var(--desk-soft);
 }
 
 .result-info {
@@ -1331,18 +1331,18 @@ onBeforeUnmount(() => {
 
 .pdf-preview-panel {
   margin-bottom: 24px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--desk-border);
   border-radius: 8px;
   overflow: hidden;
-  background: #fff;
+  background: var(--desk-surface);
 }
 
 .image-preview-panel {
   margin-bottom: 24px;
-  border: 1px solid #e5e7eb;
+  border: 1px solid var(--desk-border);
   border-radius: 8px;
   overflow: hidden;
-  background: #f8fafc;
+  background: var(--desk-soft);
 }
 
 .image-preview {
@@ -1351,7 +1351,7 @@ onBeforeUnmount(() => {
   max-height: 72vh;
   margin: 0 auto;
   object-fit: contain;
-  background: #f8fafc;
+  background: var(--desk-soft);
 }
 
 .pdf-preview-header {
@@ -1361,7 +1361,7 @@ onBeforeUnmount(() => {
   gap: 16px;
   padding: 14px 16px;
   border-bottom: 1px solid #eef0f3;
-  background: #fafbfc;
+  background: var(--desk-surface);
   min-width: 0;
 
   h3 {
@@ -1373,7 +1373,7 @@ onBeforeUnmount(() => {
   p {
     margin: 4px 0 0;
     font-size: 12px;
-    color: #888;
+    color: var(--desk-subtle);
   }
 }
 
@@ -1382,8 +1382,8 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #888;
-  background: #f8fafc;
+  color: var(--desk-subtle);
+  background: var(--desk-soft);
 }
 
 .result-list {
@@ -1393,7 +1393,7 @@ onBeforeUnmount(() => {
 
 .result-item {
   padding: 16px 0;
-  border-bottom: 1px solid #f5f5f5;
+  border-bottom: 1px solid var(--desk-soft);
 
   &:last-child {
     border-bottom: none;
@@ -1408,7 +1408,7 @@ onBeforeUnmount(() => {
 
 .result-original {
   font-size: 14px;
-  color: #666;
+  color: var(--desk-muted);
   line-height: 1.7;
   padding: 12px 16px;
   background: #fafafa;

@@ -27,6 +27,8 @@ public class TranslationSession {
     private volatile boolean resourceDowngraded;
     private volatile String resourceDowngradeReason;
     private volatile int resourceDowngradeCount;
+    /** Last-resort PDF mode: translate the remaining pages one at a time after memory pressure. */
+    private volatile boolean singlePageFallback;
     private volatile double progress;
     private volatile String progressStage = "";
     private long createdAt;
@@ -74,6 +76,7 @@ public class TranslationSession {
     public boolean isResourceDowngraded() { return resourceDowngraded; }
     public String getResourceDowngradeReason() { return resourceDowngradeReason; }
     public int getResourceDowngradeCount() { return resourceDowngradeCount; }
+    public boolean isSinglePageFallback() { return singlePageFallback; }
     public double getProgress() { return progress; }
     public String getProgressStage() { return progressStage; }
     public long getCreatedAt() { return createdAt; }
@@ -130,6 +133,7 @@ public class TranslationSession {
     public void setResourceDowngraded(boolean resourceDowngraded) { this.resourceDowngraded = resourceDowngraded; touch(); }
     public void setResourceDowngradeReason(String resourceDowngradeReason) { this.resourceDowngradeReason = resourceDowngradeReason; touch(); }
     public void setResourceDowngradeCount(int resourceDowngradeCount) { this.resourceDowngradeCount = resourceDowngradeCount; touch(); }
+    public void setSinglePageFallback(boolean singlePageFallback) { this.singlePageFallback = singlePageFallback; touch(); }
     public void setProgress(double progress) { this.progress = progress; touch(); }
     public void setProgressStage(String progressStage) { this.progressStage = progressStage; touch(); }
     public void setCompletedAt(long completedAt) { this.completedAt = completedAt; touch(); }

@@ -2,6 +2,7 @@ package com.web.backen.matchmaking;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.auth.AuthUser;
+import com.web.backen.auth.DailyCheckinSchemaMigration;
 import com.web.backen.auth.QuotaService;
 import org.junit.jupiter.api.*;
 import org.springframework.core.io.ClassPathResource;
@@ -37,12 +38,35 @@ class MatchmakingMySqlIT {
             admin.execute("CREATE TABLE " + other + ".matchmaking_trial_codes(code_plain VARCHAR(64))");
             jdbc.execute("ALTER TABLE matchmaking_trial_codes DROP COLUMN code_plain");
             jdbc.execute("ALTER TABLE matchmaking_reports MODIFY COLUMN report_payload TEXT NOT NULL");
+            jdbc.execute("ALTER TABLE daily_checkins DROP COLUMN deck_version, DROP COLUMN card_id, DROP COLUMN tarot_payload");
             new MatchmakingSchemaMigration(jdbc).addAccountOwnedPayloadColumns();
+            new DailyCheckinSchemaMigration(jdbc).addDailyTarotColumns();
             assertEquals("mediumtext", jdbc.queryForObject("SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='matchmaking_reports' AND COLUMN_NAME='report_payload'", String.class));
+            assertEquals(3, jdbc.queryForObject("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='daily_checkins' AND COLUMN_NAME IN ('deck_version','card_id','tarot_payload')", Integer.class));
             jdbc.queryForList("SELECT code_plain FROM matchmaking_trial_codes");
             jdbc.update("INSERT INTO users(id,username,password_hash,role,credits) VALUES(1,'test','x','USER',20)");
+            jdbc.update("INSERT INTO users(id,username,password_hash,role,credits) VALUES(2,'legacy-checkin','x','USER',0)");
+            jdbc.update("INSERT INTO users(id,username,password_hash,role,credits) VALUES(3,'parallel-checkin','x','USER',0)");
             var quota = new QuotaService(jdbc); quota.initializeDefaults();
             var tx = new TransactionTemplate(new DataSourceTransactionManager(source));
+            jdbc.update("INSERT INTO daily_checkins(user_id,checkin_date) VALUES(2,CURRENT_DATE)");
+            assertNotNull(quota.dailyCheckinStatus(2).get("tarotCard"));
+            assertEquals(0, quota.balance(2));
+            var checkinPool = Executors.newFixedThreadPool(4); var checkinStart = new CountDownLatch(1);
+            try {
+                var checkins = new ArrayList<Future<Map<String, Object>>>();
+                for (int i = 0; i < 4; i++) checkins.add(checkinPool.submit(() -> {
+                    try { checkinStart.await(); } catch (InterruptedException e) { throw new RuntimeException(e); }
+                    return tx.execute(status -> quota.claimDailyCheckin(3));
+                }));
+                checkinStart.countDown();
+                Set<Object> cards = new HashSet<>();
+                for (var future : checkins) cards.add(((Map<?, ?>) future.get(15, TimeUnit.SECONDS).get("tarotCard")).get("cardId"));
+                assertEquals(1, cards.size());
+            } finally { checkinPool.shutdownNow(); }
+            assertEquals(2, quota.balance(3));
+            assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM daily_checkins WHERE user_id=3", Integer.class));
+            assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM credit_transactions WHERE user_id=3 AND kind='DAILY_CHECKIN'", Integer.class));
             long spend = tx.execute(status -> quota.spend(1, 3, "TEST", "parallel-refund", "test"));
             var pool = Executors.newFixedThreadPool(6); var start = new CountDownLatch(1);
             try {

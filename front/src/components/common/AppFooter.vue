@@ -48,7 +48,7 @@ const navigateTo = (path) => {
 @use '@/assets/styles/variables' as *;
 
 .app-footer {
-  background: #e8e1d5;
+  background: var(--desk-bg);
   color: #333;
   padding: $spacing-section 0 0;
 
@@ -125,7 +125,7 @@ const navigateTo = (path) => {
 .footer-mark {
   width: 4px;
   height: 28px;
-  background: #b83126;
+  background: var(--desk-accent);
 }
 
 @media (max-width: 768px) {

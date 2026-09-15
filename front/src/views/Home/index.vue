@@ -56,7 +56,7 @@
               <p class="section-kicker">02 / 快速入口</p>
               <h2 id="workflow-title">站内工具</h2>
             </div>
-            <a href="/matchmaking-report" @click.prevent="navigateTo('/matchmaking-report')">打开婚恋报告 <span aria-hidden="true">→</span></a>
+            <a href="/matchmaking-report" @click.prevent="navigateTo('/matchmaking-report')">打开关系探索报告 <span aria-hidden="true">→</span></a>
           </div>
 
           <nav class="workflow-list" aria-label="研究工作流入口">
@@ -145,7 +145,7 @@ const tools = [
   { title: '论文翻译', description: '保留版式输出双语 PDF', path: '/translate', icon: DocumentTextOutline },
   { title: 'PPT 生成', description: '从论文生成答辩材料', path: '/contact', icon: SchoolOutline },
   { title: 'GPT 生图', description: '生成图片或用参考图继续创作', path: '/image-generate', icon: ImagesOutline },
-  { title: '婚恋定位体检', description: '生成五维定位与沟通报告', path: '/matchmaking-report', icon: HeartOutline },
+  { title: '关系探索报告', description: '从关系偏好、人格倾向与塔罗牌面展开自我探索', path: '/matchmaking-report', icon: HeartOutline },
   { title: '开源项目', description: '浏览 GitHub 仓库与 README', path: '/news', icon: LogoGithub },
   { title: '留言板', description: '留下建议或查看站内交流', path: '/guestbook', icon: ChatbubbleEllipsesOutline }
 ]
@@ -193,19 +193,19 @@ function formatNumber(value) {
 .home-page {
   min-height: calc(100vh - 81px);
   overflow: hidden;
-  background: #eee9df;
-  color: #25251f;
+  background: var(--desk-bg);
+  color: var(--desk-text);
 }
 
-.ranking-toggle{display:flex;gap:6px;margin:0 0 12px}.ranking-toggle button{border:1px solid #d7ccba;background:#f8f4ec;padding:6px 11px;cursor:pointer}.ranking-toggle button.active{background:#b83126;color:#fff;border-color:#b83126}.ranking-list{display:grid;gap:0}.ranking-row{display:grid;grid-template-columns:36px 1fr;gap:10px;padding:12px 0;border-bottom:1px solid #e5ddd1;color:inherit;text-decoration:none}.ranking-row:last-child{border-bottom:0}.ranking-row b{color:#b83126}.ranking-row p{margin:5px 0;font-size:12px;line-height:1.45;color:#665f55}.ranking-row small{color:#8a6654}
-.checkin-panel { margin-top: 22px; border-top: 1px solid #d8d1c5; padding-top: 20px; }
+.ranking-toggle{display:flex;gap:6px;margin:0 0 12px}.ranking-toggle button{border:1px solid var(--desk-border);background:var(--desk-surface);padding:6px 11px;cursor:pointer}.ranking-toggle button.active{background:var(--desk-accent);color:#fff;border-color:var(--desk-accent)}.ranking-list{display:grid;gap:0}.ranking-row{display:grid;grid-template-columns:36px 1fr;gap:10px;padding:12px 0;border-bottom:1px solid #e5ddd1;color:inherit;text-decoration:none}.ranking-row:last-child{border-bottom:0}.ranking-row b{color:var(--desk-accent)}.ranking-row p{margin:5px 0;font-size:12px;line-height:1.45;color:#665f55}.ranking-row small{color:#8a6654}
+.checkin-panel { margin-top: 22px; border-top: 1px solid var(--desk-border); padding-top: 20px; }
 .checkin-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
 .checkin-heading .section-kicker { margin-bottom: 8px; }
-.checkin-heading h3 { margin:0; color:#25251f; font-family:Georgia, 'Noto Serif SC', serif; font-size:20px; font-weight:500; }
-.checkin-heading > span { color:#756f64; font-size:13px; }
+.checkin-heading h3 { margin:0; color:var(--desk-text); font-family:Georgia, 'Noto Serif SC', serif; font-size:20px; font-weight:500; }
+.checkin-heading > span { color:var(--desk-muted); font-size:13px; }
 .checkin-list { list-style:none; margin:14px 0 0; padding:0; display:grid; gap:2px; }
 .checkin-list li { display:grid; grid-template-columns:42px 1fr auto; gap:12px; align-items:center; padding:12px 8px; border-bottom:1px solid #e7e0d5; }
-.checkin-list b { color:#b83126; font-size:12px; }.checkin-list span { color:#58745f; font-weight:700; }.checkin-empty { color:#756f64; margin:18px 0 4px; }
+.checkin-list b { color:var(--desk-accent); font-size:12px; }.checkin-list span { color:#58745f; font-weight:700; }.checkin-empty { color:var(--desk-muted); margin:18px 0 4px; }
 
 .desk-hero {
   position: relative;
@@ -217,7 +217,7 @@ function formatNumber(value) {
     position: absolute;
     inset: 0;
     z-index: -1;
-    background: #f8f5ee;
+    background: var(--desk-bg);
     content: '';
   }
 }
@@ -240,14 +240,14 @@ function formatNumber(value) {
     top: 40px;
     width: 3px;
     height: 102px;
-    background: #b83126;
+    background: var(--desk-accent);
     content: '';
   }
 
   h1 {
     max-width: 600px;
     margin: 0;
-    color: #25251f;
+    color: var(--desk-text);
     font-family: Georgia, 'Noto Serif SC', 'Songti SC', serif;
     font-size: clamp(52px, 5.1vw, 74px);
     font-weight: 500;
@@ -257,7 +257,7 @@ function formatNumber(value) {
 
   .lead {
     margin: 22px 0 0;
-    color: #756f64;
+    color: var(--desk-muted);
     font-family: Georgia, 'Noto Serif SC', serif;
     font-size: clamp(20px, 2vw, 27px);
     letter-spacing: 0.02em;
@@ -266,7 +266,7 @@ function formatNumber(value) {
 
 .section-kicker {
   margin: 0 0 18px;
-  color: #b83126;
+  color: var(--desk-accent);
   font: 700 12px/1.2 $font-en;
   letter-spacing: 0.13em;
   text-transform: uppercase;
@@ -290,11 +290,11 @@ function formatNumber(value) {
   gap: 22px;
   min-height: 52px;
   padding: 0 22px;
-  background: #b83126;
+  background: var(--desk-accent);
   color: #fffaf1;
   font-size: 15px;
   font-weight: 700;
-  box-shadow: 4px 5px 0 rgba(95, 86, 65, 0.12);
+  box-shadow: var(--desk-shadow);
 
   span { font-size: 21px; line-height: 1; }
 
@@ -393,7 +393,7 @@ function formatNumber(value) {
   backdrop-filter: blur(7px);
 
   strong {
-    color: #b83126;
+    color: var(--desk-accent);
     font-weight: 700;
   }
 }
@@ -410,7 +410,7 @@ function formatNumber(value) {
   letter-spacing: 0.12em;
 
   strong {
-    color: #25251f;
+    color: var(--desk-text);
     font-family: Georgia, 'Noto Serif SC', serif;
     font-size: 17px;
     font-weight: 400;
@@ -420,7 +420,7 @@ function formatNumber(value) {
 
 .workflow-section {
   padding: 34px 0 76px;
-  background: #eee9df;
+  background: var(--desk-bg);
 }
 
 .workflow-layout {
@@ -431,10 +431,10 @@ function formatNumber(value) {
 
 .paper-panel {
   position: relative;
-  border: 1px solid #cfc7b7;
+  border: 1px solid var(--desk-border);
   border-radius: 2px;
-  background: #fbf9f3;
-  box-shadow: 2px 3px 0 rgba(95, 86, 65, 0.12);
+  background: var(--desk-surface);
+  box-shadow: var(--desk-shadow);
   padding: 26px 28px;
 }
 
@@ -454,13 +454,13 @@ function formatNumber(value) {
   justify-content: space-between;
   gap: 20px;
   padding-bottom: 14px;
-  border-bottom: 1px solid #d8d1c5;
+  border-bottom: 1px solid var(--desk-border);
 
   .section-kicker { margin-bottom: 10px; }
 
   h2 {
     margin: 0;
-    color: #25251f;
+    color: var(--desk-text);
     font-family: Georgia, 'Noto Serif SC', serif;
     font-size: 25px;
     font-weight: 500;
@@ -472,7 +472,7 @@ function formatNumber(value) {
     text-decoration: none;
   }
 
-  a:hover { color: #b83126; }
+  a:hover { color: var(--desk-accent); }
 }
 
 .panel-pulse {
@@ -493,22 +493,22 @@ function formatNumber(value) {
     min-height: 68px;
     color: inherit;
     text-decoration: none;
-    border-bottom: 1px solid #e3ddd2;
+    border-bottom: 1px solid var(--desk-border);
     transition: padding 0.25s ease, color 0.25s ease;
   }
 
   a:hover {
     padding-left: 5px;
-    color: #b83126;
+    color: var(--desk-accent);
   }
 
   strong,
   small { display: block; }
   strong { font-size: 14px; }
-  small { margin-top: 3px; color: #89847a; font-size: 11px; }
+  small { margin-top: 3px; color: var(--desk-subtle); font-size: 11px; }
 }
 
-.row-index { color: #a49d90; font: 12px/1 Georgia, serif; }
+.row-index { color: var(--desk-subtle); font: 12px/1 Georgia, serif; }
 .tool-icon { color: #4f5f4b; }
 .row-arrow { transition: transform 0.25s ease; }
 .workflow-list a:hover .row-arrow { transform: translateX(4px); }
@@ -517,7 +517,7 @@ function formatNumber(value) {
   small {
     display: block;
     margin-top: 7px;
-    color: #8b867c;
+    color: var(--desk-subtle);
     text-align: right;
   }
 }
@@ -557,7 +557,7 @@ function formatNumber(value) {
 
 .featured-repo {
   margin-top: 18px;
-  border: 1px solid #d8d1c5;
+  border: 1px solid var(--desk-border);
   padding: 18px;
 
   p { min-height: 48px; color: #69645b; line-height: 1.65; }
@@ -571,13 +571,13 @@ function formatNumber(value) {
   strong,
   small { display: block; }
   strong { overflow-wrap: anywhere; font: 700 16px/1.3 $font-en; }
-  small { margin-top: 3px; color: #999287; font-size: 11px; }
+  small { margin-top: 3px; color: var(--desk-subtle); font-size: 11px; }
 }
 
 .repo-meta {
   display: flex;
   gap: 18px;
-  border-top: 1px solid #e3ddd2;
+  border-top: 1px solid var(--desk-border);
   padding: 12px 0;
   color: #6c7565;
   font-size: 12px;
@@ -586,9 +586,9 @@ function formatNumber(value) {
 .repo-link {
   display: flex;
   justify-content: space-between;
-  border: 1px solid #d8d1c5;
+  border: 1px solid var(--desk-border);
   padding: 11px 12px;
-  color: #b83126;
+  color: var(--desk-accent);
   font-weight: 600;
   text-decoration: none;
 }

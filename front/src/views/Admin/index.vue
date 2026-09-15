@@ -857,7 +857,7 @@
             </div>
           </section>
         </div>
-      <section id="matchmaking-panel" class="admin-panel"><div class="panel-title"><div><span class="eyebrow">MATCHMAKING REPORT PROVIDER</span><h2>婚恋报告 / Mimo API</h2></div><button class="primary" @click="saveMatchmakingSettings">保存婚恋报告配置</button></div><p class="panel-desc">默认继承「LLM 通用模型」的 Mimo 配置。填写并保存后，只会覆盖婚恋报告节目；密钥不会返回浏览器。</p><div class="provider-card"><div class="provider-head"><div><h3>专属文本模型</h3><span>不联网检索，仅整理已校验的匿名化条件账本。</span></div><n-tag :type="matchmakingApiHint !== '未配置' ? 'success' : 'warning'" size="small" :bordered="false">{{ matchmakingApiHint }}</n-tag></div><n-input v-model:value="matchmakingForm.baseUrl" placeholder="Base URL" /><label class="provider-protocol field-gap">接口协议<select v-model="matchmakingForm.protocol"><option value="auto">自动识别（推荐）</option><option value="openai">OpenAI Chat Completions</option><option value="claude">Claude Messages</option></select></label><n-input v-model:value="matchmakingForm.model" class="field-gap" placeholder="模型名称" /><n-input v-model:value="matchmakingForm.apiKey" class="field-gap" type="password" show-password-on="click" :placeholder="matchmakingApiHint === '未配置' ? '输入 Key' : '留空保留当前 Key'" /><div class="provider-actions"><button class="small" :disabled="testingProvider === 'matchmaking'" @click="testMatchmakingConnection">{{ testingProvider === 'matchmaking' ? '测试中…' : '测试连通性' }}</button><span v-if="testResults.matchmaking" class="test-result" :class="testResults.matchmaking.type">{{ testResults.matchmaking.text }}<em v-if="testResults.matchmaking.latencyMs"> · {{ testResults.matchmaking.latencyMs }} ms</em></span></div></div></section>
+      <section id="matchmaking-panel" class="admin-panel"><div class="panel-title"><div><span class="eyebrow">MATCHMAKING REPORT PROVIDER</span><h2>婚恋报告 / Mimo API</h2></div><button class="primary" @click="saveMatchmakingSettings">保存婚恋报告配置</button></div><p class="panel-desc">默认继承「LLM 通用模型」的 Mimo 配置。填写并保存后，只会覆盖婚恋报告节目；密钥不会返回浏览器。</p><div class="provider-card"><div class="provider-head"><div><h3>专属文本模型</h3><span>不联网检索，仅整理已校验的匿名化条件账本。</span></div><n-tag :type="matchmakingApiHint !== '未配置' ? 'success' : 'warning'" size="small" :bordered="false">{{ matchmakingApiHint }}</n-tag></div><label class="feature-switch"><input v-model="matchmakingForm.relationshipEnabled" type="checkbox" /> 开放“关系探索报告”新建入口 <small>关闭后仍可读取已有新版报告</small></label><n-input v-model:value="matchmakingForm.baseUrl" placeholder="Base URL" /><label class="provider-protocol field-gap">接口协议<select v-model="matchmakingForm.protocol"><option value="auto">自动识别（推荐）</option><option value="openai">OpenAI Chat Completions</option><option value="claude">Claude Messages</option></select></label><n-input v-model:value="matchmakingForm.model" class="field-gap" placeholder="模型名称" /><n-input v-model:value="matchmakingForm.apiKey" class="field-gap" type="password" show-password-on="click" :placeholder="matchmakingApiHint === '未配置' ? '输入 Key' : '留空保留当前 Key'" /><div class="provider-actions"><button class="small" :disabled="testingProvider === 'matchmaking'" @click="testMatchmakingConnection">{{ testingProvider === 'matchmaking' ? '测试中…' : '测试连通性' }}</button><span v-if="testResults.matchmaking" class="test-result" :class="testResults.matchmaking.type">{{ testResults.matchmaking.text }}<em v-if="testResults.matchmaking.latencyMs"> · {{ testResults.matchmaking.latencyMs }} ms</em></span></div></div></section>
       <section id="matchmaking-billing-panel" class="admin-panel"><div class="panel-title"><div><span class="eyebrow">MATCHMAKING BILLING</span><h2>婚恋报告积分</h2></div><button class="primary" @click="saveSettings">保存计费规则</button></div><p class="panel-desc">每份专属报告在模型成功生成后扣除一次积分；调用、结构校验或保存失败会自动退款。</p><div class="form-grid"><label>婚恋报告 / 份<n-input-number v-model:value="settings.matchmakingCreditPerReport" :min="1" /></label></div></section>
           </div>
         </div>
@@ -972,6 +972,7 @@ const matchmakingForm = reactive({
   model: "",
   apiKey: "",
   protocol: "auto",
+  relationshipEnabled: false,
 });
 const matchmakingApiHint = ref("未配置");
 const pptRetentionForm = reactive({ maxPerUser: 5, maxTotal: 20 });
@@ -1085,6 +1086,7 @@ function applyMatchmakingSettings(setting) {
   matchmakingForm.baseUrl = setting.baseUrl || "";
   matchmakingForm.model = setting.model || "";
   matchmakingForm.protocol = String(setting.protocol || "auto").toLowerCase();
+  matchmakingForm.relationshipEnabled = Boolean(setting.relationshipEnabled);
   matchmakingForm.apiKey = "";
   matchmakingApiHint.value = setting.apiKeyHint || "未配置";
 }
@@ -1468,8 +1470,8 @@ async function saveImageGenerationSettings() {
 .admin-page {
   min-height: 100vh;
   padding: 40px 20px 72px;
-  background: #f3f5f7;
-  color: #17212b;
+  background: var(--desk-bg);
+  color: var(--desk-text);
 }
 .admin-shell {
   max-width: 1280px;
@@ -1480,8 +1482,8 @@ async function saveImageGenerationSettings() {
 .admin-header,
 .admin-panel,
 .stat-card {
-  background: #fff;
-  border: 1px solid #e1e7ec;
+  background: var(--desk-surface);
+  border: 1px solid var(--desk-border);
   border-radius: 14px;
   box-shadow: 0 6px 22px #1626330b;
 }
@@ -1499,7 +1501,7 @@ async function saveImageGenerationSettings() {
 .admin-header p,
 .panel-desc,
 .muted {
-  color: #72808c;
+  color: var(--desk-muted);
 }
 .eyebrow {
   color: #7b8b99;
@@ -1565,9 +1567,9 @@ async function saveImageGenerationSettings() {
 }
 .provider-card {
   padding: 16px;
-  border: 1px solid #e5eaee;
+  border: 1px solid var(--desk-border);
   border-radius: 11px;
-  background: #fbfcfd;
+  background: var(--desk-surface);
   min-width: 0;
 }
 .provider-head {
@@ -1579,7 +1581,7 @@ async function saveImageGenerationSettings() {
   font-size: 15px;
 }
 .provider-head span {
-  color: #7b8791;
+  color: var(--desk-subtle);
   font-size: 12px;
   line-height: 1.55;
 }
@@ -1595,7 +1597,7 @@ async function saveImageGenerationSettings() {
 .form-grid label {
   display: grid;
   gap: 6px;
-  color: #53616c;
+  color: var(--desk-muted);
   font-size: 12px;
   font-weight: 600;
   min-width: 0;
@@ -1603,7 +1605,7 @@ async function saveImageGenerationSettings() {
 .table-wrap {
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
-  border: 1px solid #edf0f2;
+  border: 1px solid var(--desk-soft);
   border-radius: 8px;
 }
 table {
@@ -1615,7 +1617,7 @@ table {
 th,
 td {
   padding: 12px 10px;
-  border-bottom: 1px solid #edf0f2;
+  border-bottom: 1px solid var(--desk-soft);
   text-align: left;
   white-space: nowrap;
 }
@@ -1640,15 +1642,15 @@ code {
 }
 .primary {
   color: #fff;
-  background: #b83126;
+  background: var(--desk-accent);
 }
 .ghost {
-  background: #edf1f4;
+  background: var(--desk-soft);
   color: #3a4a55;
 }
 .small {
   padding: 5px 9px;
-  background: #edf1f4;
+  background: var(--desk-soft);
   margin-right: 5px;
 }
 .small:disabled {
@@ -1738,9 +1740,9 @@ code {
     content: "左右滑动查看完整数据";
     display: block;
     padding: 7px 10px;
-    color: #7b8791;
+    color: var(--desk-subtle);
     font-size: 11px;
-    background: #fafbfc;
+    background: var(--desk-surface);
   }
   .visibility-grid {
     grid-template-columns: 1fr;
@@ -1772,7 +1774,7 @@ code {
 .visibility-grid label {
   display: grid;
   gap: 6px;
-  color: #53616c;
+  color: var(--desk-muted);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1780,13 +1782,13 @@ code {
   padding: 9px;
   border: 1px solid #d9e1e6;
   border-radius: 6px;
-  background: #fff;
+  background: var(--desk-surface);
   color: #34434d;
 }
 .provider-protocol {
   display: grid;
   gap: 6px;
-  color: #53616c;
+  color: var(--desk-muted);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1794,7 +1796,7 @@ code {
   padding: 9px;
   border: 1px solid #d9e1e6;
   border-radius: 6px;
-  background: #fff;
+  background: var(--desk-surface);
   color: #34434d;
 }
 .provider-protocol span {
@@ -1811,9 +1813,9 @@ code {
   display: grid;
   gap: 12px;
   padding: 15px;
-  border: 1px solid #e5eaee;
+  border: 1px solid var(--desk-border);
   border-radius: 11px;
-  background: #fbfcfd;
+  background: var(--desk-surface);
 }
 .retention-grid h3 {
   margin: 0;
@@ -1822,7 +1824,7 @@ code {
 .retention-grid label {
   display: grid;
   gap: 6px;
-  color: #53616c;
+  color: var(--desk-muted);
   font-size: 12px;
   font-weight: 600;
 }
@@ -1850,7 +1852,7 @@ code {
   color: #b34a4a;
 }
 .test-result.info {
-  color: #72808c;
+  color: var(--desk-muted);
 }
 .test-result em {
   font-style: normal;
@@ -1861,7 +1863,7 @@ code {
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
-  scrollbar-color: #98a8b5 #edf1f4;
+  scrollbar-color: #98a8b5 var(--desk-soft);
 }
 .audit-table-wrap:focus-visible {
   outline: 3px solid #b9d1e3;
@@ -1871,19 +1873,19 @@ code {
   position: sticky;
   top: 0;
   z-index: 1;
-  background: #fbfcfd;
+  background: var(--desk-surface);
   box-shadow: 0 1px 0 #dfe6eb;
 }
 .audit-table-wrap::-webkit-scrollbar {
   width: 12px;
 }
 .audit-table-wrap::-webkit-scrollbar-track {
-  background: #edf1f4;
+  background: var(--desk-soft);
   border-left: 1px solid #e0e6ea;
 }
 .audit-table-wrap::-webkit-scrollbar-thumb {
   background: #98a8b5;
-  border: 3px solid #edf1f4;
+  border: 3px solid var(--desk-soft);
   border-radius: 999px;
 }
 .audit-table-wrap::-webkit-scrollbar-thumb:hover {
@@ -1973,7 +1975,7 @@ code {
   position: absolute;
   inset: 0 auto 0 0;
   width: 5px;
-  background: #b83126;
+  background: var(--desk-accent);
   content: "";
 }
 
@@ -2090,7 +2092,7 @@ code {
   display: grid;
   gap: 5px;
   padding: 2px 8px 12px;
-  border-bottom: 1px solid #edf0f2;
+  border-bottom: 1px solid var(--desk-soft);
 }
 
 .admin-index__heading strong {
@@ -2146,7 +2148,7 @@ code {
   align-items: flex-start;
   gap: 9px;
   padding: 11px 9px 2px;
-  border-top: 1px solid #edf0f2;
+  border-top: 1px solid var(--desk-soft);
 }
 
 .admin-index__note-dot {
@@ -2207,7 +2209,7 @@ code {
   position: relative;
   overflow: hidden;
   padding: 18px 20px;
-  background: #fff;
+  background: var(--desk-surface);
 }
 
 .stat-card::after {
@@ -2216,7 +2218,7 @@ code {
   bottom: 0;
   width: 38px;
   height: 3px;
-  background: #b83126;
+  background: var(--desk-accent);
   content: "";
   opacity: 0.7;
 }
@@ -2267,6 +2269,25 @@ code {
 .provider-protocol span {
   color: #829099;
 }
+.feature-switch {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 0 0 13px;
+  color: var(--desk-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.feature-switch input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  accent-color: #5a7f8d;
+}
+.feature-switch small {
+  color: #829099;
+  font-weight: 400;
+}
 
 .field-gap {
   margin-top: 10px;
@@ -2298,7 +2319,7 @@ code {
   border-color: #d7e0e4;
   border-radius: 8px;
   color: #33434d;
-  background: #fbfcfd;
+  background: var(--desk-surface);
 }
 
 .retention-grid {
@@ -2317,7 +2338,7 @@ code {
 .table-wrap {
   border-color: #e4eaed;
   border-radius: 10px;
-  background: #fff;
+  background: var(--desk-surface);
 }
 
 table {
@@ -2332,7 +2353,7 @@ td {
 
 th {
   color: #81909a;
-  background: #fbfcfd;
+  background: var(--desk-surface);
   font-size: 11px;
   letter-spacing: 0.04em;
 }
@@ -2356,7 +2377,7 @@ code {
 }
 
 .primary {
-  background: #b83126;
+  background: var(--desk-accent);
   box-shadow: 0 5px 12px rgba(184, 49, 38, 0.16);
 }
 
@@ -2557,8 +2578,8 @@ code {
   .table-wrap::after {
     display: block;
     padding: 7px 10px;
-    color: #7b8791;
-    background: #fafbfc;
+    color: var(--desk-subtle);
+    background: var(--desk-surface);
     content: "左右滑动查看完整数据";
     font-size: 11px;
   }

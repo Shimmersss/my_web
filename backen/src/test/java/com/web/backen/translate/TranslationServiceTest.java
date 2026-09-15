@@ -292,6 +292,55 @@ class TranslationServiceTest {
     }
 
     @Test
+    void fallsBackToSinglePageBatchesWhenStableQpsStillHitsResourcePressure() throws Exception {
+        PdfParseService pdfParseService = mock(PdfParseService.class);
+        BabelDocService babelDocService = mock(BabelDocService.class);
+        TranslationConfig config = new TranslationConfig();
+        config.setStorageDir(tempDir.toString());
+        config.setMaxHistory(5);
+        config.setQueueCapacity(2);
+        config.setMaxQps(4);
+        config.setStableQps(2);
+
+        when(pdfParseService.getTotalPages(any(Path.class))).thenReturn(3);
+        when(babelDocService.translatePdf(any(Path.class), any(Path.class), anyString(),
+                anyInt(), anyInt(), anyString(), anyInt(), any()))
+                .thenThrow(new BabelDocService.ResourcePressureException("内存压力", 4))
+                .thenThrow(new BabelDocService.ResourcePressureException("内存压力", 2));
+        when(babelDocService.translatePdf(any(Path.class), any(Path.class), anyString(),
+                anyInt(), anyInt(), anyString(), anyInt(), anyInt(), anyInt(), any()))
+                .thenAnswer(invocation -> {
+                    Path resultDir = invocation.getArgument(1);
+                    Path translated = resultDir.resolve("translated.pdf");
+                    Path bilingual = resultDir.resolve("bilingual.pdf");
+                    Files.writeString(translated, "translated");
+                    Files.writeString(bilingual, "bilingual");
+                    return new BabelDocService.TranslationResult(translated, bilingual);
+                });
+
+        TranslationService service = new TranslationService(
+                pdfParseService, babelDocService, config, new ObjectMapper());
+        service.initialize();
+        try {
+            TranslationSession session = service.createSessionPreview(
+                    "paper.pdf", new ByteArrayInputStream("pdf".getBytes()));
+            service.startTranslation(session.getTaskId(), 1, 3, "auto", 4);
+            awaitStatus(service, session.getTaskId(), "completed");
+
+            TranslationSession completed = service.getSession(session.getTaskId());
+            assertTrue(completed.isSinglePageFallback());
+            assertEquals(2, completed.getQps());
+            assertEquals(2, completed.getResourceDowngradeCount());
+            verify(babelDocService).translatePdf(
+                    any(Path.class), any(Path.class), eq("paper.pdf"), eq(1), eq(3), eq("auto"),
+                    eq(2), eq(2), eq(1), any());
+            verify(babelDocService, times(2)).awaitResourceRecovery();
+        } finally {
+            service.shutdown();
+        }
+    }
+
+    @Test
     void keepsWarningButAllowsTranslationWhenPdfTextLayerLooksCorrupt() throws Exception {
         PdfParseService pdfParseService = mock(PdfParseService.class);
         BabelDocService babelDocService = mock(BabelDocService.class);

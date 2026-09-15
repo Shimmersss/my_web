@@ -74,6 +74,26 @@ class MatchmakingReportAccessTest {
     }
 
     @Test
+    void archivePaginatesExcludesExpiredAndRestrictsOwnerFilterToRoot() throws Exception {
+        for (int i = 0; i < 12; i++) {
+            insertReport("alice-" + i, alice.id(), "上海", Instant.parse("2026-08-30T01:00:00Z").plusSeconds(i));
+        }
+        insertReport("bob-new", bob.id(), "杭州", Instant.parse("2026-08-31T01:00:00Z"));
+        insertReport("alice-expired", alice.id(), "上海", Instant.parse("2026-08-01T01:00:00Z"), Instant.now().minus(Duration.ofHours(1)));
+
+        Map<String, Object> first = service.reportArchive(alice, 1, 10, "bob");
+        Map<String, Object> second = service.reportArchive(alice, 2, 10, null);
+        Map<String, Object> rootFiltered = service.reportArchive(root, 1, 10, "bob");
+
+        assertEquals(12L, first.get("total"));
+        assertEquals(2, first.get("totalPages"));
+        assertEquals(10, ((List<?>) first.get("items")).size());
+        assertEquals(2, ((List<?>) second.get("items")).size());
+        assertTrue(((List<Map<String, Object>>) first.get("items")).stream().allMatch(row -> "alice".equals(row.get("ownerUsername"))));
+        assertEquals(List.of("bob-new"), ((List<Map<String, Object>>) rootFiltered.get("items")).stream().map(row -> row.get("id")).toList());
+    }
+
+    @Test
     void quantityRetentionKeepsNewestReportsPerUserThenAcrossTheSite() throws Exception {
         runtime.update(Map.of("matchmakingRetention", Map.of("maxPerUser", 2, "maxTotal", 3)));
         insertReport("alice-old", alice.id(), "上海", Instant.parse("2026-08-30T01:00:00Z"));
@@ -105,9 +125,13 @@ class MatchmakingReportAccessTest {
     }
 
     private void insertReport(String id, long userId, String city, Instant createdAt) throws Exception {
+        insertReport(id, userId, city, createdAt, Instant.now().plus(Duration.ofDays(30)));
+    }
+
+    private void insertReport(String id, long userId, String city, Instant createdAt, Instant expiresAt) throws Exception {
         String profileId = "profile-" + id;
         Timestamp created = Timestamp.from(createdAt);
-        Timestamp expires = Timestamp.from(Instant.now().plus(Duration.ofDays(30)));
+        Timestamp expires = Timestamp.from(expiresAt);
         jdbc.update("INSERT INTO matchmaking_profiles(id,user_id,payload,created_at,updated_at,expires_at) VALUES(?,?,?,?,?,?)",
                 profileId, userId, "{}", created, created, expires);
         String payload = new ObjectMapper().writeValueAsString(Map.of("id", id, "createdAt", createdAt.toString(), "expiresAt", expires.toInstant().toString()));

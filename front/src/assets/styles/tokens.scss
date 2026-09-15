@@ -1,0 +1,36 @@
+// Shared appearance tokens. The moonlit experience keeps its own palette.
+:root {
+  color-scheme: light;
+  --desk-bg: #f7f7f4;
+  --desk-surface: #fffefa;
+  --desk-soft: #f0f0eb;
+  --desk-border: #e3e3db;
+  --desk-text: #272a27;
+  --desk-muted: #646b63;
+  --desk-subtle: #737a71;
+  --desk-accent: #a83b32;
+  --desk-accent-hover: #8d3029;
+  --desk-tint: #f7ece8;
+  --desk-glass: rgba(255, 254, 250, .9);
+  --desk-shadow: 0 4px 24px rgba(32, 42, 32, .035);
+  --desk-shadow-raised: 0 14px 40px rgba(32, 42, 32, .075);
+  --desk-radius: 16px;
+  --desk-ease: cubic-bezier(.22, 1, .36, 1);
+}
+
+:root.dark {
+  color-scheme: dark;
+  --desk-bg: #191c1b;
+  --desk-surface: #232725;
+  --desk-soft: #2c312e;
+  --desk-border: #3d443f;
+  --desk-text: #eeefe8;
+  --desk-muted: #b6beb3;
+  --desk-subtle: #a4afa2;
+  --desk-accent: #efa396;
+  --desk-accent-hover: #ffc1b7;
+  --desk-tint: #3d302d;
+  --desk-glass: rgba(35, 39, 37, .94);
+  --desk-shadow: 0 4px 24px rgba(0, 0, 0, .1);
+  --desk-shadow-raised: 0 14px 40px rgba(0, 0, 0, .22);
+}

@@ -552,7 +552,7 @@ onBeforeUnmount(() => {
 
 .open-source-page {
   min-height: 100vh;
-  background: #eee9df;
+  background: var(--desk-bg);
   padding: 32px 0 56px;
 }
 
@@ -577,7 +577,7 @@ onBeforeUnmount(() => {
   }
 
   .eyebrow {
-    color: #b83126;
+    color: var(--desk-accent);
     font-weight: 700;
     letter-spacing: 0.12em;
     font-size: 12px;
@@ -597,8 +597,8 @@ onBeforeUnmount(() => {
   grid-template-columns: minmax(240px, 1fr) 180px auto;
   gap: $spacing-md;
   align-items: center;
-  background: #fbf9f3;
-  border: 1px solid #d2cabc;
+  background: var(--desk-surface);
+  border: 1px solid var(--desk-border);
   border-radius: 2px;
   padding: $spacing-md;
   margin-bottom: $spacing-lg;
@@ -609,9 +609,9 @@ onBeforeUnmount(() => {
 }
 
 .ranking-panel {
-  background: #373730;
+  background: var(--desk-text);
   color: #f8f4ea;
-  border: 1px solid #373730;
+  border: 1px solid var(--desk-text);
   border-radius: 2px;
   padding: $spacing-lg;
   margin-bottom: $spacing-xl;
@@ -687,7 +687,7 @@ onBeforeUnmount(() => {
   }
 
   &.active {
-    color: #373730;
+    color: var(--desk-text);
     background: #edb35a;
     border-color: #edb35a;
   }
@@ -725,7 +725,7 @@ onBeforeUnmount(() => {
 }
 
 .recommendation-eyebrow {
-  color: #b83126;
+  color: var(--desk-accent);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -757,7 +757,7 @@ onBeforeUnmount(() => {
   min-width: 0;
   flex: 1;
   overflow-wrap: anywhere;
-  color: #fffaf0;
+  color: var(--desk-surface);
   font-weight: 700;
   text-decoration: none;
 
@@ -819,8 +819,8 @@ onBeforeUnmount(() => {
   min-height: 360px;
   display: flex;
   flex-direction: column;
-  background: #fbf9f3;
-  border: 1px solid #d2cabc;
+  background: var(--desk-surface);
+  border: 1px solid var(--desk-border);
   border-radius: 2px;
   padding: $spacing-lg;
   box-shadow: $shadow-sm;
@@ -828,7 +828,7 @@ onBeforeUnmount(() => {
 
   &:hover {
     transform: translateY(-3px);
-    border-color: #b83126;
+    border-color: var(--desk-accent);
     box-shadow: $shadow-lg;
   }
 }
@@ -847,7 +847,7 @@ onBeforeUnmount(() => {
   display: grid;
   place-items: center;
   color: #fff;
-  background: #373730;
+  background: var(--desk-text);
   flex-shrink: 0;
 }
 
@@ -876,7 +876,7 @@ onBeforeUnmount(() => {
 
 .category {
   flex-shrink: 0;
-  background: #f0e5d9;
+  background: var(--desk-tint);
   color: $primary-color;
   border-radius: 4px;
   padding: 3px 9px;
@@ -954,8 +954,8 @@ onBeforeUnmount(() => {
   padding: $spacing-lg;
   border: 1px solid #e6ebf2;
   border-radius: 8px;
-  background: #fff;
-  color: #1f2937;
+  background: var(--desk-surface);
+  color: var(--desk-text);
   font-size: 15px;
   line-height: 1.75;
 
@@ -969,13 +969,13 @@ onBeforeUnmount(() => {
 
   :deep(h1) {
     font-size: 1.8em;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--desk-border);
     padding-bottom: 0.3em;
   }
 
   :deep(h2) {
     font-size: 1.45em;
-    border-bottom: 1px solid #e5e7eb;
+    border-bottom: 1px solid var(--desk-border);
     padding-bottom: 0.25em;
   }
 
@@ -994,8 +994,8 @@ onBeforeUnmount(() => {
 
   :deep(pre) {
     overflow: auto;
-    background: #0f172a;
-    color: #e2e8f0;
+    background: var(--desk-text);
+    color: var(--desk-border);
     border-radius: 6px;
     padding: 14px 16px;
   }
@@ -1027,7 +1027,7 @@ onBeforeUnmount(() => {
 
   :deep(th),
   :deep(td) {
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--desk-border);
     padding: 6px 10px;
   }
 }

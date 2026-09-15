@@ -10,6 +10,8 @@ import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 import org.springframework.mock.web.MockHttpServletRequest;
 
 import java.util.Map;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -149,8 +151,107 @@ class AuthQuotaServiceTest {
         assertEquals(2, first.get("granted"));
         assertEquals(7, first.get("balance"));
         assertEquals(true, again.get("claimed"));
+        assertEquals(((Map<?, ?>) first.get("tarotCard")).get("cardId"), ((Map<?, ?>) again.get("tarotCard")).get("cardId"));
+        assertEquals(LocalDate.now(ZoneId.of("Asia/Shanghai")).toString(), ((Map<?, ?>) first.get("tarotCard")).get("date"));
         assertEquals(7, services.quota().balance(userId));
+        assertEquals(1, services.jdbc().queryForObject("SELECT COUNT(*) FROM daily_checkins WHERE user_id=?", Integer.class, userId));
         assertEquals(1, services.jdbc().queryForObject("SELECT COUNT(*) FROM credit_transactions WHERE user_id=? AND kind='DAILY_CHECKIN'", Integer.class, userId));
+    }
+
+    @Test
+    void legacyDailyCheckinGetsCardWithoutReceivingCreditsAgain() {
+        TestServices services = newServices();
+        services.jdbc().update("INSERT INTO users (username, password_hash, role, credits, enabled) VALUES ('alice', 'x', 'USER', 5, TRUE)");
+        long userId = services.jdbc().queryForObject("SELECT id FROM users WHERE username='alice'", Long.class);
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Shanghai"));
+        services.jdbc().update("INSERT INTO daily_checkins(user_id, checkin_date) VALUES (?, ?)", userId, today);
+
+        Map<String, Object> first = services.quota().dailyCheckinStatus(userId);
+        Map<String, Object> second = services.quota().dailyCheckinStatus(userId);
+
+        assertEquals(true, first.get("claimed"));
+        assertNotNull(first.get("tarotCard"));
+        assertEquals(((Map<?, ?>) first.get("tarotCard")).get("cardId"), ((Map<?, ?>) second.get("tarotCard")).get("cardId"));
+        assertEquals(5, services.quota().balance(userId));
+        assertEquals(0, services.jdbc().queryForObject("SELECT COUNT(*) FROM credit_transactions WHERE user_id=? AND kind='DAILY_CHECKIN'", Integer.class, userId));
+    }
+
+    @Test
+    void disabledDailyCheckinRejectsNewClaims() {
+        TestServices services = newServices();
+        services.jdbc().update("INSERT INTO users (username, password_hash, role, credits, enabled) VALUES ('alice', 'x', 'USER', 5, TRUE)");
+        long userId = services.jdbc().queryForObject("SELECT id FROM users WHERE username='alice'", Long.class);
+        services.quota().updateSettings(1, 10, false, 2, 2);
+
+        AuthException error = assertThrows(AuthException.class, () -> services.quota().claimDailyCheckin(userId));
+
+        assertEquals(403, error.getStatus());
+        assertEquals(5, services.quota().balance(userId));
+        assertEquals(0, services.jdbc().queryForObject("SELECT COUNT(*) FROM daily_checkins WHERE user_id=?", Integer.class, userId));
+    }
+
+    @Test
+    void aPreviousShanghaiDayDoesNotBlockTodaysCard() {
+        TestServices services = newServices();
+        services.jdbc().update("INSERT INTO users (username, password_hash, role, credits, enabled) VALUES ('alice', 'x', 'USER', 5, TRUE)");
+        long userId = services.jdbc().queryForObject("SELECT id FROM users WHERE username='alice'", Long.class);
+        LocalDate today = LocalDate.now(ZoneId.of("Asia/Shanghai"));
+        services.jdbc().update("INSERT INTO daily_checkins(user_id, checkin_date) VALUES (?, ?)", userId, today.minusDays(1));
+
+        Map<String, Object> result = services.quota().claimDailyCheckin(userId);
+
+        assertEquals(today.toString(), result.get("date"));
+        assertEquals(2, services.jdbc().queryForObject("SELECT COUNT(*) FROM daily_checkins WHERE user_id=?", Integer.class, userId));
+    }
+
+    @Test
+    void concurrentDailyCheckinsCreditAndPersistOnlyOneCard() throws Exception {
+        TestServices services = newServices();
+        services.jdbc().update("INSERT INTO users (username, password_hash, role, credits, enabled) VALUES ('alice', 'x', 'USER', 5, TRUE)");
+        long userId = services.jdbc().queryForObject("SELECT id FROM users WHERE username='alice'", Long.class);
+        var manager = new org.springframework.jdbc.datasource.DataSourceTransactionManager(services.db());
+        var pool = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+        var futures = new java.util.ArrayList<java.util.concurrent.Future<Map<String, Object>>>();
+        try {
+            for (int i = 0; i < 2; i++) futures.add(pool.submit(() -> {
+                ready.countDown();
+                assertTrue(start.await(5, TimeUnit.SECONDS));
+                return new org.springframework.transaction.support.TransactionTemplate(manager)
+                        .execute(status -> services.quota().claimDailyCheckin(userId));
+            }));
+            assertTrue(ready.await(5, TimeUnit.SECONDS));
+            start.countDown();
+            Map<String, Object> first = futures.get(0).get(10, TimeUnit.SECONDS);
+            Map<String, Object> second = futures.get(1).get(10, TimeUnit.SECONDS);
+
+            assertEquals(((Map<?, ?>) first.get("tarotCard")).get("cardId"), ((Map<?, ?>) second.get("tarotCard")).get("cardId"));
+            assertEquals(7, services.quota().balance(userId));
+            assertEquals(1, services.jdbc().queryForObject("SELECT COUNT(*) FROM daily_checkins WHERE user_id=?", Integer.class, userId));
+            assertEquals(1, services.jdbc().queryForObject("SELECT COUNT(*) FROM credit_transactions WHERE user_id=? AND kind='DAILY_CHECKIN'", Integer.class, userId));
+        } finally {
+            pool.shutdownNow();
+            services.db().shutdown();
+        }
+    }
+
+    @Test
+    void dailyCheckinCardAndCreditsRollBackTogether() {
+        TestServices services = newServices();
+        services.jdbc().update("INSERT INTO users (username, password_hash, role, credits, enabled) VALUES ('alice', 'x', 'USER', 5, TRUE)");
+        long userId = services.jdbc().queryForObject("SELECT id FROM users WHERE username='alice'", Long.class);
+        var tx = new org.springframework.transaction.support.TransactionTemplate(
+                new org.springframework.jdbc.datasource.DataSourceTransactionManager(services.db()));
+
+        tx.executeWithoutResult(status -> {
+            services.quota().claimDailyCheckin(userId);
+            status.setRollbackOnly();
+        });
+
+        assertEquals(5, services.quota().balance(userId));
+        assertEquals(0, services.jdbc().queryForObject("SELECT COUNT(*) FROM daily_checkins WHERE user_id=?", Integer.class, userId));
+        assertEquals(0, services.jdbc().queryForObject("SELECT COUNT(*) FROM credit_transactions WHERE user_id=? AND kind='DAILY_CHECKIN'", Integer.class, userId));
     }
 
     @Test

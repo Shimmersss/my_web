@@ -58,6 +58,9 @@ CREATE TABLE IF NOT EXISTS daily_checkins (
     id BIGINT AUTO_INCREMENT PRIMARY KEY,
     user_id BIGINT NOT NULL,
     checkin_date DATE NOT NULL,
+    deck_version VARCHAR(64) NULL,
+    card_id VARCHAR(64) NULL,
+    tarot_payload TEXT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT uk_daily_checkin_user_date UNIQUE (user_id, checkin_date),
     FOREIGN KEY (user_id) REFERENCES users(id)

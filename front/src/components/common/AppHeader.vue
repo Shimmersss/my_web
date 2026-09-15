@@ -40,8 +40,8 @@
               <span>{{ auth.isMatchmakingTrial ? '婚恋内测' : auth.user?.username }}</span>
               <strong v-if="!auth.isMatchmakingTrial">{{ auth.credits }} credits</strong>
             </button>
-            <n-button v-if="!auth.isMatchmakingTrial" size="small" secondary :disabled="!auth.dailyCheckin?.enabled || auth.dailyCheckin?.claimed" @click="handleDailyCheckin">
-              {{ auth.dailyCheckin?.claimed ? '已签到' : '签到' }}
+            <n-button v-if="!auth.isMatchmakingTrial" size="small" secondary :disabled="!auth.dailyCheckin?.enabled && !auth.dailyCheckin?.claimed" @click="handleDailyCheckin">
+              {{ auth.dailyCheckin?.claimed ? '今日牌' : '签到' }}
             </n-button>
             <n-button size="small" text @click="handleLogout">退出</n-button>
           </div>
@@ -76,8 +76,8 @@
               <span>{{ auth.isMatchmakingTrial ? '婚恋内测' : auth.user?.username }}</span>
               <strong v-if="!auth.isMatchmakingTrial">{{ auth.credits }} credits</strong>
             </button>
-            <n-button v-if="!auth.isMatchmakingTrial" block secondary :disabled="!auth.dailyCheckin?.enabled || auth.dailyCheckin?.claimed" @click="handleDailyCheckin">
-              {{ auth.dailyCheckin?.claimed ? '今日已签到' : `每日签到 +${auth.dailyCheckin?.credits || 0}` }}
+            <n-button v-if="!auth.isMatchmakingTrial" block secondary :disabled="!auth.dailyCheckin?.enabled && !auth.dailyCheckin?.claimed" @click="handleDailyCheckin">
+              {{ auth.dailyCheckin?.claimed ? '查看今日牌' : `每日签到 +${auth.dailyCheckin?.credits || 0}` }}
             </n-button>
             <n-button block secondary @click="handleLogout">退出登录</n-button>
           </template>
@@ -103,6 +103,13 @@
       </form>
     </n-modal>
 
+    <n-modal v-model:show="dailyTarotOpen" preset="card" class="daily-tarot-modal" title="今日塔罗" :bordered="false" closable>
+      <div v-if="dailyTarotCard" class="daily-tarot-content">
+        <TarotHoloCard class="daily-tarot-card" :src="`/tarot/${dailyTarotCard.cardId}.webp`" :alt="`${dailyTarotCard.name}牌面`" :title="dailyTarotCard.name" :subtitle="dailyTarotCard.keywordsZh?.join(' · ')" />
+        <div><p class="daily-tarot-kicker">DAILY GUIDANCE · {{ dailyTarotCard.date }}</p><h3>{{ dailyTarotCard.name }}</h3><p>{{ dailyTarotCard.dailyGuidanceZh }}</p><small>牌面提供一种观察今天的视角，不是预测或确定性结论。</small></div>
+      </div>
+    </n-modal>
+
     <n-modal v-model:show="downloadReminderOpen" preset="dialog" title="下载 Shimmer App">
       <p class="download-reminder-copy">App 内置独立 Gecko 浏览器内核，文件上传、下载和长任务体验更稳定。</p>
       <template #action>
@@ -126,6 +133,7 @@ import {
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
 import NotificationPanel from './NotificationPanel.vue'
+import TarotHoloCard from '@/components/matchmaking/TarotHoloCard.vue'
 import { isAndroidMobileWeb } from '@/utils/androidBridge'
 import { buildDesktopMenuOptions, resolveMenuPath } from '@/utils/navigation'
 
@@ -141,6 +149,8 @@ const authMode = ref('login')
 const authSubmitting = ref(false)
 const authError = ref('')
 const downloadReminderOpen = ref(false)
+const dailyTarotOpen = ref(false)
+const dailyTarotCard = ref(null)
 const authForm = reactive({
   username: '',
   password: '',
@@ -319,8 +329,19 @@ async function handleLogout() {
 
 async function handleDailyCheckin() {
   try {
+    if (auth.dailyCheckin?.claimed && auth.dailyCheckin?.tarotCard) {
+      dailyTarotCard.value = auth.dailyCheckin.tarotCard
+      dailyTarotOpen.value = true
+      mobileMenuOpen.value = false
+      return
+    }
     const result = await auth.checkIn()
-    if (result?.granted) message.success(`签到成功，获得 ${result.granted} 积分`)
+    if (result?.tarotCard) {
+      dailyTarotCard.value = result.tarotCard
+      dailyTarotOpen.value = true
+      mobileMenuOpen.value = false
+    }
+    if (result?.granted) message.success(`签到成功，获得 ${result.granted} 积分和一张今日牌`)
     else message.info('今天已经签到过了')
   } catch (error) {
     message.error(error.message || '签到失败，请稍后重试')
@@ -335,8 +356,8 @@ async function handleDailyCheckin() {
   position: sticky;
   top: 0;
   z-index: 1000;
-  background: #f8f5ee;
-  border-bottom: 1px solid #cfc7b7;
+  background: var(--desk-bg);
+  border-bottom: 1px solid var(--desk-border);
   box-shadow: none;
   transition: background 0.3s ease, box-shadow 0.3s ease;
   overflow: visible;
@@ -389,7 +410,7 @@ async function handleDailyCheckin() {
     font-family: Georgia, serif;
     font-size: 25px;
     font-weight: 700;
-    color: #25251f;
+    color: var(--desk-text);
 
     .dark & {
       color: var(--n-text-color);
@@ -408,7 +429,7 @@ async function handleDailyCheckin() {
 .logo-mark {
   width: 4px;
   height: 27px;
-  background: #b83126;
+  background: var(--desk-accent);
 }
 
 .header-right {
@@ -472,8 +493,8 @@ async function handleDailyCheckin() {
 
 .account-button {
   appearance: none;
-  border: 1px solid #cfc7b7;
-  background: #fffaf0;
+  border: 1px solid var(--desk-border);
+  background: var(--desk-surface);
   color: #2f2d27;
   display: grid;
   gap: 1px;
@@ -493,7 +514,7 @@ async function handleDailyCheckin() {
 
   strong {
     font-size: 11px;
-    color: #8f2a22;
+    color: var(--desk-accent);
   }
 }
 
@@ -578,7 +599,7 @@ async function handleDailyCheckin() {
     width: 100%;
     border: 1px solid #d7cfc0;
     border-radius: 6px;
-    background: #fffaf0;
+    background: var(--desk-surface);
     color: #2f2d27;
     display: flex;
     align-items: center;
@@ -588,7 +609,7 @@ async function handleDailyCheckin() {
     padding: 10px 12px;
     cursor: pointer;
 
-    strong { color: #8f2a22; font-size: 12px; }
+    strong { color: var(--desk-accent); font-size: 12px; }
   }
 }
 
@@ -688,7 +709,7 @@ async function handleDailyCheckin() {
         }
 
         .n-menu-item-content--selected {
-          background: #f3e8e2;
+          background: var(--desk-tint);
           color: #9f2a20;
           font-weight: 700;
         }
@@ -726,8 +747,17 @@ async function handleDailyCheckin() {
 
     &:hover {
       border-color: #c6aa9a;
-      background: #fffaf0;
+      background: var(--desk-surface);
     }
   }
 }
+
+:global(.daily-tarot-modal) { width: min(760px, calc(100vw - 28px)); }
+.daily-tarot-content { display: grid; grid-template-columns: minmax(210px, 300px) 1fr; gap: 28px; align-items: center; }
+.daily-tarot-card { aspect-ratio: 2 / 3; }
+.daily-tarot-kicker { margin: 0 0 10px; color: #a47a44; font-size: 11px; font-weight: 800; letter-spacing: .13em; }
+.daily-tarot-content h3 { margin: 0 0 12px; color: #17213d; font: 500 28px/1.3 Georgia, "Noto Serif SC", serif; }
+.daily-tarot-content p:not(.daily-tarot-kicker) { color: #686273; line-height: 1.85; }
+.daily-tarot-content small { color: #8b8491; line-height: 1.65; }
+@media (max-width: 560px) { .daily-tarot-content { grid-template-columns: 1fr; }.daily-tarot-card { width: min(210px, 66vw); margin: 0 auto; } }
 </style>

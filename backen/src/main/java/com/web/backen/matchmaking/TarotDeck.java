@@ -11,8 +11,8 @@ import java.util.List;
 import java.util.Map;
 
 /** The server-owned 22-card major arcana deck used by relationship-exploration-v1. */
-final class TarotDeck {
-    static final String VERSION = "major-22-v1";
+public final class TarotDeck {
+    public static final String VERSION = "major-22-v1";
     static final List<Card> CARDS = load();
 
     private TarotDeck() {}
@@ -27,9 +27,9 @@ final class TarotDeck {
                 List<String> keywords = new ArrayList<>();
                 node.withArray("keywordsZh").forEach(item -> keywords.add(item.asText()));
                 cards.add(new Card(node.path("id").asText(), node.path("sourceId").asInt(), node.path("name").asText(),
-                        List.copyOf(keywords), node.path("relationshipMeaningZh").asText()));
+                        List.copyOf(keywords), node.path("relationshipMeaningZh").asText(), node.path("dailyGuidanceZh").asText()));
             }
-            if (cards.size() != 22 || cards.stream().anyMatch(card -> card.id().isBlank() || card.name().isBlank()))
+            if (cards.size() != 22 || cards.stream().anyMatch(card -> card.id().isBlank() || card.name().isBlank() || card.dailyGuidance().isBlank()))
                 throw new IllegalStateException("塔罗牌库必须包含22张有效大牌");
             return List.copyOf(cards);
         } catch (IOException e) {
@@ -49,5 +49,32 @@ final class TarotDeck {
         return result;
     }
 
-    record Card(String id, int sourceId, String name, List<String> keywords, String relationshipMeaning) {}
+    public static List<Map<String, Object>> catalogue() {
+        return CARDS.stream().map(TarotDeck::publicView).toList();
+    }
+
+    public static Map<String, Object> randomDailyCard(java.security.SecureRandom random) {
+        Card card = CARDS.get(random.nextInt(CARDS.size()));
+        Map<String, Object> result = new LinkedHashMap<>(publicView(card));
+        result.remove("relationshipMeaningZh");
+        return result;
+    }
+
+    public static Map<String, Object> dailyCard(String cardId) {
+        Card card = byId(cardId);
+        if (card == null) return null;
+        Map<String, Object> result = new LinkedHashMap<>(publicView(card));
+        result.remove("relationshipMeaningZh");
+        return result;
+    }
+
+    private static Map<String, Object> publicView(Card card) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("cardId", card.id()); result.put("sourceId", card.sourceId()); result.put("name", card.name());
+        result.put("orientation", "upright"); result.put("keywordsZh", card.keywords());
+        result.put("relationshipMeaningZh", card.relationshipMeaning()); result.put("dailyGuidanceZh", card.dailyGuidance());
+        return result;
+    }
+
+    record Card(String id, int sourceId, String name, List<String> keywords, String relationshipMeaning, String dailyGuidance) {}
 }

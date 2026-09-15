@@ -22,10 +22,12 @@ import java.io.File;
 import java.nio.file.Files;
 import java.sql.Timestamp;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -462,6 +464,7 @@ public class MatchmakingService {
         Map<String, Object> result = new LinkedHashMap<>(MatchmakingBenchmarks.catalogue());
         result.putAll(RelationshipQuestionnaire.catalogue());
         result.put("tarotDeckVersion", TarotDeck.VERSION);
+        result.put("tarotCards", TarotDeck.catalogue());
         return result;
     }
     public Map<String, Object> drawTarot(AuthUser user) {
@@ -529,32 +532,71 @@ public class MatchmakingService {
 
     public List<Map<String, Object>> reportSummaries(AuthUser user) {
         cleanExpired();
-        String select = """
-                SELECT r.id, r.user_id, u.username, tc.code_suffix, r.city, r.total_score, r.level, r.has_image,
-                       r.report_version, r.title, r.personality_label, r.created_at
-                FROM matchmaking_reports r JOIN users u ON u.id=r.user_id
-                LEFT JOIN matchmaking_trial_codes tc ON tc.guest_user_id=r.user_id
-                """;
+        String select = reportSummarySelect();
         List<Map<String, Object>> rows = user.isRoot()
                 ? jdbc.queryForList(select + " WHERE r.expires_at>CURRENT_TIMESTAMP ORDER BY r.created_at DESC LIMIT ?",
                     matchmakingMaxGlobalHistory())
                 : jdbc.queryForList(select + " WHERE r.user_id=? AND r.expires_at>CURRENT_TIMESTAMP ORDER BY r.created_at DESC LIMIT ?",
                     user.id(), matchmakingMaxHistory());
-        return rows.stream()
-                .map(row -> {
-                    Map<String, Object> summary = new LinkedHashMap<>();
-                    summary.put("id", row.get("id")); summary.put("city", row.get("city"));
-                    summary.put("total", row.get("total_score")); summary.put("level", row.get("level"));
-                    summary.put("reportVersion", row.get("report_version")); summary.put("title", row.get("title"));
-                    summary.put("personalityLabel", row.get("personality_label"));
-                    String ownerLabel = ownerLabel(row);
-                    summary.put("ownerUsername", ownerLabel); summary.put("ownerLabel", ownerLabel);
-                    summary.put("viewerCanDelete", ((Number) row.get("user_id")).longValue() == user.id());
-                    summary.put("hasImage", Boolean.TRUE.equals(row.get("has_image")) || Integer.valueOf(1).equals(row.get("has_image")));
-                    Object createdAt = row.get("created_at");
-                    summary.put("createdAt", createdAt instanceof Timestamp t ? t.toInstant().toString() : String.valueOf(createdAt));
-                    return summary;
-                }).toList();
+        return rows.stream().map(row -> reportSummary(row, user)).toList();
+    }
+
+    public Map<String, Object> reportArchive(AuthUser user, int requestedPage, int requestedPageSize, String requestedOwner) {
+        cleanExpired();
+        int page = Math.max(1, requestedPage), pageSize = Math.max(1, Math.min(20, requestedPageSize));
+        String owner = requestedOwner == null ? "" : requestedOwner.trim();
+
+        String where;
+        List<Object> parameters = new ArrayList<>();
+        if (user.isRoot()) {
+            where = " WHERE r.expires_at>CURRENT_TIMESTAMP";
+            if (!owner.isEmpty()) {
+                where += " AND LOWER(u.username) LIKE ?";
+                parameters.add("%" + owner.toLowerCase(Locale.ROOT) + "%");
+            }
+        } else {
+            where = " WHERE r.user_id=? AND r.expires_at>CURRENT_TIMESTAMP";
+            parameters.add(user.id());
+        }
+
+        String countSql = "SELECT COUNT(*) FROM matchmaking_reports r JOIN users u ON u.id=r.user_id" + where;
+        Long counted = jdbc.queryForObject(countSql, Long.class, parameters.toArray());
+        long total = counted == null ? 0 : counted;
+        int totalPages = total == 0 ? 0 : (int) Math.ceil((double) total / pageSize);
+        if (totalPages > 0) page = Math.min(page, totalPages);
+        List<Object> pageParameters = new ArrayList<>(parameters);
+        pageParameters.add(pageSize); pageParameters.add((page - 1) * pageSize);
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                reportSummarySelect() + where + " ORDER BY r.created_at DESC LIMIT ? OFFSET ?", pageParameters.toArray());
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("items", rows.stream().map(row -> reportSummary(row, user)).toList());
+        result.put("page", page); result.put("pageSize", pageSize); result.put("total", total); result.put("totalPages", totalPages);
+        return result;
+    }
+
+    private String reportSummarySelect() {
+        return """
+                SELECT r.id, r.user_id, u.username, tc.code_suffix, r.city, r.total_score, r.level, r.has_image,
+                       r.report_version, r.title, r.personality_label, r.created_at
+                FROM matchmaking_reports r JOIN users u ON u.id=r.user_id
+                LEFT JOIN matchmaking_trial_codes tc ON tc.guest_user_id=r.user_id
+                """;
+    }
+
+    private Map<String, Object> reportSummary(Map<String, Object> row, AuthUser user) {
+        Map<String, Object> summary = new LinkedHashMap<>();
+        summary.put("id", row.get("id")); summary.put("city", row.get("city"));
+        summary.put("total", row.get("total_score")); summary.put("level", row.get("level"));
+        summary.put("reportVersion", row.get("report_version")); summary.put("title", row.get("title"));
+        summary.put("personalityLabel", row.get("personality_label"));
+        String ownerLabel = ownerLabel(row);
+        summary.put("ownerUsername", ownerLabel); summary.put("ownerLabel", ownerLabel);
+        summary.put("viewerCanDelete", ((Number) row.get("user_id")).longValue() == user.id());
+        summary.put("hasImage", Boolean.TRUE.equals(row.get("has_image")) || Integer.valueOf(1).equals(row.get("has_image")));
+        Object createdAt = row.get("created_at");
+        summary.put("createdAt", createdAt instanceof Timestamp t ? t.toInstant().toString() : String.valueOf(createdAt));
+        return summary;
     }
 
     public Map<String, Object> report(AuthUser user, String reportId) {

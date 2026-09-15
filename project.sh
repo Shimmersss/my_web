@@ -391,6 +391,18 @@ start_frontend() {
   if command -v setsid &>/dev/null; then
     nohup setsid npm run dev -- --host >"$FRONTEND_LOG" 2>&1 < /dev/null &
     spawned_pid="$!"
+  elif command -v python3 &>/dev/null; then
+    FRONTEND_LOG="$FRONTEND_LOG" FRONTEND_PID="$FRONTEND_PID" python3 - <<'PY'
+import os
+import subprocess
+with open(os.environ['FRONTEND_LOG'], 'ab', buffering=0) as log:
+    process = subprocess.Popen(['npm', 'run', 'dev', '--', '--host'],
+                               stdin=subprocess.DEVNULL, stdout=log, stderr=log,
+                               start_new_session=True)
+with open(os.environ['FRONTEND_PID'], 'w') as pid_file:
+    pid_file.write(str(process.pid) + '\n')
+PY
+    spawned_pid="$(<"$FRONTEND_PID")"
   else
     nohup npm run dev -- --host >"$FRONTEND_LOG" 2>&1 < /dev/null &
     spawned_pid="$!"

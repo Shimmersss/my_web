@@ -1,0 +1,97 @@
+// Shared visual rhythm; page-specific layouts and all report canvases stay local.
+#app {
+  .n-layout, .n-layout-content { background: var(--desk-bg); }
+  .n-layout-header { background: var(--desk-glass); }
+
+  :is(.tool-page, .open-source-page) { padding-top: clamp(28px, 4vw, 56px); }
+  :is(.tool-page__header, .page-head, .studio-heading) { margin-bottom: 32px; }
+  :is(.tool-page__header, .page-head, .studio-heading) h1 {
+    color: var(--desk-text);
+    font-family: 'Noto Serif SC', 'Songti SC', Georgia, serif;
+    font-size: clamp(28px, 3.2vw, 42px);
+    font-weight: 500;
+    letter-spacing: -.035em;
+    line-height: 1.35;
+  }
+  :is(.tool-page__header, .page-head, .studio-heading) p { max-width: 68ch; }
+
+  .tool-page__surface,
+  .ppt-page :is(.panel, .recent-panel),
+  .translate-page .recent-section,
+  .publications-page .sidebar,
+  .open-source-page :is(.toolbar, .ranking-panel, .project-card),
+  .image-studio :is(.control-panel, .result-panel),
+  .guestbook-page .message-card,
+  .download-page .download-card,
+  .admin-page :is(.admin-header, .admin-panel, .stat-card) {
+    border-color: var(--desk-border);
+    border-radius: var(--desk-radius);
+    background: var(--desk-surface);
+    box-shadow: var(--desk-shadow);
+  }
+
+  .image-studio { background: var(--desk-bg); }
+  .image-studio .mode-tabs { border-radius: 10px; background: var(--desk-soft); }
+  .image-studio .mode-tabs button { border-radius: 7px; }
+  .image-studio .upload-drop { border-radius: 12px; }
+  .image-studio .history-card { border-radius: 12px; overflow: hidden; }
+  .download-page :is(.release-panel, .address-panel) { border-radius: 12px; }
+
+  .app-header {
+    background: var(--desk-glass);
+    border-bottom-color: var(--desk-border);
+    backdrop-filter: blur(16px);
+  }
+  .app-header .logo-text { color: var(--desk-text); font-weight: 500; }
+  .app-header .header-actions { border-left-color: var(--desk-border); }
+  .app-header .account-button {
+    background: var(--desk-surface);
+    border-color: var(--desk-border);
+    color: var(--desk-text);
+  }
+  .app-header .n-menu-item-content--selected { background: var(--desk-tint); }
+  .app-footer { background: var(--desk-bg); border-top: 1px solid var(--desk-border); }
+  .app-footer .footer-bottom { border-top-color: var(--desk-border); }
+
+  .n-button { transition: background-color .2s ease, box-shadow .2s ease, transform .2s var(--desk-ease); }
+  .n-button:not(:disabled):active { transform: translateY(1px); }
+
+  @media (hover: hover) and (pointer: fine) {
+    .open-source-page .project-card:hover,
+    .image-studio .history-card:hover {
+      box-shadow: var(--desk-shadow-raised);
+      transform: translateY(-3px);
+    }
+  }
+
+  @media (max-width: 640px) {
+    :is(.tool-page__header, .page-head, .studio-heading) { margin-bottom: 24px; }
+    .tool-page { padding-top: 26px; }
+    .app-header { backdrop-filter: none; background: var(--desk-surface); }
+  }
+}
+
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--desk-accent);
+  outline-offset: 4px;
+}
+
+@keyframes desk-enter {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  :is(.tool-page__header, .page-head, .studio-heading, .download-card) {
+    animation: desk-enter .65s var(--desk-ease) both;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

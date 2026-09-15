@@ -9,6 +9,12 @@
 
 根AGENTS、WORKLOG、MAINTENANCE和前后端子目录MD按现有gitignore保留本地，不保证新克隆中存在。公共流程应从以上文件独立可读。
 
+## 规格与实施记录
+
+- [月下会客厅：关系人格与塔罗报告完整交接](plans/2026-09-10-moonlit-personality-tarot-handoff.md)：面向 Luna Max 的产品、问卷、牌阵、接口、事务、视觉、验收与部署方案；本地实现已完成，生产开关仍关闭。
+- [人格来源审查](plans/personality-source-review.md)：28 题来源、编码、边界和未确认事项。
+- [关系探索素材记录](plans/2026-09-10-moonlit-relationship-assets.md)：22 张原创牌面与来源映射。
+
 ## 已完成设计与历史材料
 
 - [2026-09-07可靠性修复计划](plans/2026-09-07-web-reliability-fixes.md)：该次范围与验证证据；不作为后续每次任务的固定范围。

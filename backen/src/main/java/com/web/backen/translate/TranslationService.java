@@ -187,6 +187,7 @@ public class TranslationService {
             session.setResourceDowngraded(false);
             session.setResourceDowngradeReason(null);
             session.setResourceDowngradeCount(0);
+            session.setSinglePageFallback(false);
             session.setQuotaRequired(user != null && quotaService != null && !user.isRoot());
             session.setCreationReady(true);
             session.setStatus("creating");
@@ -397,7 +398,16 @@ public class TranslationService {
                             progress -> sendProgress(session, progress));
                 } else {
                     int pages = session.getEndPage() - session.getStartPage() + 1;
-                    if (session.getQps() <= stableQps() && pages >= STABLE_LONG_DOCUMENT_MIN_PAGES) {
+                    if (session.isSinglePageFallback()) {
+                        // Keep the conservative QPS for every remaining page.  The normal
+                        // long-document mode can restore requested QPS after its first
+                        // recovery chunk, but this path is entered only after stable QPS
+                        // itself has exhausted the available memory headroom.
+                        babelDocService.translatePdf(session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
+                                session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
+                                session.getQps(), STABLE_LONG_DOCUMENT_CHUNK_PAGES,
+                                progress -> sendProgress(session, progress));
+                    } else if (session.getQps() <= stableQps() && pages >= STABLE_LONG_DOCUMENT_MIN_PAGES) {
                         babelDocService.translatePdf(session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
                                 session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
                                 session.getRequestedQps(), STABLE_LONG_DOCUMENT_CHUNK_PAGES,
@@ -452,6 +462,30 @@ public class TranslationService {
     private boolean downgradeForResourcePressure(TranslationSession session, BabelDocService.ResourcePressureException e) {
         int stableQps = stableQps();
         int failedQps = e.getQps() > 0 ? e.getQps() : session.getQps();
+        if (failedQps <= stableQps && (!session.isImageInput()
+                && !session.isSinglePageFallback()
+                && session.getEndPage() > session.getStartPage())) {
+            log.warn("稳定模式仍触发资源保护，切换为单页分片重试: taskId={}, qps={}, reason={}",
+                    session.getTaskId(), failedQps, e.getMessage());
+            session.setSinglePageFallback(true);
+            session.setResourceDowngraded(true);
+            session.setResourceDowngradeReason(e.getMessage());
+            session.setResourceDowngradeCount(session.getResourceDowngradeCount() + 1);
+            session.setProgress(0);
+            session.setProgressStage("single-page-fallback");
+            session.setStatus("translating");
+            saveMetadata(session);
+            emit(session, "progress", Map.of(
+                    "progress", 0,
+                    "stage", "single-page-fallback",
+                    "stageLabel", stageLabel("single-page-fallback"),
+                    "current", 0,
+                    "total", 0,
+                    "qps", session.getQps(),
+                    "resourceDowngraded", true,
+                    "resourceDowngradeReason", session.getResourceDowngradeReason()));
+            return true;
+        }
         if (failedQps <= stableQps) {
             return false;
         }
@@ -875,6 +909,7 @@ public class TranslationService {
             case "image-render" -> "正在把译文覆盖回图片";
             case "image-export" -> "正在生成译文图像和 PDF";
             case "resource-downgrade" -> "内存压力较高，已切换稳定模式重试";
+            case "single-page-fallback" -> "内存压力仍较高，已切换为逐页翻译";
             case "resource-recovery" -> "正在等待服务器内存恢复";
             case "chunk-wait" -> "正在释放内存，准备下一批";
             case "chunk-completed" -> "已完成一批页面";

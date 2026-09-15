@@ -36,6 +36,14 @@ public class MatchmakingController {
         catch(AuthException e) { return error(e); }
     }
     @GetMapping("/reports") public Map<String,Object> reports(HttpServletRequest request) { return ok(service.reportSummaries(access(request))); }
+    @GetMapping("/reports/archive") public ResponseEntity<?> reportArchive(
+            @RequestParam(defaultValue = "1") int page,
+            @RequestParam(defaultValue = "10") int pageSize,
+            @RequestParam(defaultValue = "") String owner,
+            HttpServletRequest request) {
+        try { return ResponseEntity.ok(ok(service.reportArchive(access(request), page, pageSize, owner))); }
+        catch(AuthException e) { return error(e); }
+    }
     @GetMapping("/reports/latest") public Map<String,Object> latest(HttpServletRequest request) { return ok(service.latest(access(request))); }
     @GetMapping("/reports/{reportId}") public ResponseEntity<?> report(@PathVariable String reportId, HttpServletRequest request) {
         try { return ResponseEntity.ok(ok(service.report(access(request), reportId))); }

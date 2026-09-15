@@ -1,5 +1,5 @@
 // 颜色变量
-$primary-color: #b83126;
+$primary-color: #a83b32;
 $success-color: #52c41a;
 $warning-color: #faad14;
 $error-color: #ff4d4f;
@@ -52,14 +52,14 @@ $breakpoints: (
 );
 
 // 阴影
-$shadow-sm: 2px 3px 0 rgba(95, 86, 65, 0.1);
-$shadow-md: 3px 5px 0 rgba(95, 86, 65, 0.12);
-$shadow-lg: 5px 8px 0 rgba(95, 86, 65, 0.14);
+$shadow-sm: 0 4px 24px rgba(32, 42, 32, 0.035);
+$shadow-md: 0 10px 30px rgba(32, 42, 32, 0.06);
+$shadow-lg: 0 18px 50px rgba(32, 42, 32, 0.08);
 
 // 圆角 - 研究工具台
-$border-radius-sm: 2px;
-$border-radius-base: 4px;
-$border-radius-lg: 3px;
+$border-radius-sm: 6px;
+$border-radius-base: 10px;
+$border-radius-lg: 16px;
 
 // 过渡
 $transition-fast: 0.2s ease;

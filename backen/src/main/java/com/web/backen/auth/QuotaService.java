@@ -1,5 +1,8 @@
 package com.web.backen.auth;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.web.backen.matchmaking.TarotDeck;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -11,11 +14,14 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.security.SecureRandom;
 import java.util.concurrent.ThreadLocalRandom;
 
 @Service
 public class QuotaService {
     private final JdbcTemplate jdbc;
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final SecureRandom tarotRandom = new SecureRandom();
 
     public QuotaService(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
@@ -77,26 +83,84 @@ public class QuotaService {
 
     public Map<String, Object> dailyCheckinStatus(long userId) {
         LocalDate today = today();
-        Integer claimed = jdbc.queryForObject("SELECT COUNT(*) FROM daily_checkins WHERE user_id=? AND checkin_date=?", Integer.class, userId, today);
-        return Map.of("enabled", dailyCheckinEnabled(), "claimed", claimed != null && claimed > 0,
-                "credits", dailyCheckinCredits(), "minCredits", dailyCheckinMinCredits(), "maxCredits", dailyCheckinMaxCredits(), "date", today.toString());
+        List<Map<String, Object>> rows = dailyCheckinRows(userId, today);
+        if (!rows.isEmpty() && rows.get(0).get("tarot_payload") == null) {
+            Map<String, Object> card = newDailyTarot();
+            jdbc.update("UPDATE daily_checkins SET deck_version=?, card_id=?, tarot_payload=? WHERE user_id=? AND checkin_date=? AND tarot_payload IS NULL",
+                    TarotDeck.VERSION, card.get("cardId"), writeDailyTarot(card), userId, today);
+            rows = dailyCheckinRows(userId, today);
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("enabled", dailyCheckinEnabled()); result.put("claimed", !rows.isEmpty());
+        result.put("credits", dailyCheckinCredits()); result.put("minCredits", dailyCheckinMinCredits());
+        result.put("maxCredits", dailyCheckinMaxCredits()); result.put("date", today.toString());
+        result.put("tarotCard", rows.isEmpty() ? null : readDailyTarot(rows.get(0), today));
+        return result;
     }
 
     @Transactional
     public Map<String, Object> claimDailyCheckin(long userId) {
         if (!dailyCheckinEnabled()) throw new AuthException(403, "每日签到暂未开启");
         LocalDate today = today();
+        if (jdbc.queryForList("SELECT id FROM users WHERE id=? FOR UPDATE", userId).isEmpty()) {
+            throw new AuthException(404, "用户不存在");
+        }
+        List<Map<String, Object>> claimedRows = dailyCheckinRows(userId, today);
+        if (!claimedRows.isEmpty()) {
+            Map<String, Object> existing = new LinkedHashMap<>(dailyCheckinStatus(userId));
+            existing.put("balance", balance(userId)); existing.put("granted", 0);
+            return existing;
+        }
+        Map<String, Object> card = newDailyTarot();
         try {
-            jdbc.update("INSERT INTO daily_checkins (user_id, checkin_date) VALUES (?, ?)", userId, today);
+            jdbc.update("INSERT INTO daily_checkins (user_id, checkin_date, deck_version, card_id, tarot_payload) VALUES (?, ?, ?, ?, ?)",
+                    userId, today, TarotDeck.VERSION, card.get("cardId"), writeDailyTarot(card));
         } catch (DuplicateKeyException e) {
-            return dailyCheckinStatus(userId);
+            Map<String, Object> existing = new LinkedHashMap<>(dailyCheckinStatus(userId));
+            existing.put("balance", balance(userId)); existing.put("granted", 0);
+            return existing;
         }
         int reward = ThreadLocalRandom.current().nextInt(dailyCheckinMinCredits(), dailyCheckinMaxCredits() + 1);
         jdbc.update("UPDATE users SET credits=credits+?, updated_at=CURRENT_TIMESTAMP WHERE id=?", reward, userId);
         int balance = balance(userId);
         jdbc.update("INSERT INTO credit_transactions (user_id, amount, balance_after, kind, note) VALUES (?, ?, ?, 'DAILY_CHECKIN', ?)",
                 userId, reward, balance, "每日签到奖励（" + today + "）");
-        return Map.of("enabled", true, "claimed", true, "credits", reward, "date", today.toString(), "balance", balance, "granted", reward);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("enabled", true); result.put("claimed", true); result.put("credits", reward);
+        result.put("minCredits", dailyCheckinMinCredits()); result.put("maxCredits", dailyCheckinMaxCredits());
+        result.put("date", today.toString()); result.put("balance", balance); result.put("granted", reward);
+        result.put("tarotCard", withDate(card, today));
+        return result;
+    }
+
+    private List<Map<String, Object>> dailyCheckinRows(long userId, LocalDate date) {
+        // A locking/current read is required under MySQL REPEATABLE READ after a competing
+        // claim commits; a plain snapshot read can otherwise miss the winning row.
+        return jdbc.queryForList("SELECT deck_version, card_id, tarot_payload FROM daily_checkins WHERE user_id=? AND checkin_date=? FOR UPDATE", userId, date);
+    }
+
+    private Map<String, Object> newDailyTarot() {
+        Map<String, Object> card = new LinkedHashMap<>(TarotDeck.randomDailyCard(tarotRandom));
+        card.put("deckVersion", TarotDeck.VERSION);
+        return card;
+    }
+
+    private String writeDailyTarot(Map<String, Object> card) {
+        try { return mapper.writeValueAsString(card); }
+        catch (Exception e) { throw new IllegalStateException("今日塔罗牌无法保存", e); }
+    }
+
+    private Map<String, Object> readDailyTarot(Map<String, Object> row, LocalDate date) {
+        try {
+            Map<String, Object> card = mapper.readValue(String.valueOf(row.get("tarot_payload")), new TypeReference<>() {});
+            return withDate(card, date);
+        } catch (Exception e) { throw new IllegalStateException("今日塔罗牌无法读取", e); }
+    }
+
+    private Map<String, Object> withDate(Map<String, Object> source, LocalDate date) {
+        Map<String, Object> card = new LinkedHashMap<>(source);
+        card.put("date", date.toString());
+        return card;
     }
 
     @Transactional

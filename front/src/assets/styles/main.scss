@@ -1,6 +1,8 @@
 @use './variables' as *;
 @use './mixins' as *;
 @use './common' as *;
+@use './tokens';
+@use './refinement';
 
 @font-face {
   font-family: 'Noto Serif SC';
@@ -20,14 +22,10 @@ body {
   font-family: $font-family;
   font-size: $font-size-base;
   line-height: $line-height;
-  color: $text-color;
-  background-color: $bg-color;
-  overflow-x: hidden;
+  color: var(--desk-text);
+  background-color: var(--desk-bg);
 }
 
-html {
-  overflow-x: hidden;
-}
 
 img,
 video,

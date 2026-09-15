@@ -237,7 +237,7 @@ const allMenuOptions = computed(() => [
     key: 'ImageGenerate'
   },
   {
-    label: '婚恋报告',
+    label: '月下会客厅',
     key: 'Matchmaking'
   },
   {
@@ -754,7 +754,7 @@ async function handleDailyCheckin() {
 
 :global(.daily-tarot-modal) { width: min(760px, calc(100vw - 28px)); }
 .daily-tarot-content { display: grid; grid-template-columns: minmax(210px, 300px) 1fr; gap: 28px; align-items: center; }
-.daily-tarot-card { aspect-ratio: 2 / 3; }
+.daily-tarot-card { height: auto; aspect-ratio: 2 / 3; }
 .daily-tarot-kicker { margin: 0 0 10px; color: #a47a44; font-size: 11px; font-weight: 800; letter-spacing: .13em; }
 .daily-tarot-content h3 { margin: 0 0 12px; color: #17213d; font: 500 28px/1.3 Georgia, "Noto Serif SC", serif; }
 .daily-tarot-content p:not(.daily-tarot-kicker) { color: #686273; line-height: 1.85; }

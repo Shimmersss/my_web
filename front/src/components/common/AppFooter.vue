@@ -18,7 +18,7 @@
           <li><a href="/translate" @click.prevent="navigateTo('/translate')">翻译</a></li>
           <li><a href="/contact" @click.prevent="navigateTo('/contact')">PPT 生成</a></li>
           <li><a href="/image-generate" @click.prevent="navigateTo('/image-generate')">GPT 生图</a></li>
-          <li><a href="/matchmaking-report" @click.prevent="navigateTo('/matchmaking-report')">婚恋报告</a></li>
+          <li><a href="/matchmaking-report" @click.prevent="navigateTo('/matchmaking-report')">月下会客厅</a></li>
           <li><a href="/news" @click.prevent="navigateTo('/news')">GitHub 项目</a></li>
           <li><a href="/guestbook" @click.prevent="navigateTo('/guestbook')">留言板</a></li>
         </ul>

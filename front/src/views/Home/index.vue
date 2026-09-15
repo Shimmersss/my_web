@@ -8,7 +8,7 @@
           <p class="lead">网站试运营中</p>
 
           <div class="hero-actions" aria-label="首页快捷操作">
-            <a class="primary-action" href="/publications" @click.prevent="navigateTo('/publications')">
+            <a class="primary-action" href="#quick-access" @click.prevent="scrollToQuickAccess">
               进入工作台 <span aria-hidden="true">→</span>
             </a>
           </div>
@@ -48,7 +48,7 @@
       </div>
     </section>
 
-    <section class="workflow-section" aria-labelledby="workflow-title">
+    <section id="quick-access" class="workflow-section" aria-labelledby="workflow-title">
       <div class="container workflow-layout">
         <article class="paper-panel workflow-panel">
           <div class="panel-heading">
@@ -56,7 +56,7 @@
               <p class="section-kicker">02 / 快速入口</p>
               <h2 id="workflow-title">站内工具</h2>
             </div>
-            <a href="/matchmaking-report" @click.prevent="navigateTo('/matchmaking-report')">打开关系探索报告 <span aria-hidden="true">→</span></a>
+            <a href="/matchmaking-report" @click.prevent="navigateTo('/matchmaking-report')">打开月下会客厅 <span aria-hidden="true">→</span></a>
           </div>
 
           <nav class="workflow-list" aria-label="研究工作流入口">
@@ -145,7 +145,7 @@ const tools = [
   { title: '论文翻译', description: '保留版式输出双语 PDF', path: '/translate', icon: DocumentTextOutline },
   { title: 'PPT 生成', description: '从论文生成答辩材料', path: '/contact', icon: SchoolOutline },
   { title: 'GPT 生图', description: '生成图片或用参考图继续创作', path: '/image-generate', icon: ImagesOutline },
-  { title: '关系探索报告', description: '从关系偏好、人格倾向与塔罗牌面展开自我探索', path: '/matchmaking-report', icon: HeartOutline },
+  { title: '月下会客厅', description: '从关系偏好、人格倾向与塔罗牌面展开自我探索', path: '/matchmaking-report', icon: HeartOutline },
   { title: '开源项目', description: '浏览 GitHub 仓库与 README', path: '/news', icon: LogoGithub },
   { title: '留言板', description: '留下建议或查看站内交流', path: '/guestbook', icon: ChatbubbleEllipsesOutline }
 ]
@@ -179,6 +179,14 @@ function resetHeroMove() {
 
 function navigateTo(path) {
   router.push(path)
+}
+
+function scrollToQuickAccess() {
+  const target = document.getElementById('quick-access')
+  if (!target) return
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  target.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' })
+  window.history.replaceState(null, '', '#quick-access')
 }
 
 function formatNumber(value) {
@@ -220,6 +228,10 @@ function formatNumber(value) {
     background: var(--desk-bg);
     content: '';
   }
+}
+
+.workflow-section {
+  scroll-margin-top: 88px;
 }
 
 .hero-layout {

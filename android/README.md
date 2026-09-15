@@ -1,12 +1,12 @@
 # Shimmer Android GeckoView App
 
 This directory contains the first-party Android container for
-`https://shimmer.help/`. Version `0.3.6-internal` embeds Mozilla GeckoView in
+`https://shimmer.help/`. Version `0.3.7-internal` embeds Mozilla GeckoView in
 the APK. It does not render with Android System WebView, a Trusted Web
 Activity, Custom Tabs, or an installed browser.
 
 - Application ID: `help.shimmer.app`
-- Version: `0.3.6-internal` (`versionCode` 11)
+- Version: `0.3.7-internal` (`versionCode` 12)
 - Minimum SDK: 26; compile SDK: 36; target SDK: 35
 - Release ABI: `arm64-v8a` (modern 64-bit ARM Android devices)
 - Embedded engine: GeckoView `149.0.20260403140140`
@@ -26,7 +26,7 @@ Build the signed internal APK with:
 ```
 
 The build atomically publishes
-`.release/android/shimmer-internal-0.3.6.apk` plus its
+`.release/android/shimmer-internal-0.3.7.apk` plus its
 `.verified.sha256` marker only after signature, certificate, package metadata,
 SDK, App Link, release-hardening, and Gecko payload checks pass. The payload
 gate requires the built-in bridge and `lib/arm64-v8a/libxul.so`, rejects a tiny
@@ -58,6 +58,9 @@ Run the release-gate regression tests without signing:
   Storage Access Framework; no broad storage permission is requested.
 - The Vue app does not register its PWA Service Worker in this container. API,
   SSE, task, and download state remain server-authoritative.
+- Returning after at least five minutes in the background performs a cache-bypassing
+  reload. Short system picker/external-link round trips keep the current page, while
+  session and view focus are restored whenever the activity regains window focus.
 - Gecko crashes or process kills reopen the owned session and expose the retry
   UI. Fullscreen, back navigation, App Links, file inputs, JavaScript alerts,
   confirm/prompt, and HTML select prompts have first-party handlers.
@@ -79,7 +82,7 @@ Publish an already verified APK and atomically switch the server manifest with:
 ```
 
 Update artifacts live in the server's persistent `.run/android-updates`
-directory. `0.2.1-internal` already contains the updater and can offer 0.3.6;
+directory. `0.2.1-internal` already contains the updater and can offer 0.3.7;
 `0.2.0-internal` must first be manually upgraded to 0.2.1 or newer.
 
 The old TWA used a selected browser profile, and 0.2.x used Android System

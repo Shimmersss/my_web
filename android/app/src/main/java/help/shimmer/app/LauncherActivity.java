@@ -8,6 +8,7 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
+import android.os.SystemClock;
 import android.provider.OpenableColumns;
 import android.util.Log;
 import android.view.View;
@@ -54,6 +55,8 @@ public final class LauncherActivity extends Activity {
     private static final int SAVE_DOCUMENT_REQUEST = 7102;
     private static final long MAX_DOWNLOAD_BYTES = 256L * 1024L * 1024L;
     private static final long MAX_TEXT_BYTES = 1024L * 1024L;
+    private static final long BACKGROUND_REFRESH_AFTER_MS = 5L * 60L * 1000L;
+    private static final long NOT_BACKGROUNDED = -1L;
 
     // 站点 file input 的 accept 可能只写扩展名；DocumentsUI 只认 MIME，
     // 扩展名 token 会让文件点击被静默拒绝，因此按此表归一化。
@@ -89,6 +92,9 @@ public final class LauncherActivity extends Activity {
     private boolean canGoBack;
     private boolean fullScreen;
     private boolean destroyed;
+    private boolean activityResumed;
+    private boolean skipRefreshOnNextResume;
+    private long backgroundedAtElapsedRealtime = NOT_BACKGROUNDED;
     private String currentUrl = HOME_URL;
     private PendingSave pendingSave;
     private GeckoResult<GeckoSession.PromptDelegate.PromptResponse> filePromptResult;
@@ -131,11 +137,11 @@ public final class LauncherActivity extends Activity {
     private void installBridge() {
         ((Application) getApplication()).getGeckoRuntime().getWebExtensionController()
                 .ensureBuiltIn(BRIDGE_LOCATION, BRIDGE_ID)
-                .accept(extension -> {
+                .accept(extension -> runOnUiThread(() -> {
                     if (extension == null || destroyed || session == null) return;
                     session.getWebExtensionController().setMessageDelegate(
                             extension, new BridgeMessageDelegate(), BRIDGE_APP);
-                }, error -> runOnUiThread(() -> Toast.makeText(
+                }), error -> runOnUiThread(() -> Toast.makeText(
                         this, "App 文件桥接初始化失败", Toast.LENGTH_LONG).show()));
     }
 
@@ -245,8 +251,10 @@ public final class LauncherActivity extends Activity {
                 .setType(save.mimeType)
                 .putExtra(Intent.EXTRA_TITLE, save.filename);
         try {
+            skipRefreshOnNextResume = true;
             startActivityForResult(intent, SAVE_DOCUMENT_REQUEST);
         } catch (ActivityNotFoundException error) {
+            skipRefreshOnNextResume = false;
             pendingSave.cleanup();
             pendingSave = null;
             Toast.makeText(this, "系统没有可用的文件保存器", Toast.LENGTH_LONG).show();
@@ -297,8 +305,10 @@ public final class LauncherActivity extends Activity {
                         prompt.type == GeckoSession.PromptDelegate.FilePrompt.Type.MULTIPLE);
         if (types.length > 1) intent.putExtra(Intent.EXTRA_MIME_TYPES, types);
         try {
+            skipRefreshOnNextResume = true;
             startActivityForResult(intent, FILE_CHOOSER_REQUEST);
         } catch (ActivityNotFoundException error) {
+            skipRefreshOnNextResume = false;
             finishFilePrompt(null);
             Toast.makeText(this, "系统没有可用的文件选择器", Toast.LENGTH_LONG).show();
         }
@@ -537,8 +547,10 @@ public final class LauncherActivity extends Activity {
 
     private void openExternal(Uri uri) {
         try {
+            skipRefreshOnNextResume = true;
             startActivity(new Intent(Intent.ACTION_VIEW, uri));
         } catch (ActivityNotFoundException error) {
+            skipRefreshOnNextResume = false;
             Toast.makeText(this, "没有可打开该链接的应用", Toast.LENGTH_LONG).show();
         }
     }
@@ -562,14 +574,55 @@ public final class LauncherActivity extends Activity {
 
     @Override
     protected void onPause() {
-        if (session != null && session.isOpen()) session.setActive(false);
+        activityResumed = false;
+        if (session != null && session.isOpen()) {
+            session.setFocused(false);
+            session.setActive(false);
+        }
         super.onPause();
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        if (session != null && session.isOpen()) session.setActive(true);
+        activityResumed = true;
+        boolean shouldRefresh = shouldRefreshAfterBackground(
+                backgroundedAtElapsedRealtime, SystemClock.elapsedRealtime(), skipRefreshOnNextResume);
+        backgroundedAtElapsedRealtime = NOT_BACKGROUNDED;
+        skipRefreshOnNextResume = false;
+        if (session != null && session.isOpen()) {
+            session.setActive(true);
+            session.setFocused(true);
+            geckoView.post(() -> {
+                if (!destroyed && activityResumed) geckoView.requestFocus();
+            });
+            if (shouldRefresh) {
+                Log.i(TAG, "refresh after extended background");
+                session.reload(GeckoSession.LOAD_FLAGS_BYPASS_CACHE);
+            }
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        backgroundedAtElapsedRealtime = SystemClock.elapsedRealtime();
+        super.onStop();
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (session == null || !session.isOpen()) return;
+        boolean contentFocused = hasFocus && activityResumed;
+        session.setFocused(contentFocused);
+        if (contentFocused) geckoView.requestFocus();
+    }
+
+    static boolean shouldRefreshAfterBackground(long backgroundedAt, long resumedAt,
+                                                boolean skipRefresh) {
+        return backgroundedAt != NOT_BACKGROUNDED && !skipRefresh
+                && resumedAt >= backgroundedAt
+                && resumedAt - backgroundedAt >= BACKGROUND_REFRESH_AFTER_MS;
     }
 
     @Override

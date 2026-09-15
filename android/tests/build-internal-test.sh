@@ -126,6 +126,14 @@ fi
 
 launcher_source="$ANDROID_DIR/app/src/main/java/help/shimmer/app/LauncherActivity.java"
 updater_source="$ANDROID_DIR/app/src/main/java/help/shimmer/app/AppUpdateManager.java"
+grep -q 'BACKGROUND_REFRESH_AFTER_MS = 5L \* 60L \* 1000L' "$launcher_source" \
+  || { echo 'Background refresh threshold is missing' >&2; exit 1; }
+grep -q 'session.reload(GeckoSession.LOAD_FLAGS_BYPASS_CACHE)' "$launcher_source" \
+  || { echo 'Extended-background refresh does not bypass stale cache' >&2; exit 1; }
+grep -q 'session.setFocused(true)' "$launcher_source" \
+  || { echo 'Foreground GeckoSession focus restoration is missing' >&2; exit 1; }
+grep -q 'geckoView.requestFocus()' "$launcher_source" \
+  || { echo 'Foreground GeckoView focus restoration is missing' >&2; exit 1; }
 sed -n '/protected void onNewIntent/,/^    }/p' "$launcher_source" \
   | grep -q 'appUpdateManager.checkForUpdates()' || {
     echo 'A reused singleTask Activity does not recheck for updates' >&2

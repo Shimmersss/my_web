@@ -7,6 +7,10 @@ import os
 import re
 import statistics
 
+from tokenizer_cache import configure_tokenizer_cache
+
+tokenizer_cache_override = os.environ.get("TIKTOKEN_CACHE_DIR")
+
 from babeldoc.docvision.doclayout import DocLayoutModel
 from babeldoc.format.pdf import high_level
 from babeldoc.format.pdf.document_il import Box, PdfParagraph
@@ -28,6 +32,10 @@ from reference_layout import (
     reference_section_flags,
     reference_split_points,
 )
+
+# BabelDOC assigns its own runtime cache directory while importing. Restore an
+# operator override or select the packaged cache after those imports complete.
+configure_tokenizer_cache(tokenizer_cache_override)
 
 COMMON_ENGLISH_WORDS = {
     "the",

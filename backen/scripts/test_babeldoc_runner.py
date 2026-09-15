@@ -1,4 +1,10 @@
+import hashlib
+import os
+import tempfile
 import unittest
+from pathlib import Path
+
+from tokenizer_cache import O200K_CACHE_KEY, O200K_SHA256, configure_tokenizer_cache
 
 from reference_layout import (
     is_numbered_reference,
@@ -86,6 +92,33 @@ class ReferenceLayoutTest(unittest.TestCase):
         )
         self.assertEqual([], reference_split_points(["1. 安装依赖", "2. 启动服务"]))
         self.assertEqual([], reference_split_points(["[1] Author, 2023.", "[3] Other, 2024."]))
+
+
+class TokenizerCacheTest(unittest.TestCase):
+    def test_packaged_o200k_cache_is_complete_and_selected(self):
+        previous = os.environ.pop("TIKTOKEN_CACHE_DIR", None)
+        try:
+            cache_dir = configure_tokenizer_cache()
+            cache_file = cache_dir / O200K_CACHE_KEY
+            self.assertEqual(O200K_SHA256, hashlib.sha256(cache_file.read_bytes()).hexdigest())
+            self.assertEqual(str(cache_dir), os.environ["TIKTOKEN_CACHE_DIR"])
+        finally:
+            if previous is None:
+                os.environ.pop("TIKTOKEN_CACHE_DIR", None)
+            else:
+                os.environ["TIKTOKEN_CACHE_DIR"] = previous
+
+    def test_explicit_cache_directory_is_preserved(self):
+        previous = os.environ.get("TIKTOKEN_CACHE_DIR")
+        try:
+            with tempfile.TemporaryDirectory() as configured:
+                self.assertEqual(Path(configured), configure_tokenizer_cache(configured))
+                self.assertEqual(configured, os.environ["TIKTOKEN_CACHE_DIR"])
+        finally:
+            if previous is None:
+                os.environ.pop("TIKTOKEN_CACHE_DIR", None)
+            else:
+                os.environ["TIKTOKEN_CACHE_DIR"] = previous
 
 
 if __name__ == "__main__":

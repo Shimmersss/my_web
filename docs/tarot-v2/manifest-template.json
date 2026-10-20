@@ -1,0 +1,66 @@
+{
+  "schemaVersion": "tarot-art-production-v2.2",
+  "cardId": null,
+  "themeId": null,
+  "suggestedSlot": null,
+  "title": null,
+  "status": "planned",
+  "userReview": "not-reviewed",
+  "selectedMaster": null,
+  "inputs": [],
+  "generationRuns": [],
+  "layerPlan": {
+    "background": {
+      "objects": [],
+      "alphaType": "opaque",
+      "removedObjects": [],
+      "reflectionOwnership": []
+    },
+    "subject": {
+      "objects": [],
+      "rigidGroups": [],
+      "alphaType": "rgba",
+      "supportGeometry": [],
+      "contactShadows": []
+    },
+    "effects": {
+      "objects": [],
+      "alphaType": "rgba"
+    },
+    "text": {
+      "objects": [],
+      "alphaType": "rgba"
+    },
+    "lineart": {
+      "source": null,
+      "algorithm": null,
+      "parameters": {}
+    }
+  },
+  "files": [],
+  "parameters": null,
+  "implementedAnimations": [],
+  "plannedAnimations": [],
+  "checks": {
+    "assets": null,
+    "manualVisual": null,
+    "blender": null,
+    "webDesktop390": null,
+    "web320": null,
+    "android": "not-run",
+    "fiveSlotThumbnailComparison": null,
+    "zeroParallaxComposite": null,
+    "blackWhiteGrayAlpha": null,
+    "extremeTiltFourDirections": null
+  },
+  "knownIssues": [],
+  "nextAction": null,
+  "deployment": "not-deployed",
+  "recordInstructions": {
+    "inputs": "每项填写实际 path、sha256、role，不填写猜测或未来文件。",
+    "generationRuns": "每次填写 tool、timestamp、callId或null、完整prompt、inputPaths、outputPaths、采用/失败结论。",
+    "files": "每项填写 path、sha256、bytes、图片width/height/mode与必要alpha统计。",
+    "checks": "填写status、timestamp、reportPath、对应母版/资产哈希及人工结论；未做保持null/not-run。"
+  },
+  "productionGuide": null
+}

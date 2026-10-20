@@ -4,7 +4,7 @@
 
 **A full-stack workbench for personal research and creative work: papers, translation, slide decks, AI images, and a little moonlit tarot.**
 
-[简体中文](README.md) · English
+[中文](README.md) · **英文**
 
 [![License: MIT](https://img.shields.io/badge/code-MIT-blue.svg)](LICENSE)
 [![Assets: CC BY-NC-SA 4.0](https://img.shields.io/badge/assets-CC%20BY--NC--SA%204.0-lightgrey.svg)](LICENSE-ASSETS.md)

@@ -4,7 +4,7 @@
 
 **一个面向个人研究与创作的全栈工作台：文献、翻译、演示文稿、AI 生图，再加一点月光下的塔罗。**
 
-简体中文 · [English](README.en.md)
+**中文** · [英文](README.en.md)
 
 [![License: MIT](https://img.shields.io/badge/code-MIT-blue.svg)](LICENSE)
 [![Assets: CC BY-NC-SA 4.0](https://img.shields.io/badge/assets-CC%20BY--NC--SA%204.0-lightgrey.svg)](LICENSE-ASSETS.md)

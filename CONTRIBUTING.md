@@ -1,6 +1,6 @@
 # 参与贡献 / Contributing
 
-[中文](#中文) · [English](#english)
+**中文** · [英文](#english)
 
 ## 中文
 

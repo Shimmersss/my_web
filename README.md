@@ -1,189 +1,283 @@
-# Research Workbench / 研究工具台
+<div align="center">
 
-一个面向个人工作与研究流程的全栈工具台，整合 Zotero 文献库、PDF/图片翻译、PPT/HTML 生成、AI 生图、婚恋报告、GitHub 项目展示与留言板。
+# 闪闪小站 · Shimmer Desk
 
-A full-stack personal workbench that brings together a Zotero library browser, PDF/image translation, PPT/HTML generation, AI images, matchmaking reports, GitHub showcases and a guestbook.
+**一个面向个人研究与创作的全栈工作台：文献、翻译、演示文稿、AI 生图，再加一点月光下的塔罗。**
 
-## 开发与维护入口 / Contributor Guide
+简体中文 · [English](README.en.md)
 
-- [项目工作流](docs/WORKFLOW.md)：任务范围、验证矩阵、审查与交付。
-- [部署与恢复](DEPLOYMENT.md)：当前脚本能力、数据备份和SQL兼容性。
-- [文档索引](docs/README.md)：现行说明、历史设计和本地记录的区别。
-- [Android](android/README.md)：容器构建、文件链路与版本发布。
+[![License: MIT](https://img.shields.io/badge/code-MIT-blue.svg)](LICENSE)
+[![Assets: CC BY-NC-SA 4.0](https://img.shields.io/badge/assets-CC%20BY--NC--SA%204.0-lightgrey.svg)](LICENSE-ASSETS.md)
+![Vue 3](https://img.shields.io/badge/Vue-3.5-42b883?logo=vuedotjs&logoColor=white)
+![Spring Boot 3](https://img.shields.io/badge/Spring%20Boot-3.2-6db33f?logo=springboot&logoColor=white)
+![Java 17](https://img.shields.io/badge/Java-17-orange?logo=openjdk&logoColor=white)
+![Node.js 20+](https://img.shields.io/badge/Node.js-20%2B-339933?logo=nodedotjs&logoColor=white)
+[![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-![Research Workbench home](front/public/readme/home.jpg)
+<img src="docs/images/screenshots/home.jpg" alt="闪闪小站首页" width="860">
 
-## 功能 / What It Does
+</div>
 
-- **文献库展示 / Zotero library**：后端从 Zotero Web API 拉取私有文献库，启动预热并缓存；前端按 collection、关键词和附件状态浏览。
-- **附件代理 / Attachment proxy**：PDF、Markdown 和网页快照附件统一由后端代理，支持 Zotero S3 跳转、ZIP 附件解包、流式传输和真实下载进度。
-- **PDF/图片翻译 / PDF and image translation**：上传 PDF 后选择页码范围、字体族和速度模式，由后端排队调用 BabelDOC 生成保留版式的纯中文 / 双语 PDF；PNG/JPG 等常见图片使用视觉模型生成中文译图和双语译图。
-- **PPT 生成 / Materials to PPT**：PPTX 与 HTML 的作者层统一使用隔离 Codex CLI；PPTX 输出 PPTD 后由固定导出器交付，HTML 只允许 Codex 输出受限 JSON 计划，再由固定 reveal.js 渲染器按 13 类语义布局、主题节奏和四档安全动效交付。可选智能推荐或精确指定 3–30 页（包含封面与结束页）；PPTX 的 GPT Image 2 可在后台上限内选择数量，单任务可配置为 1–10 张，预扣、生成和失败退款始终使用同一个数量。模板与样式预览会持续展开，方便比较。两条链路均可复用受控的 Tavily、Wikimedia Commons 与 Openverse 搜图，并保留视觉来源与复用权利状态；真实逐页渲染与确定性质量门仍会阻断破损产物。
-- **AI 生图 / Image generation**：独立生成任务、参考图输入、历史结果与受鉴权下载，失败按任务状态补偿额度。
-- **婚恋报告 / Matchmaking reports**：问卷、确定性评分、报告与可选画像，支持一次性内测资格；任务和退款恢复依据保存在MySQL。
-- **GitHub 项目展示 / GitHub showcase**：前端只访问站内接口，后端代理 GitHub API 和 README raw 内容，避免浏览器直连外部接口。
-- **留言板与站内通知 / Guestbook and notifications**：访客可阅读公开留言；注册用户可发布主留言、单层回复和点赞。回复、点赞会生成站内通知，作者可删除自己的内容，root 可在后台统一管理。
+## 目录
 
-## 截图 / Screenshots
+- [简介](#简介)
+- [功能一览](#功能一览)
+- [界面预览](#界面预览)
+- [架构](#架构)
+- [技术栈](#技术栈)
+- [快速开始](#快速开始)
+- [配置](#配置)
+- [仓库结构](#仓库结构)
+- [测试与检查](#测试与检查)
+- [部署](#部署)
+- [路线图](#路线图)
+- [参与贡献](#参与贡献)
+- [许可与致谢](#许可与致谢)
 
-### Zotero Publications / Zotero 文献页
+## 简介
 
-文献页聚合 Zotero 条目、collection、标签、附件和引用导出。PDF 附件按需下载，避免一次性占用浏览器和 JVM 内存。
+闪闪小站把日常研究会用到的工具放进同一个站点：从 Zotero 读文献，用 BabelDOC 保留版式翻译 PDF，把资料交给 Codex 生成可编辑的 PPTX 或 reveal.js 网页演示，用 GPT Image 2 生图；工作之余，还可以在夜空主题的「月下」里抽卡、收藏和占卜。
 
-The publications page combines Zotero items, collections, tags, attachments and citation export. PDF attachments are downloaded on demand to keep browser and JVM memory usage bounded.
+它是一个可以自己部署的完整应用，而不只是前端演示：
 
-![Zotero publications](front/public/readme/publications.jpg)
+- **前后端分离**：Vue 3 前端只访问本站 `/api/*`；外部 API、密钥、文件代理、队列与子进程全部由 Spring Boot 后端负责。
+- **账号与积分**：邀请码注册、HttpOnly Cookie + CSRF 会话、每日签到、按任务预扣积分，失败时有可重试的退款补偿。
+- **低配可用**：按 **2 核 / 4 GB** 服务器设计，长任务走有界队列、单 worker 与磁盘任务文件，并带内存与 Swap 保护。
+- **多端访问**：支持 PWA 与深色模式，另有基于 GeckoView 的 Android 客户端。
 
-### PDF/Image Translation / PDF 与图片翻译
+## 功能一览
 
-翻译页采用上传、配置、翻译中、结果预览四态流程。PDF 由 BabelDOC 负责保留论文版式、图片和公式位置；图片由视觉模型识别文字后覆盖译文。
+| 模块 | 路由 | 说明 | 状态 |
+| --- | --- | --- | --- |
+| 📚 文献库 | `/publications` | 同步 Zotero 私有文献库，按分组、关键词、类型浏览；PDF / Markdown / 网页快照附件由后端按需代理，支持引用导出 | ✅ 已上线 |
+| 🌐 论文翻译 | `/translate` | PDF 由 BabelDOC 输出纯中文 / 双语版，尽量保留版式、图片和公式；无文字层的扫描页先做 Tesseract OCR；参考文献后的附录也会翻译；PNG/JPG 等图片走视觉模型 | ✅ 已上线 |
+| 📊 PPT 生成 | `/contact` | 输入提示词或上传资料（PDF/Word/PPT/Excel/Markdown/网页等）。PPTX：Codex 在约 30 套 PPTD 设计系统中排版，再导出为可编辑文件。HTML：13 套 reveal.js 主题，13 类语义布局，四档动效。可智能推荐或指定 3–30 页，可选联网研究与 GPT Image 2 配图，带真实渲染质检和版本化修改 | ✅ 已上线 |
+| 🎨 GPT 生图 | `/image-generate` | 文生图与参考图编辑，可选画幅和质量，保留历史记录，下载需鉴权；失败按任务状态退还积分 | ✅ 已上线 |
+| 🌙 月下收藏库 | `/moonlit-collection` | 22 张大阿卡纳，每张 5 个独立主题，共 110 款主题卡；带倾斜、厚度与箔光交互的全息卡面 | ✅ 已上线 |
+| ✨ 月下抽卡 | `/moonlit-draw` | 用积分抽取主题卡，扣费和抽取在同一事务内完成，单抽价格可在后台配置；每日签到附赠今日牌，重复卡累计张数 | ✅ 已上线 |
+| 🔮 月下占卜 | `/tarot-reading` | 提问 → 选牌阵（单张 / 圣三角 / 二择一）→ 洗牌切牌 → 牌扇选牌 → 3D 翻牌 → 即时牌义 → 可选 AI 深度解读；牌由服务器决定，区分正逆位 | 🚧 前端已完成，后端开发中 |
+| 🐙 GitHub 项目 | `/news` | 展示指定仓库，并按周、按月统计全 GitHub 新项目 Star 榜，附 AI 摘要；README 由后端代理获取 | ✅ 已上线 |
+| 💬 留言板 | `/guestbook` | 公开留言，支持单层回复和点赞，并有站内通知；作者可删除自己的内容，root 可统一管理 | ✅ 已上线 |
+| 🛠️ 管理后台 | `/admin` | 今日概览、各栏目可见范围、API 与模型配置、任务文件保留期、积分定价与签到、邀请码、用户与额度流水 | ✅ 已上线 |
+| 📱 Android | `/download-app` | GeckoView 原生壳，支持文件上传下载、App Link，前台恢复时自动刷新 | ✅ 内测 `0.3.7-internal` |
 
-The translation view follows a four-state flow: upload, configure, translate and preview results. BabelDOC preserves PDF layout, images and formula positions, while image inputs are translated through vision and rendered back to PNG.
+## 界面预览
 
-![PDF translation](front/public/readme/translate.jpg)
+### 📚 Zotero 文献库
 
-### Materials To PPT / 通用资料转 PPT
+分组、标签、附件和引用导出集中在一页。附件按需流式下载，浏览器和 JVM 的内存占用都有上限。
 
-PPT 生成页支持仅提示词、仅资料、提示词 + 资料，以及可选 PPTX 视觉参考；联网研究默认开启，也可关闭。可让 Codex 智能推荐篇幅，也可以精确指定 3–30 页；PPTX 的 GPT Image 2 可选择生成数量，额度会随数量透明预估。PPTX 提供约 30 套 PPTD 设计系统，HTML 提供 13 套 reveal.js 主题（含独立的 Roman Forum 古典视觉系统）和自动/克制/强调/关闭四档动效。模板与样式区持续显示真实的 5 页样稿。Spring Boot 管理登录、额度、队列、恢复和 SSE，固定的服务端研究模块在模型沙箱外搜索并验证图片。结果页优先展示可操作的动态 HTML 演示，再提供 Chromium 静态质检图；二次修改只需要自然语言要求，并保留版本链。
+<img src="docs/images/screenshots/publications.jpg" alt="Zotero 文献库" width="860">
 
-The PPT generator accepts a prompt or common source materials plus an optional PPTX template. Extraction is automatic; jobs run in a single backend worker queue, expose a browser preview/editor after completion, and produce either editable `.pptx` or self-contained `.html` files. Revisions create a new task while preserving the original source, template, and output format.
+### 🌐 PDF / 图片翻译
 
-![PPT generation](front/public/readme/ppt-generate.jpg)
+流程分四步：上传、配置、翻译、预览结果。可选页码范围、译文字体和速度模式；长文档按单页分片排队，内存紧张时自动降速。
 
-## 架构 / Architecture
+<img src="docs/images/screenshots/translate.jpg" alt="PDF 翻译配置" width="680">
+
+### 📊 资料转 PPT
+
+可以只给提示词、只给资料，也可以两者都给。模板区一直展开，每套都能看 5 页真实样稿；页数、联网研究、配图策略和 AI 生图都可以按任务调整。
+
+<img src="docs/images/screenshots/ppt-generate.jpg" alt="PPT 生成" width="700">
+
+### 🎨 GPT 生图
+
+<img src="docs/images/screenshots/image-generate.jpg" alt="GPT 生图" width="860">
+
+### 🌙 月下收藏库与抽卡
+
+收藏墙按 22 张基础牌分组，点开任意一张，可以切换它的 5 个独立主题并查看寓意。
+
+<img src="docs/images/screenshots/moonlit-collection.jpg" alt="月下收藏库" width="860">
+
+<table>
+  <tr>
+    <td width="55%"><img src="docs/images/screenshots/moonlit-detail.jpg" alt="主题详情"></td>
+    <td width="45%"><img src="docs/images/screenshots/moonlit-draw.jpg" alt="积分抽卡结果"></td>
+  </tr>
+  <tr>
+    <td align="center">主题详情：五个独立主题与收藏张数</td>
+    <td align="center">积分抽卡：揭示动画与主题寓意</td>
+  </tr>
+</table>
+
+### 🔮 月下占卜（开发中预览）
+
+夜空背景用 Canvas 绘制，配有星盘、七芒星洗牌和 FLIP 飞入动画；动画只改动 transform 和 opacity，并适配「减少动态效果」设置。以下截图来自前端模拟模式（`VITE_TAROT_MOCK=1`）。
+
+<table>
+  <tr>
+    <td width="68%"><img src="docs/images/screenshots/tarot-reading.jpg" alt="圣三角牌阵"><br><img src="docs/images/screenshots/tarot-shuffle.jpg" alt="洗牌与切牌"></td>
+    <td width="32%"><img src="docs/images/screenshots/tarot-mobile.jpg" alt="移动端牌义"></td>
+  </tr>
+  <tr>
+    <td align="center">桌面端：圣三角牌阵、洗牌与切牌</td>
+    <td align="center">移动端：即时牌义与系列共鸣</td>
+  </tr>
+</table>
+
+### 🐙 GitHub 项目雷达
+
+<img src="docs/images/screenshots/github.jpg" alt="GitHub 项目雷达" width="860">
+
+## 架构
 
 ```mermaid
 flowchart LR
-  Browser["Vue 3 + Vite UI"] --> API["Spring Boot API"]
-  API --> Cache["In-memory cache"]
-  API --> Zotero["Zotero Web API v3"]
-  API --> GitHub["GitHub API / raw README"]
-  API --> BabelDOC["BabelDOC CLI"]
-  API --> LLM["LLM API"]
-  API --> Disk[".run files: translation / PPT / images"]
-  API --> SQL["MySQL: accounts / credits / matchmaking tasks"]
+  subgraph Client["客户端"]
+    Web["Vue 3 + Vite<br/>Naive UI · Pinia · PWA"]
+    App["Android<br/>GeckoView 壳"]
+  end
+  Web -- "/api/* · Cookie + CSRF" --> API
+  App --> Web
+  subgraph Server["Spring Boot 3 · Java 17"]
+    API["REST / SSE API<br/>鉴权 · 积分 · 队列"]
+    Cache["内存缓存<br/>Zotero 快照"]
+  end
+  API --> Cache
+  API --> SQL[("MySQL / H2<br/>账号 · 积分 · 任务 · 收藏")]
+  API --> Disk[(".run/ 任务文件<br/>译稿 · 演示 · 图片")]
+  API -- 子进程 --> Babel["BabelDOC + Tesseract<br/>PDF 翻译"]
+  API -- 子进程 --> Worker["Node 工作进程<br/>Codex CLI · reveal.js<br/>PPTD 导出 · Chromium 质检"]
+  API --> Ext["外部服务<br/>Zotero · GitHub · LLM<br/>GPT Image · Tavily"]
 ```
 
-浏览器只访问 `/api/*`。外部服务、CLI 调用、文件下载、鉴权、队列和资源限制都放在后端。
+- 浏览器从不直接访问外部服务；文件下载和附件都经过带鉴权的后端代理。
+- 每类长任务有自己的有界队列和单 worker。月下占卜任务以 SQL 为恢复依据，退款凭据单独记录。
+- 后端重启后，未完成的任务会重新排队；失败时退款可以重试，界面不会提前显示退款成功。
 
-The browser only talks to `/api/*`. External services, local CLIs, file downloads, authentication, queues and resource limits live in the backend.
+## 技术栈
 
-## 技术栈 / Tech Stack
-
-| Layer / 层 | Stack / 技术 |
+| 层 | 技术 |
 | --- | --- |
-| Frontend / 前端 | Vue 3, Vite, Naive UI, Pinia, Vue Router |
-| Backend / 后端 | Spring Boot 3, Java 17 |
-| Documents / 文档处理 | PDFBox, BabelDOC, pptx-automizer, reveal.js, LibreOffice, Chromium, Docling / MarkItDown |
-| Data Sources / 数据源 | Zotero Web API v3, GitHub API |
-| Runtime / 运行 | macOS/Linux shell scripts, root `.env.local`, disk-backed task storage |
+| 前端 | Vue 3、Vite 5、Naive UI、Pinia、Vue Router、vue-i18n、PDF.js、marked + DOMPurify、Sass |
+| 后端 | Spring Boot 3.2、Java 17、MyBatis-Plus、Spring JDBC、PDFBox、BCrypt |
+| 数据 | MySQL（生产）/ H2（本地），磁盘任务文件 |
+| 文档与演示 | BabelDOC、Tesseract、PyMuPDF、Docling / MarkItDown、Codex CLI、open-kimi-ppt-skill（PPTD）、reveal.js、Playwright + Chromium、LibreOffice、Poppler |
+| 3D 卡面 | three.js（GLTF）、Blender（离线制作） |
+| 移动端 | Android + Mozilla GeckoView |
+| 运维 | `project.sh` 本地编排、systemd + Nginx、发布脚本带备份与回滚 |
 
-## 仓库结构 / Repository Layout
+## 快速开始
+
+### 环境要求
+
+| 必需 | 可选（对应功能才需要） |
+| --- | --- |
+| Java 17、Maven 3.9+ | [uv](https://github.com/astral-sh/uv) + BabelDOC 0.6.2、Tesseract（`eng`）：PDF 翻译 |
+| Node.js 20+ 与 npm | LibreOffice、Poppler、Google Chrome / Chromium、Noto CJK 字体：PPT 渲染与质检 |
+| macOS 或 Linux（bash） | MySQL 8：接近生产环境的本地数据库 |
+
+### 启动
+
+```bash
+git clone https://github.com/Shimmersss/my_web.git
+cd my_web
+cp .env.local.example .env.local      # 至少填写 ROOT_PASSWORD
+chmod 600 .env.local
+npm --prefix backen install           # PPT 工作进程依赖，可选
+PROJECT_DB_MODE=h2 ./project.sh start # 用内存 H2，不需要 MySQL
+```
+
+首次启动会自动安装前端依赖并打包后端。启动后：
+
+- 前端：<http://localhost:3000>
+- 后端：<http://localhost:8080>（`/api/health`）
+- 用 `.env.local` 里的 `ROOT_USERNAME` / `ROOT_PASSWORD` 登录 root，然后在后台生成邀请码，用来注册普通账号。
+
+常用命令：
+
+```bash
+./project.sh status            # 查看前后端与 MySQL 状态
+./project.sh restart backend   # 只重启后端
+./project.sh logs backend      # 跟踪后端日志
+./project.sh stop              # 停止全部服务
+```
+
+> 💡 只想预览月下占卜界面？可以用 `VITE_TAROT_MOCK=1 npm --prefix front run dev` 启动前端，抽牌和 AI 解读会使用浏览器内的模拟数据，不请求后端；生产构建不包含模拟代码。
+
+## 配置
+
+所有密钥都从根目录的 `.env.local` 读取，这个文件已被 Git 忽略。[`.env.local.example`](.env.local.example) 列出了全部变量（只含空值或占位符），可以当作配置清单。
+
+| 分组 | 主要变量 | 用途 |
+| --- | --- | --- |
+| 账号 | `ROOT_USERNAME`、`ROOT_PASSWORD`、`ADMIN_KEY`、`AUTH_COOKIE_SECURE` | root 初始化、会话 Cookie |
+| 数据库 | `DB_URL`、`DB_DRIVER`、`DB_USERNAME`、`DB_PASSWORD` | 留空时使用 H2；生产指向 MySQL |
+| 文献 | `ZOTERO_API_KEY`、`ZOTERO_USER_ID` | Zotero 同步 |
+| 文本模型 | `LLM_API_URL`、`LLM_API_KEY`、`LLM_MODEL`、`LLM_VISION_*` | 图片翻译、摘要与解读，接口需兼容 OpenAI |
+| PDF 翻译 | `BABELDOC_*`、`TRANSLATION_*` | BabelDOC 命令、模型、分片与资源保护 |
+| 演示文稿 | `PPT_GENERATION_*`、`TAVILY_*`、`SEMANTIC_SCHOLAR_API_KEY` | Codex、渲染工具、联网研究、演示配图 |
+| 生图 | `IMAGE_GENERATION_*`、`PPT_GENERATION_IMAGE_GENERATION_*` | GPT Image 2 接口与队列限制 |
+
+大部分模型、定价、保留期和栏目可见范围也可以在 `/admin` 里在线调整。
+
+## 仓库结构
 
 ```text
-backen/                  Spring Boot backend (package: com.web.backen)
-front/                   Vue 3 frontend
-project.sh               local start / stop / status helper
-README.md                bilingual public project overview
+.
+├── backen/                 Spring Boot 后端（包名 com.web.backen，目录名有意保留为 backen）
+│   ├── src/main/java/      auth · zotero · translate · ppt · imagegen · moonlit · matchmaking · guestbook · github …
+│   ├── src/main/resources/ application.yml、schema.sql、牌库与主题数据
+│   └── scripts/            BabelDOC runner、OCR、文档解析、ppt-agent / ppt-codex 工作进程
+├── front/                  Vue 3 前端
+│   ├── src/views/          各页面（Publications、Translate、PptGenerate、TarotReading、Moonlit* …）
+│   ├── src/components/     通用组件、塔罗与月下组件
+│   └── public/             PWA、模板预览、塔罗素材与全息闪卡
+├── android/                GeckoView Android 客户端
+├── vendor/                 第三方运行时（open-kimi-ppt-skill）
+├── deploy/                 发布、源站加固与 APK 发布脚本
+├── docs/                   工作流、规格、塔罗美术规范与截图
+├── output/                 塔罗美术制作工程与审查证据
+└── project.sh              本地启动 / 停止 / 状态
 ```
 
-> 后端目录名故意保留为 `backen`，Java 包名是 `com.web.backen`。不要改成 `backend`。
->
-> The backend directory is intentionally named `backen`; the Java package is `com.web.backen`.
+## 测试与检查
 
-## 本地开发 / Local Development
-
-Requirements / 环境要求：
-
-- Java 17
-- Node.js 20+ + npm、stable LibreOffice、Poppler、Chromium、fontconfig + Noto CJK（PPT Agent）
-- `uv` for BabelDOC / Python helper commands
+按改动范围选择检查，完整对照表见[验证矩阵](docs/WORKFLOW.md#验证矩阵)：
 
 ```bash
-# create root .env.local locally, using the variables listed below
-./project.sh start
+npm --prefix front run build      # 前端构建，同时运行导航、PWA、PDF 预览、占卜流程等门禁
+mvn -f backen/pom.xml test        # 后端测试
+npm --prefix backen test          # PPT / HTML 工作进程测试
 ```
 
-Open / 打开：
+涉及真实 MySQL 事务时，请在独立测试库上运行 `MatchmakingMySqlIT`（见 WORKFLOW）。H2 测试通过不能代替 MySQL 验证。
 
-- Frontend / 前端：`http://localhost:3000`
-- Backend / 后端：`http://localhost:8080`
+## 部署
 
-Useful commands / 常用命令：
+生产部署步骤、备份（SQL 和 `.run/` 都要备份）、资源参数和回滚方法见 [DEPLOYMENT.md](DEPLOYMENT.md)，Android 构建与发布见 [android/README.md](android/README.md)。
 
-```bash
-./project.sh status
-./project.sh restart backend
-./project.sh logs backend
-./project.sh stop
-# local MySQL is managed automatically when DB_URL points to 127.0.0.1:3306
-./project.sh mysql status
-```
+- 仓库不包含任何生产主机或凭据。发布目标只从本地权限为 `0600` 的 `.deploy.local` 或当前 shell 环境读取（模板见 [`.deploy.local.example`](.deploy.local.example)）。
+- `/api/health` 返回 200 不代表发布成功，还要检查四类任务和待补偿状态，并跑一次真实任务。
+- BabelDOC 处理文档时，工作集可能接近 2.8 GB。在 4 GB 机器上要固定单页分片，并保留 cgroup / Swap 保护。
 
-## 配置 / Configuration
+## 路线图
 
-密钥从根目录 `.env.local` 读取，该文件不会提交到 Git。之前提交过的 `front/.env*` 已经取消跟踪；当前构建和运行不依赖这些前端环境文件。
+- [x] Zotero 文献库、PDF / 图片翻译、扫描页 OCR
+- [x] PPTX（PPTD）与 HTML（reveal.js）双链路演示生成
+- [x] GPT 生图、留言板与站内通知、Android 客户端
+- [x] 月下收藏库：110 款独立主题卡、积分抽卡、每日签到
+- [ ] 月下占卜后端：牌阵抽牌、正逆位、AI 深度解读（[规格](docs/plans/2026-10-13-moonlit-divination.md)）
+- [ ] 其余 21 张牌的完整分层 3D 主题资产（[美术规范](docs/tarot-v2/README.md)）
+- [ ] PPTX 生成的按任务容器隔离与出网限制，之后再向普通用户开放
 
-Secrets are loaded from root `.env.local`, which is ignored by Git. Previously committed `front/.env*` files have been removed from Git tracking; the current build and runtime flow do not require them.
+## 参与贡献
 
-Important groups / 主要配置组：
+欢迎提交 Issue 和 PR！开始前请阅读：
 
-- `ZOTERO_API_KEY`, `ZOTERO_USER_ID`
-- `ADMIN_KEY`
-- `LLM_*`
-- `BABELDOC_*`
-- `PPT_GENERATION_*`
-- `ROOT_USERNAME`, `ROOT_PASSWORD`
-- `DB_URL`, `DB_DRIVER`, `DB_USERNAME`, `DB_PASSWORD` for production MySQL
+- [贡献指南](CONTRIBUTING.md)：开发流程、检查命令和必须保持的约定
+- [行为准则](CODE_OF_CONDUCT.md)
+- [安全策略](SECURITY.md)：发现漏洞请私下报告，不要公开提交 Issue
+- [文档索引](docs/README.md) 与 [项目工作流](docs/WORKFLOW.md)
 
-本地 `.env.local` 若配置 `127.0.0.1:3306` 的 MySQL，`project.sh start/stop` 会联动 Homebrew `mysql` 服务；需要显式绕过数据库服务时设置 `PROJECT_DB_MODE=h2`。
+## 许可与致谢
 
-真实 API key 和部署参数必须放在仓库外。根目录 `.env.local.example` 只保留空值/占位符，可作为部署配置清单；不要提交真实 `.env.local`。
+- **代码**：[MIT License](LICENSE) © 2026 Li Zexuan (Shimmersss)
+- **美术素材与截图**：[CC BY-NC-SA 4.0](LICENSE-ASSETS.md)，包括塔罗牌面、110 款主题卡、全息闪卡素材、站点图标和 README 截图
+- **第三方组件**：各自沿用原许可，完整清单见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)
 
-Keep real API keys and deployment parameters outside the repository. The root `.env.local.example` only contains blank placeholders and can be used as a deployment checklist; never commit a real `.env.local`.
+特别感谢以下项目：[Vue](https://vuejs.org/)、[Naive UI](https://www.naiveui.com/)、[Spring Boot](https://spring.io/projects/spring-boot)、[BabelDOC](https://github.com/funstory-ai/BabelDOC)、[open-ppt-skill](https://github.com/jinwyp/open-ppt-skill)、[reveal.js](https://revealjs.com/)、[OpenAI Codex](https://github.com/openai/codex)、[PDF.js](https://mozilla.github.io/pdf.js/)、[three.js](https://threejs.org/)、[Tesseract](https://github.com/tesseract-ocr/tesseract)、[GeckoView](https://mozilla.github.io/geckoview/)、[Zotero](https://www.zotero.org/)、[Tarotoo 塔罗数据集](https://github.com/Tarotoo-com/tarotoo-tarot-dataset)和 [BJTU-Slides-Template](https://github.com/Allenpandas/BJTU-Slides-Template)。
 
-## 资源基线 / Resource Baseline
-
-生产目标环境是 **2 核 CPU / 4 GB 内存**。长任务使用有界队列、单 worker 文档生成、磁盘任务文件、流式附件传输和保守并发默认值。
-
-The production target is modest: **2 CPU cores / 4 GB RAM**. Long-running work uses bounded queues, single-worker document generation, disk-backed task files, streaming attachment transfer and conservative concurrency defaults.
-
-## 部署 / Deployment
-
-For practical deployment steps, see [DEPLOYMENT.md](DEPLOYMENT.md).
-
-这个公开分支把部署凭证、主机地址和本地发布产物排除在 Git 外。仓库包含经过安全加固的发布脚本，但它不会提供默认生产主机；实际目标只能来自权限为 `0600` 的本地 `.deploy.local` 或当前 shell 环境。
-
-This public branch keeps deployment credentials, host addresses and local release outputs out of Git. It includes a hardened deployment script, but that script has no default production host; the target must come from a mode-`0600` local `.deploy.local` file or the current shell environment.
-
-部署到服务器时，请用 npm 构建前端、用 Maven 打包 Spring Boot 后端，并从服务器环境或根目录 `.env.local` 提供运行密钥。复制 `.deploy.local.example` 为 `.deploy.local` 后执行 `chmod 600 .deploy.local`；优先填写只能通过 VPN/私网访问的 SSH alias，主机、SSH 和远端路径参数必须留在仓库外。
-
-For server deployment, follow [the deployment and recovery procedure](DEPLOYMENT.md), including SQL and task-file backups. A code archive alone is not a complete recovery point. Copy `.deploy.local.example` to `.deploy.local`, run `chmod 600 .deploy.local`, and prefer an SSH alias reachable only through a VPN/private network. Host, SSH and remote path values must stay outside the repository.
-
-## Git 管理 / Git Hygiene
-
-公开仓库保留 `README.md`、`DEPLOYMENT.md`、`docs/WORKFLOW.md` 等通用协作说明。内部维护记录、本地发布目录、运行态数据、前后端本地文档、前后端 env 文件、截图归档和密钥都被忽略。
-
-The repository keeps public contributor docs such as `README.md`, `DEPLOYMENT.md` and `docs/WORKFLOW.md`. Internal maintenance notes, local release folders, runtime state, frontend/backend local docs, frontend/backend env files, screenshot archives and secrets are ignored.
-
-Ignored local/generated paths include / 已忽略的本地或生成路径包括：
-
-- root-level internal Markdown such as `AGENTS.md`, `WORKLOG.md`, `MAINTENANCE.md`
-- `front/**/*.md`, `backen/**/*.md`
-- `front/**/.env*`, `backen/**/.env*`
-- `front/部分页面截图/`
-- `.run/`
-- `.release/`
-- `server-upload/`
-- `outputs/`
-- `.env.local`
-- `.deploy.local`
-- Python `__pycache__/` and `*.pyc`
-
-这些文件取消 Git 跟踪不会影响当前应用构建：前端和后端源码不导入 `front/README.md`、`backen/README.md`、`front/CHECKLIST.md`、`front/DEVELOPMENT.md`、`front/PROJECT_SUMMARY.md`、`front/QUICKSTART.md`、`front/.env*` 或 `front/部分页面截图/`。
-
-Removing these files from Git tracking does not affect the current application build: the active frontend and backend code do not import `front/README.md`, `backen/README.md`, `front/CHECKLIST.md`, `front/DEVELOPMENT.md`, `front/PROJECT_SUMMARY.md`, `front/QUICKSTART.md`, `front/.env*`, or `front/部分页面截图/`.
-
-提交前可用 `git check-ignore -v <path>` 确认某个本地文件的忽略规则。
-
-Before committing, use `git check-ignore -v <path>` to confirm the ignore rule for a local file.
+> ⚠️ `vendor/open-kimi-ppt-skill/editor/` 中的编辑器资源按上游说明来自对 Kimi/neo-ppt 的逆向，不在 MIT 授权范围内。Fork 或再分发前，请先阅读 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) 中的说明。

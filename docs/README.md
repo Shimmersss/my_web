@@ -2,7 +2,9 @@
 
 ## 现行规范
 
-- [项目概览](../README.md)：功能、启动和仓库结构。
+- [项目概览](../README.md)（[English](../README.en.md)）：功能、截图、快速开始和仓库结构。
+- [贡献指南](../CONTRIBUTING.md)、[行为准则](../CODE_OF_CONDUCT.md)、[安全策略](../SECURITY.md)：开源协作入口；Issue/PR 模板在 `.github/`。
+- [许可](../LICENSE)（代码 MIT）、[素材许可](../LICENSE-ASSETS.md)（美术与截图 CC BY-NC-SA 4.0）、[第三方组件与引用](../THIRD_PARTY_NOTICES.md)：新增依赖或素材时同步更新。
 - [工作流](WORKFLOW.md)：开发、验证、审查、交付和文档维护。
 - [部署与恢复](../DEPLOYMENT.md)：生产操作顺序、数据兼容性和脚本能力边界。
 - [Android](../android/README.md)：原生容器与APK流程。

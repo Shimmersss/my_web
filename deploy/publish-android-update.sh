@@ -5,7 +5,6 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCAL_CONFIG="${DEPLOY_LOCAL_CONFIG:-$ROOT/.deploy.local}"
 ANDROID_HOME="${ANDROID_HOME:-/opt/homebrew/share/android-commandlinetools}"
 APK="${1:-$ROOT/.release/android/shimmer-internal-0.3.7.apk}"
-REMOTE_UPDATE_DIR="${ANDROID_UPDATE_REMOTE_DIR:-/home/admin/web-homepage/.run/android-updates}"
 NOTES="${ANDROID_UPDATE_NOTES:-后台超过 5 分钟返回时自动刷新页面，并修复 App 恢复前台后偶发点击无响应。}"
 
 die() { printf '[x] %s\n' "$*" >&2; exit 1; }
@@ -22,9 +21,11 @@ if [[ -f "$LOCAL_CONFIG" ]]; then
 fi
 
 : "${DEPLOY_HOST:?DEPLOY_HOST is required}"
-DEPLOY_USER="${DEPLOY_USER:-admin}"
+: "${DEPLOY_USER:?DEPLOY_USER is required}"
 DEPLOY_PORT="${DEPLOY_PORT:-22}"
-PUBLIC_URL="${PUBLIC_URL:-https://shimmer.help/}"
+PUBLIC_URL="${PUBLIC_URL:-${DOMAIN:+https://$DOMAIN/}}"
+: "${PUBLIC_URL:?PUBLIC_URL or DOMAIN is required}"
+REMOTE_UPDATE_DIR="${ANDROID_UPDATE_REMOTE_DIR:-${REMOTE_DIR:?REMOTE_DIR or ANDROID_UPDATE_REMOTE_DIR is required}/.run/android-updates}"
 [[ -f "$APK" ]] || die "Verified APK not found: $APK"
 MARKER="$APK.verified.sha256"
 [[ -f "$MARKER" ]] || die "APK verification marker not found: $MARKER"

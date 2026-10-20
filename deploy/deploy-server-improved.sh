@@ -28,16 +28,16 @@ if [[ -f "$LOCAL_CONFIG" ]]; then
 fi
 
 DEPLOY_HOST="${DEPLOY_HOST:-}"
-DEPLOY_USER="${DEPLOY_USER:-admin}"
+DEPLOY_USER="${DEPLOY_USER:-}"
 DEPLOY_PORT="${DEPLOY_PORT:-22}"
 DEPLOY_IDENTITY_FILE="${DEPLOY_IDENTITY_FILE:-}"
-REMOTE_DIR="${REMOTE_DIR:-/home/admin/web-homepage}"
-REMOTE_UPLOAD_DIR="${REMOTE_UPLOAD_DIR:-/home/admin/.web-homepage-releases}"
+REMOTE_DIR="${REMOTE_DIR:-/opt/web-homepage}"
+REMOTE_UPLOAD_DIR="${REMOTE_UPLOAD_DIR:-/opt/web-homepage-releases}"
 CONFIG_DIR="${CONFIG_DIR:-/etc/web-homepage}"
 SERVICE_NAME="${SERVICE_NAME:-web-backen}"
 NGINX_SITE_NAME="${NGINX_SITE_NAME:-corporate-site}"
-DOMAIN="${DOMAIN:-shimmer.help}"
-PUBLIC_URL="${PUBLIC_URL:-https://shimmer.help/}"
+DOMAIN="${DOMAIN:-}"
+PUBLIC_URL="${PUBLIC_URL:-${DOMAIN:+https://$DOMAIN/}}"
 FORCE_NGINX_CONFIG="${FORCE_NGINX_CONFIG:-0}"
 RUN_TESTS="${RUN_TESTS:-1}"
 REQUIRE_CLEAN="${REQUIRE_CLEAN:-0}"
@@ -119,7 +119,9 @@ done
 (( REMOTE_RELEASE_KEEP >= 1 )) || die "REMOTE_RELEASE_KEEP must be at least 1"
 if [[ "$BUILD_ONLY" != "1" ]]; then
   [[ -n "$DEPLOY_HOST" ]] || die "DEPLOY_HOST is required. Put it in the ignored 0600 .deploy.local file or export it in the shell."
+  [[ -n "$DEPLOY_USER" ]] || die "DEPLOY_USER is required. Put it in .deploy.local (see .deploy.local.example)."
 fi
+[[ -n "$DOMAIN" && -n "$PUBLIC_URL" ]] || die "DOMAIN is required (PUBLIC_URL defaults to https://DOMAIN/). Put it in .deploy.local (see .deploy.local.example)."
 
 TARGET="$DEPLOY_USER@${DEPLOY_HOST:-build-only.invalid}"
 SSH_OPTIONS=(-p "$DEPLOY_PORT")

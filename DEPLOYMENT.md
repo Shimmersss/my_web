@@ -59,7 +59,7 @@ git diff --check
 
 ### 2. 先构建，保持生产服务运行
 
-复制并配置 [.deploy.local.example](.deploy.local.example) 为本机 `.deploy.local`，权限0600；使用已有SSH别名或受控连接方式，不提交真实源站信息。不要覆盖已经存在的本地配置。
+复制并配置 [.deploy.local.example](.deploy.local.example) 为本机 `.deploy.local`，权限0600；使用已有SSH别名或受控连接方式，不提交真实源站信息。不要覆盖已经存在的本地配置。`DEPLOY_HOST`、`DEPLOY_USER`、`DOMAIN` 没有默认值，必须写在本地配置中（`PUBLIC_URL` 默认为 `https://$DOMAIN/`）；`REMOTE_DIR`、`REMOTE_UPLOAD_DIR` 等服务器路径的默认值只是 `/opt/web-homepage*` 占位，请按实际服务器填写。脚本按作者的 Ubuntu + systemd + Nginx 环境编写，自建部署时只作参考。
 
 ```bash
 # 只构建，不上传、不停服、不安装。

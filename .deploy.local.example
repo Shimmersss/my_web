@@ -2,12 +2,20 @@
 # Prefer an SSH alias reachable through a VPN/private network. Never commit a
 # production origin IP or a DNS-only hostname that resolves to it.
 DEPLOY_HOST=web-origin-via-vpn
-DEPLOY_USER=admin
+DEPLOY_USER=deploy
 DEPLOY_PORT=22
 # DEPLOY_IDENTITY_FILE=/absolute/path/to/private-key
 
-DOMAIN=shimmer.help
-PUBLIC_URL=https://shimmer.help/
+# Required: public site. PUBLIC_URL defaults to https://$DOMAIN/.
+DOMAIN=example.com
+PUBLIC_URL=https://example.com/
+
+# Server layout. The scripts default to these placeholder paths; set your own.
+REMOTE_DIR=/opt/web-homepage
+REMOTE_UPLOAD_DIR=/opt/web-homepage-releases
+CONFIG_DIR=/etc/web-homepage
+SERVICE_NAME=web-backen
+NGINX_SITE_NAME=corporate-site
 
 # Preserve the hand-maintained production TLS/Nginx site by default. In
 # particular, routine application releases must not recreate retired vhosts.

@@ -171,6 +171,7 @@ fi
 command -v java >/dev/null 2>&1 || die "java not found. Install Java 17 first."
 command -v uv >/dev/null 2>&1 || die "uv not found. Runtime PPT/PDF features depend on uv run."
 command -v python3 >/dev/null 2>&1 || die "python3 not found. Deployment safety checks require Python 3."
+command -v sysctl >/dev/null 2>&1 || die "sysctl not found. BabelDOC memory protection requires procps."
 command -v node >/dev/null 2>&1 || die "node not found. The presentation Agent requires Node.js 20+."
 command -v npm >/dev/null 2>&1 || die "npm not found. Install npm alongside Node.js."
 node -e 'if (Number(process.versions.node.split(".")[0]) < 20) process.exit(1)' \
@@ -180,6 +181,9 @@ if soffice --version 2>&1 | grep -Eiq 'dev|alpha|beta|rc[0-9]*'; then
   die "A stable LibreOffice release is required; development and prerelease builds are rejected."
 fi
 command -v pdftoppm >/dev/null 2>&1 || die "pdftoppm not found. Install poppler; the Agent has no secondary renderer."
+command -v tesseract >/dev/null 2>&1 || die "tesseract not found. Install tesseract-ocr and tesseract-ocr-eng for textless PDFs."
+tesseract --list-langs 2>&1 | grep -qx 'eng' \
+  || die "Tesseract English data missing. Install tesseract-ocr-eng."
 
 if ! java -version 2>&1 | grep -Eq 'version "17|version "18|version "19|version "2[0-9]|openjdk version "17|openjdk version "18|openjdk version "19|openjdk version "2[0-9]'; then
   warn "Java exists, but it may be older than 17. Spring Boot 3 requires Java 17+."
@@ -216,6 +220,10 @@ cleanup_deployment_lock() { rm -f "$DEPLOYMENT_LOCK"; }
 trap cleanup_deployment_lock EXIT
 
 [[ -n "${ROOT_PASSWORD:-}" && "${#ROOT_PASSWORD}" -ge 6 ]] || die "ROOT_PASSWORD in $ENV_FILE must be set and at least 6 characters."
+BABELDOC_VM_SWAPPINESS="${BABELDOC_VM_SWAPPINESS:-20}"
+[[ "$BABELDOC_VM_SWAPPINESS" =~ ^[0-9]+$ ]] \
+  && (( BABELDOC_VM_SWAPPINESS >= 0 && BABELDOC_VM_SWAPPINESS <= 100 )) \
+  || die "BABELDOC_VM_SWAPPINESS must be an integer from 0 to 100."
 PPT_CHROME_COMMAND="${PPT_GENERATION_CHROME_COMMAND:-}"
 if [[ -z "$PPT_CHROME_COMMAND" ]]; then
   for candidate in /usr/bin/chromium /usr/bin/chromium-browser /usr/bin/google-chrome; do
@@ -344,6 +352,11 @@ if [[ ! -f "$PPT_CODEX_MIGRATION_MARKER" ]]; then
   info "Archived and cleared pre-Codex PPT tasks: $PPT_TASK_ARCHIVE"
 fi
 
+info "Configuring BabelDOC swap policy..."
+printf 'vm.swappiness=%s\n' "$BABELDOC_VM_SWAPPINESS" > /etc/sysctl.d/90-web-babeldoc.conf
+chmod 0644 /etc/sysctl.d/90-web-babeldoc.conf
+sysctl -q -w "vm.swappiness=$BABELDOC_VM_SWAPPINESS"
+
 info "Installing systemd service..."
 cat > "/etc/systemd/system/$SERVICE_NAME.service" <<SERVICE_UNIT
 [Unit]
@@ -367,8 +380,9 @@ Restart=always
 RestartSec=5
 SuccessExitStatus=143
 MemoryAccounting=yes
-MemoryHigh=2200M
-MemoryMax=2800M
+MemoryHigh=2950M
+MemoryMax=3000M
+MemorySwapMax=1200M
 TasksMax=256
 
 [Install]

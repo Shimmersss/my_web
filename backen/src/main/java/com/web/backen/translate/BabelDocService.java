@@ -37,16 +37,23 @@ public class BabelDocService {
     private static final Logger log = LoggerFactory.getLogger(BabelDocService.class);
     private static final int MAX_OUTPUT_CHARS = 64 * 1024;
     private static final long MONITOR_INTERVAL_MILLIS = 2000;
-    private static final String CHUNK_CACHE_VERSION = "version=3";
+    private static final String CHUNK_CACHE_VERSION = "version=4";
+    private static final String COMPLETION_POLICY = "completion=complete-v1";
     private static final Pattern CHUNK_RANGE = Pattern.compile("^(\\d+)-(\\d+)$");
     private static final Pattern REFERENCE_HEADING = Pattern.compile(
-            "^[\\t ]*(?:references|bibliography|works[\\t ]+cited|"
-                    + "literature[\\t ]+cited)[\\t ]*$",
-            Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
+            "\\s*(?:references|bibliography|works\\s+cited|literature\\s+cited)\\s*",
+            Pattern.CASE_INSENSITIVE);
+    // Mirrors REFERENCE_SECTION_END_RE in scripts/reference_layout.py. Appendix
+    // headings usually carry an identifier and title ("Appendix A. Derivation");
+    // only keywords are case-insensitive so prose like "Appendix is" is ignored.
     private static final Pattern REFERENCE_SECTION_END = Pattern.compile(
-            "^[\\t ]*(?:appendix(?:es)?(?:[\\t ]+[A-Z0-9]+)?|"
-                    + "supplementary[\\t ]+materials?|supplemental[\\t ]+materials?)[\\t ]*$",
-            Pattern.CASE_INSENSITIVE | Pattern.MULTILINE);
+            "\\s*(?:(?:[A-Z]|\\d{1,2}(?:\\.\\d{1,2})*)[.)]?\\s+)?(?:"
+                    + "(?i:appendix|appendices)(?:\\s+(?:[A-Z]|[IVX]{1,4}|\\d{1,2})(?:\\.\\d{1,2})*)?"
+                    + "(?:\\s*[.:\\uff1a\\u2014\\u2013-]\\s*\\S.*|\\s+[A-Z(].*)?"
+                    + "|(?:(?i:supplementary|supplemental|supporting)\\s+(?i:materials?|information|data)"
+                    + "|(?i:online\\s+)?(?i:methods)|(?i:extended\\s+data)"
+                    + "|(?i:acknowledge?ments?)|(?i:author\\s+contributions))\\s*[.:\\uff1a]?"
+                    + ")\\s*");
 
     private final BabelDocConfig config;
     private final RuntimeConfigService runtimeConfig;
@@ -304,6 +311,7 @@ public class BabelDocService {
             throws IOException {
         String fingerprint = String.join("\n",
                 CHUNK_CACHE_VERSION,
+                COMPLETION_POLICY,
                 "input=" + inputFingerprint(inputPdf),
                 "fontFamily=" + String.valueOf(fontFamily),
                 "model=" + String.valueOf(runtimeConfig.babelModel()));
@@ -354,6 +362,7 @@ public class BabelDocService {
                 .replaceFirst("(?m)^pages=.*\\R?", "")
                 .replaceFirst("(?m)^chunkSize=.*\\R?", "");
         return String.join("\n",
+                COMPLETION_POLICY,
                 "input=" + inputFingerprint(inputPdf),
                 "fontFamily=" + String.valueOf(fontFamily),
                 "model=" + String.valueOf(runtimeConfig.babelModel())).equals(normalized);
@@ -460,15 +469,25 @@ public class BabelDocService {
             for (int page = 1; page <= lastPage; page++) {
                 stripper.setStartPage(page);
                 stripper.setEndPage(page);
-                String text = stripper.getText(document);
-                if (REFERENCE_HEADING.matcher(text).find()) active = true;
-                if (REFERENCE_SECTION_END.matcher(text).find()) active = false;
+                active = referenceSectionActiveAfter(stripper.getText(document), active);
             }
             return active;
         } catch (Exception e) {
             log.warn("检测分片起点参考文献状态失败，将回退逐段识别: file={}", inputPdf, e);
         }
         return false;
+    }
+
+    /** Lines are read in order: a page may close the bibliography and open an appendix. */
+    static boolean referenceSectionActiveAfter(String pageText, boolean active) {
+        for (String line : pageText.lines().toList()) {
+            if (REFERENCE_HEADING.matcher(line).matches()) {
+                active = true;
+            } else if (active && REFERENCE_SECTION_END.matcher(line).matches()) {
+                active = false;
+            }
+        }
+        return active;
     }
 
     private List<String> splitCommand(String command) {
@@ -589,11 +608,13 @@ public class BabelDocService {
     }
 
     private Optional<String> detectResourceRisk() {
-        long cgroupMemory = readCgroupMemoryCurrent();
+        CgroupMemory cgroupMemory = readCgroupMemory();
         long cgroupRiskBytes = mibToBytes(config.getResourceCgroupLimitMiB());
-        if (cgroupMemory > cgroupRiskBytes) {
-            return Optional.of("服务内存 " + formatMiB(cgroupMemory)
-                    + " MiB 超过阈值 " + config.getResourceCgroupLimitMiB() + " MiB");
+        if (cgroupMemory.workingSetBytes() > cgroupRiskBytes) {
+            return Optional.of("服务工作集 " + formatMiB(cgroupMemory.workingSetBytes())
+                    + " MiB 超过阈值 " + config.getResourceCgroupLimitMiB()
+                    + " MiB（总内存 " + formatMiB(cgroupMemory.currentBytes())
+                    + " MiB，可回收文件缓存 " + formatMiB(cgroupMemory.inactiveFileBytes()) + " MiB）");
         }
 
         MemoryInfo memoryInfo = readMemoryInfo();
@@ -642,7 +663,7 @@ public class BabelDocService {
         }
     }
 
-    private Optional<String> detectRecoveryRisk() {
+    Optional<String> detectRecoveryRisk() {
         Optional<String> hardRisk = detectResourceRisk();
         if (hardRisk.isPresent()) {
             return hardRisk;
@@ -655,25 +676,50 @@ public class BabelDocService {
             return Optional.of("系统可用内存 " + formatMiB(memoryInfo.memAvailableBytes)
                     + " MiB 尚未恢复到 " + recoveryAvailableMiB + " MiB");
         }
-        long swapUsed = memoryInfo.swapTotalBytes - memoryInfo.swapFreeBytes;
-        long safeSwapMiB = Math.max(0L, config.getResourceMaxSwapUsedMiB() - 300L);
-        if (memoryInfo.swapTotalBytes > 0 && swapUsed > mibToBytes(safeSwapMiB)) {
-            return Optional.of("Swap 已用 " + formatMiB(swapUsed) + " MiB 尚未降至 "
-                    + safeSwapMiB + " MiB 以下");
-        }
+        // Linux can retain cold pages in swap after the child exits even when
+        // RAM has recovered. Requiring an extra 300 MiB swap reduction stalls
+        // healthy chunked jobs. detectResourceRisk still enforces the configured
+        // swap ceiling; recovery additionally requires RAM headroom and two
+        // consecutive safe samples before starting the next child.
         return Optional.empty();
     }
 
-    private long readCgroupMemoryCurrent() {
+    CgroupMemory readCgroupMemory() {
         for (Path path : cgroupMemoryPaths()) {
             try {
                 if (Files.isRegularFile(path)) {
-                    return Long.parseLong(Files.readString(path).trim());
+                    long currentBytes = Long.parseLong(Files.readString(path).trim());
+                    Path memoryStat = path.resolveSibling("memory.stat");
+                    long inactiveFileBytes = Files.isRegularFile(memoryStat)
+                            ? inactiveFileBytes(Files.readString(memoryStat)) : 0;
+                    return new CgroupMemory(currentBytes, inactiveFileBytes);
                 }
             } catch (Exception ignored) {
             }
         }
-        return -1;
+        return new CgroupMemory(-1, 0);
+    }
+
+    static long inactiveFileBytes(String memoryStat) {
+        long v1Fallback = 0;
+        if (memoryStat == null || memoryStat.isBlank()) return 0;
+        for (String line : memoryStat.lines().toList()) {
+            String[] parts = line.trim().split("\\s+");
+            if (parts.length != 2) continue;
+            try {
+                if ("inactive_file".equals(parts[0])) return Math.max(0, Long.parseLong(parts[1]));
+                if ("total_inactive_file".equals(parts[0])) {
+                    v1Fallback = Math.max(0, Long.parseLong(parts[1]));
+                }
+            } catch (NumberFormatException ignored) {
+                // Ignore a malformed metric and continue with the conservative total.
+            }
+        }
+        return v1Fallback;
+    }
+
+    static long workingSetBytes(long currentBytes, long inactiveFileBytes) {
+        return currentBytes < 0 ? -1 : Math.max(0, currentBytes - Math.max(0, inactiveFileBytes));
     }
 
     private List<Path> cgroupMemoryPaths() {
@@ -695,7 +741,7 @@ public class BabelDocService {
         return paths;
     }
 
-    private MemoryInfo readMemoryInfo() {
+    MemoryInfo readMemoryInfo() {
         long memAvailable = -1;
         long swapTotal = 0;
         long swapFree = 0;
@@ -748,5 +794,11 @@ public class BabelDocService {
         }
     }
 
-    private record MemoryInfo(long memAvailableBytes, long swapTotalBytes, long swapFreeBytes) {}
+    record MemoryInfo(long memAvailableBytes, long swapTotalBytes, long swapFreeBytes) {}
+
+    record CgroupMemory(long currentBytes, long inactiveFileBytes) {
+        long workingSetBytes() {
+            return BabelDocService.workingSetBytes(currentBytes, inactiveFileBytes);
+        }
+    }
 }

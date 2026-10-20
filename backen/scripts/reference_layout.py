@@ -20,9 +20,25 @@ REFERENCE_HEADING_RE = re.compile(
     r"^\s*(?:references|bibliography|works\s+cited|literature\s+cited)\s*$",
     re.IGNORECASE,
 )
+# Headings of sections that journals place after the bibliography. Appendix
+# headings usually carry an identifier and a title ("Appendix A. Derivation",
+# "APPENDIX B: Proofs"); requiring a bare "Appendix" left whole appendices
+# untranslated. Only the keywords are case-insensitive so that ordinary prose
+# such as "Appendix is given" does not end the section.
+_SECTION_NUMBER = r"(?:(?:[A-Z]|\d{1,2}(?:\.\d{1,2})*)[.)]?\s+)?"
+_APPENDIX_HEADING = (
+    r"(?i:appendix|appendices)"
+    r"(?:\s+(?:[A-Z]|[IVX]{1,4}|\d{1,2})(?:\.\d{1,2})*)?"
+    r"(?:\s*[.:\uff1a\u2014\u2013-]\s*\S.*|\s+[A-Z(].*)?"
+)
+_POST_REFERENCE_HEADING = (
+    r"(?:(?i:supplementary|supplemental|supporting)\s+(?i:materials?|information|data)"
+    r"|(?i:online\s+)?(?i:methods)|(?i:extended\s+data)"
+    r"|(?i:acknowledge?ments?)|(?i:author\s+contributions))"
+    r"\s*[.:\uff1a]?"
+)
 REFERENCE_SECTION_END_RE = re.compile(
-    r"^\s*(?:appendix(?:\s+[A-Z0-9]+)?|supplementary\s+(?:material|information))\s*$",
-    re.IGNORECASE,
+    rf"^\s*{_SECTION_NUMBER}(?:{_APPENDIX_HEADING}|{_POST_REFERENCE_HEADING})\s*$"
 )
 REFERENCE_AUTHOR_RE = re.compile(
     r"^\s*(?:[A-Z][A-Za-z'’-]+,\s*(?:[A-Z]\.?\s*){1,3}|"

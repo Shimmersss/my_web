@@ -20,6 +20,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -33,6 +34,69 @@ class BabelDocServiceTest {
     @Test
     void defaultsToFivePagesPerChunk() {
         assertEquals(5, new BabelDocConfig().getMaxPagesPerChunk());
+    }
+
+    @Test
+    void subtractsInactiveFileCacheFromCgroupWorkingSet() {
+        long current = 2_700L * 1024 * 1024;
+        long inactiveFile = BabelDocService.inactiveFileBytes(String.join("\n",
+                "anon 2147483648", "file 419430400", "inactive_file 314572800"));
+
+        assertEquals(300L * 1024 * 1024, inactiveFile);
+        assertEquals(2_400L * 1024 * 1024,
+                BabelDocService.workingSetBytes(current, inactiveFile));
+    }
+
+    @Test
+    void supportsV1TotalInactiveFileAndMalformedStatsConservatively() {
+        assertEquals(128L * 1024 * 1024, BabelDocService.inactiveFileBytes(
+                "total_inactive_file 134217728\ninactive_file invalid"));
+        assertEquals(900L, BabelDocService.workingSetBytes(1_000L, 100L));
+        assertEquals(-1L, BabelDocService.workingSetBytes(-1L, 100L));
+    }
+
+    @Test
+    void recoveryAllowsRetainedSwapBelowOperatingLimitWhenMemoryHasRecovered() {
+        BabelDocService service = resourceService(2519, 915, 580);
+        assertTrue(service.detectRecoveryRisk().isEmpty());
+    }
+
+    @Test
+    void recoveryStillRejectsSwapAboveOperatingLimit() {
+        assertTrue(resourceService(2519, 1201, 580).detectRecoveryRisk()
+                .orElseThrow().contains("Swap"));
+        assertTrue(resourceService(2519, 1200, 580).detectRecoveryRisk().isEmpty());
+    }
+
+    @Test
+    void recoveryStillRequiresMemoryHeadroomAndSafeWorkingSet() {
+        assertTrue(resourceService(599, 915, 580).detectRecoveryRisk()
+                .orElseThrow().contains("尚未恢复"));
+        assertTrue(resourceService(2519, 915, 2601).detectRecoveryRisk()
+                .orElseThrow().contains("服务工作集"));
+    }
+
+    @Test
+    void recoveredRetainedSwapCanAdvanceToNextChunk() throws InterruptedException {
+        resourceService(2519, 915, 580).waitForResourceRecovery();
+    }
+
+    private BabelDocService resourceService(long availableMiB, long swapUsedMiB,
+                                             long workingSetMiB) {
+        BabelDocConfig config = new BabelDocConfig();
+        config.setResourceRecoveryTimeoutSeconds(5);
+        return new BabelDocService(config, mock(RuntimeConfigService.class)) {
+            @Override
+            MemoryInfo readMemoryInfo() {
+                return new MemoryInfo(availableMiB * 1024 * 1024,
+                        2048L * 1024 * 1024, (2048L - swapUsedMiB) * 1024 * 1024);
+            }
+
+            @Override
+            CgroupMemory readCgroupMemory() {
+                return new CgroupMemory(workingSetMiB * 1024 * 1024, 0);
+            }
+        };
     }
 
     @Test
@@ -89,7 +153,7 @@ class BabelDocServiceTest {
         writeTextPdf(cached.resolve("translated.pdf"), 4, 0, "");
         writeTextPdf(cached.resolve("bilingual.pdf"), 4, 0, "");
         Files.writeString(resultDir.resolve(".babeldoc-chunks/shared/manifest.txt"), String.join("\n",
-                "version=2", "input=" + tempDir.resolve("input.pdf").toAbsolutePath().normalize(),
+                "version=2", "completion=complete-v1", "input=" + tempDir.resolve("input.pdf").toAbsolutePath().normalize(),
                 "chunkSize=4", "fontFamily=auto", "model=null"));
 
         service.translatePdf(tempDir.resolve("input.pdf"), resultDir, "paper.pdf",
@@ -131,7 +195,7 @@ class BabelDocServiceTest {
         writeTextPdf(legacyChunk.resolve("translated.pdf"), 4, 0, "");
         writeTextPdf(legacyChunk.resolve("bilingual.pdf"), 4, 0, "");
         Files.writeString(resultDir.resolve(".babeldoc-chunks/1-10/manifest.txt"), String.join("\n",
-                "version=1", "input=" + Files.size(tempDir.resolve("input.pdf"))
+                "version=1", "completion=complete-v1", "input=" + Files.size(tempDir.resolve("input.pdf"))
                         + ":" + Files.getLastModifiedTime(tempDir.resolve("input.pdf")).toMillis(),
                 "pages=1-10", "chunkSize=4", "fontFamily=auto", "model=null"));
 
@@ -166,6 +230,49 @@ class BabelDocServiceTest {
                 });
 
         assertEquals(List.of("5-8"), service.forcedReferenceRanges);
+    }
+
+    @Test
+    void stopsForcingReferenceSectionAtTitledAppendixHeading() throws Exception {
+        RecordingBabelDocService service = newService();
+        Path input = tempDir.resolve("references-titled-appendix.pdf");
+        writeTextPdf(input, 10, 4, "References");
+        addTextToPdf(input, 7, "Appendix A. Derivation of the governing equations");
+
+        service.translatePdf(input, tempDir.resolve("result"), "references-titled-appendix.pdf",
+                1, 10, "auto", 2, ignored -> {
+                });
+
+        assertEquals(List.of("5-8"), service.forcedReferenceRanges);
+    }
+
+    @Test
+    void readsReferenceAndAppendixHeadingsInPageOrder() {
+    }
+
+    @Test
+    void rejectsOldChunksWithoutCompletionChecksEvenWithMatchingPageCount() throws Exception {
+        RecordingBabelDocService service = newService();
+        Path resultDir = tempDir.resolve("result");
+        for (String location : List.of("shared", "1-10")) {
+            Path root = resultDir.resolve(".babeldoc-chunks").resolve(location);
+            Files.createDirectories(root.resolve("1-4"));
+            writeTextPdf(root.resolve("1-4/translated.pdf"), 4, 0, "");
+            writeTextPdf(root.resolve("1-4/bilingual.pdf"), 4, 0, "");
+            Files.writeString(root.resolve("manifest.txt"), String.join("\n",
+                    "version=3", "input=" + tempDir.resolve("input.pdf").toAbsolutePath().normalize(),
+                    "fontFamily=auto", "model=null"));
+        }
+        service.translatePdf(tempDir.resolve("input.pdf"), resultDir, "paper.pdf",
+                1, 8, "auto", 2, ignored -> { });
+        assertEquals(List.of("1-4@2", "5-8@2"), service.calls);
+        assertFalse(BabelDocService.referenceSectionActiveAfter(
+                "References\n[1] A. Author, J. Fluid 2020.\nAPPENDIX B: PROOFS\nBody", false));
+        assertTrue(BabelDocService.referenceSectionActiveAfter(
+                "Appendix A\nBody\nReferences\n[1] A. Author", false));
+        assertTrue(BabelDocService.referenceSectionActiveAfter(
+                "Appendix is cited here\nMethods Appl. Mech. Eng. 200 (2011)", true));
+        assertFalse(BabelDocService.referenceSectionActiveAfter("Supporting Information", true));
     }
 
     @Test

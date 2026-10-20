@@ -6,20 +6,26 @@ import json
 import os
 import re
 import statistics
+from pathlib import Path
 
 from tokenizer_cache import configure_tokenizer_cache
+from translation_completion import COMPLETION_CACHE_VERSION, complete_translation
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
+import openai
+from pdf_ocr import line_fill_boxes, prepare_pdf_text, preserve_textless_pages
 
 tokenizer_cache_override = os.environ.get("TIKTOKEN_CACHE_DIR")
 
 from babeldoc.docvision.doclayout import DocLayoutModel
 from babeldoc.format.pdf import high_level
-from babeldoc.format.pdf.document_il import Box, PdfParagraph
+from babeldoc.format.pdf.document_il import Box, PdfParagraph, PdfRectangle
 from babeldoc.format.pdf.document_il.midend.il_translator import ILTranslator
 from babeldoc.format.pdf.document_il.midend.paragraph_finder import (
     ParagraphFinder,
     generate_base58_id,
 )
 from babeldoc.format.pdf.document_il.midend.typesetting import Typesetting
+from babeldoc.format.pdf.document_il.utils.style_helper import WHITE
 from babeldoc.format.pdf.translation_config import (
     TranslationConfig,
     WatermarkOutputMode,
@@ -221,6 +227,47 @@ def install_reference_layout_patches(force_reference_section=False):
     ParagraphFinder._web_reference_layout_patch = True
 
 
+def paragraph_characters(paragraph):
+    for composition in paragraph.pdf_paragraph_composition or []:
+        if composition.pdf_line:
+            yield from composition.pdf_line.pdf_character
+        elif composition.pdf_formula:
+            yield from composition.pdf_formula.pdf_character
+        elif composition.pdf_same_style_characters:
+            yield from composition.pdf_same_style_characters.pdf_character
+        elif composition.pdf_character:
+            yield composition.pdf_character
+
+
+def ocr_text_fill_background(self, page):
+    """Mask only the OCR text lines on the rendered page background.
+
+    BabelDOC expands each mask to the detected layout box. For journal
+    headers that box spans the publisher logo and cover image, which then
+    disappear from the translated page.
+    """
+    for paragraph in page.pdf_paragraph:
+        boxes = []
+        for char in paragraph_characters(paragraph):
+            box = char.visual_bbox.box if char.visual_bbox and char.visual_bbox.box else char.box
+            if box is not None:
+                boxes.append((box.x, box.y, box.x2, box.y2))
+        for x0, y0, x1, y1 in line_fill_boxes(boxes):
+            page.pdf_rectangle.append(
+                PdfRectangle(
+                    box=Box(x0, y0, x1, y1),
+                    fill_background=True,
+                    graphic_state=WHITE,
+                    debug_info=False,
+                    xobj_id=paragraph.xobj_id,
+                )
+            )
+
+
+def install_ocr_fill_patch():
+    ParagraphFinder.add_text_fill_background = ocr_text_fill_background
+
+
 def repair_pdf_font_text(text):
     if not text:
         return text
@@ -279,16 +326,36 @@ class RepairingOpenAITranslator(OpenAITranslator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.add_cache_impact_parameters("pdf_font_text_repair", "shift-v1")
+        self.add_cache_impact_parameters("translation_completeness", COMPLETION_CACHE_VERSION)
 
+    @retry(retry=retry_if_exception_type(openai.RateLimitError),
+           stop=stop_after_attempt(100), wait=wait_exponential(multiplier=1, min=1, max=15))
     def do_translate(self, text, rate_limit_params=None):
-        return super().do_translate(repair_pdf_font_text(text), rate_limit_params)
+        return complete_translation(self, repair_pdf_font_text(text), rate_limit_params, plain=True)
 
+    @retry(retry=retry_if_exception_type(openai.RateLimitError),
+           stop=stop_after_attempt(100), wait=wait_exponential(multiplier=1, min=1, max=15))
     def do_llm_translate(self, text, rate_limit_params=None):
-        return super().do_llm_translate(repair_pdf_font_text(text), rate_limit_params)
+        return complete_translation(self, repair_pdf_font_text(text), rate_limit_params)
 
 
 async def run(args):
+    prepared_input, ocr_pages, has_text = prepare_pdf_text(
+        args.input, Path(args.output).parent / "ocr-input.pdf", args.pages,
+        progress=lambda current, total: emit({
+            "type": "progress", "stage": "OCR 文字识别", "overallProgress": 0,
+            "stageCurrent": current, "stageTotal": total,
+        }),
+    )
+    if not has_text:
+        preserve_textless_pages(args.input, args.output, args.pages)
+        emit({"type": "progress", "stage": "保留无文字页面", "overallProgress": 100,
+              "stageCurrent": 1, "stageTotal": 1})
+        emit({"type": "finish"})
+        return
     install_reference_layout_patches(args.force_reference_section)
+    if ocr_pages:
+        install_ocr_fill_patch()
     high_level.init()
     translator = RepairingOpenAITranslator(
         lang_in="en",
@@ -301,7 +368,7 @@ async def run(args):
     doc_layout_model = DocLayoutModel.load_onnx()
     config = TranslationConfig(
         translator=translator,
-        input_file=args.input,
+        input_file=str(prepared_input),
         lang_in="en",
         lang_out="zh",
         doc_layout_model=doc_layout_model,
@@ -311,6 +378,7 @@ async def run(args):
         pool_max_workers=args.qps,
         term_pool_max_workers=args.qps,
         auto_extract_glossary=False,
+        ocr_workaround=bool(ocr_pages),
         primary_font_family=None if args.font_family == "auto" else args.font_family,
         only_include_translated_page=True,
         watermark_output_mode=WatermarkOutputMode.NoWatermark,
@@ -333,6 +401,8 @@ async def run(args):
             emit({"type": "error", "message": str(event.get("error", "BabelDOC 翻译失败"))})
             raise RuntimeError(event.get("error", "BabelDOC 翻译失败"))
         elif event_type == "finish":
+            if getattr(translator, "_web_incomplete_translation", False):
+                raise RuntimeError("部分段落翻译不完整，已阻止交付缺字 PDF，请重试")
             emit({"type": "finish"})
             break
 

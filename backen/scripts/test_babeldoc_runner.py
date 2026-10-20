@@ -83,6 +83,41 @@ class ReferenceLayoutTest(unittest.TestCase):
             ),
         )
 
+    def test_titled_appendix_headings_end_reference_section(self):
+        weak_entry = "A source without machine-readable publication metadata."
+        body = "The governing equations are derived below."
+        for heading in (
+            "Appendix A. Derivation of the governing equations",
+            "APPENDIX B: PROOF OF THEOREM 1",
+            "Appendix A Supplementary data",
+            "Appendix A. Supplementary data Supplementary data to this article "
+            "can be found online at https://doi.org/10.1016/j.example.2025.1",
+            "Appendices",
+            "7. Appendix",
+            "Supporting Information",
+            "Methods",
+            "Acknowledgements",
+        ):
+            with self.subTest(heading=heading):
+                self.assertEqual(
+                    [True, True, False, False],
+                    reference_section_flags(
+                        ["References", weak_entry, heading, body]
+                    ),
+                )
+
+    def test_appendix_mentions_in_entries_or_prose_keep_reference_section(self):
+        self.assertEqual(
+            [True, True, True],
+            reference_section_flags(
+                [
+                    "References",
+                    "Appendix is cited by an entry without metadata",
+                    "Methods Appl. Mech. Eng. 200 (2011) 1-10",
+                ]
+            ),
+        )
+
     def test_only_splits_sequential_bibliographic_entries(self):
         self.assertEqual(
             [0, 2],

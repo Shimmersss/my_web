@@ -1,4 +1,4 @@
-# 第三方组件与引用 / Third-Party Notices
+# Third-Party Notices / 第三方组件与引用
 
 本项目建立在众多开源项目、公开数据与在线服务之上，在此致谢并列出其许可。版本以仓库中的 `pom.xml`、`package-lock.json`、`android/app/build.gradle` 与部署文档为准；升级依赖时请同步更新本文件。
 

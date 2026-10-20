@@ -1,5 +1,5 @@
 ---
-name: 问题反馈 / Bug report
+name: Bug report / 问题反馈
 about: 报告可复现的问题 / Report a reproducible problem
 title: "[Bug] "
 labels: bug

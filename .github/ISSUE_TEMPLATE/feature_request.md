@@ -1,5 +1,5 @@
 ---
-name: 功能建议 / Feature request
+name: Feature request / 功能建议
 about: 提出新功能或改进 / Suggest a feature or improvement
 title: "[Feature] "
 labels: enhancement

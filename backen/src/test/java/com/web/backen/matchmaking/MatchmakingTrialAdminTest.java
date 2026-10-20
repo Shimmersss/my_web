@@ -48,7 +48,7 @@ class MatchmakingTrialAdminTest {
         trialUser = trials.redeem(fullCode).session().user();
         quota = new QuotaService(jdbc);
         quota.initializeDefaults();
-        matchmaking = new MatchmakingService(jdbc, new ObjectMapper(), null, quota, null, null,
+        matchmaking = new MatchmakingService(jdbc, new ObjectMapper(), null, quota, null,
                 null, trials, Files.createTempDirectory("matchmaking-trial-admin").toString());
     }
 

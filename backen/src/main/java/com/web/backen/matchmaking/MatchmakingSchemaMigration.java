@@ -29,6 +29,12 @@ public class MatchmakingSchemaMigration {
         ensureTrialCodesTable();
         addColumnIfMissing("matchmaking_trial_codes", "code_plain", "VARCHAR(64) NULL");
         ensureTarotDrawsTable();
+        addColumnIfMissing("matchmaking_tarot_draws", "spread_id", "VARCHAR(24) NULL");
+        addColumnIfMissing("matchmaking_tarot_draws", "topic_id", "VARCHAR(24) NULL");
+        addColumnIfMissing("matchmaking_tarot_draws", "reading_context", "TEXT NULL");
+        addColumnIfMissing("matchmaking_tarot_draws", "deck_order_json", "TEXT NULL");
+        addColumnIfMissing("matchmaking_tarot_draws", "pick_positions", "TEXT NULL");
+        addColumnIfMissing("matchmaking_tarot_draws", "picked_at", "TIMESTAMP NULL");
     }
 
     private void ensureTrialCodesTable() {

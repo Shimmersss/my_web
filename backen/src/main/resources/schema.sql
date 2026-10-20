@@ -182,9 +182,47 @@ CREATE TABLE IF NOT EXISTS matchmaking_tarot_draws (
     user_id BIGINT NOT NULL,
     deck_version VARCHAR(64) NOT NULL,
     cards_json TEXT NOT NULL,
+    spread_id VARCHAR(24) NULL,
+    topic_id VARCHAR(24) NULL,
+    reading_context TEXT NULL,
+    deck_order_json TEXT NULL,
+    pick_positions TEXT NULL,
+    picked_at TIMESTAMP NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     expires_at TIMESTAMP NOT NULL,
     consumed_task_id VARCHAR(36) NULL,
     consumed_report_id VARCHAR(36) NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS moonlit_collections (
+    user_id BIGINT NOT NULL,
+    card_id VARCHAR(32) NOT NULL,
+    acquisitions INT NOT NULL DEFAULT 0,
+    display_theme INT NOT NULL DEFAULT 0,
+    first_acquired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, card_id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS moonlit_draws (
+    id VARCHAR(36) PRIMARY KEY,
+    user_id BIGINT NOT NULL,
+    card_id VARCHAR(32) NOT NULL,
+    method VARCHAR(16) NOT NULL,
+    result_type VARCHAR(16) NOT NULL,
+    acquisition_count INT NOT NULL,
+    draw_date DATE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (user_id, method, draw_date, id),
+    FOREIGN KEY (user_id) REFERENCES users(id)
+);
+
+CREATE TABLE IF NOT EXISTS moonlit_variant_migrations (
+    user_id BIGINT NOT NULL,
+    card_id VARCHAR(32) NOT NULL,
+    migrated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, card_id),
     FOREIGN KEY (user_id) REFERENCES users(id)
 );

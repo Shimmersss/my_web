@@ -1,6 +1,6 @@
 const STATUS_LABELS = {
   UNUSED: "未兑换",
-  CLAIMED: "已兑换待生成",
+  CLAIMED: "已兑换待解读",
   RUNNING: "生成中",
   RETRYABLE: "可重试",
   COMPLETED: "已完成",
@@ -12,7 +12,7 @@ export function trialWorkspaceState(access = {}) {
     return access.reportId && access.reportAvailable !== false ? "report" : "unavailable";
   }
   return access.status === "CLAIMED" || access.status === "RETRYABLE"
-    ? "questionnaire"
+    ? "ready"
     : "unavailable";
 }
 

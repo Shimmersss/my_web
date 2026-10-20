@@ -116,7 +116,7 @@ public class AuthService {
     public AuthUser requireUser(HttpServletRequest request) {
         AuthUser user = requireSessionUser(request);
         if (user.isMatchmakingTrial()) {
-            throw new AuthException(403, "该内测身份只能使用婚恋报告");
+            throw new AuthException(403, "该内测身份只能使用月下占卜");
         }
         return user;
     }

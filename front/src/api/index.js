@@ -96,18 +96,10 @@ export function getLatestAndroidApp() {
   return get("/app-update/latest");
 }
 
-// ==================== 婚恋条件账本 API ====================
-export function getMatchmakingCatalogue() {
-  return get("/matchmaking/catalogue");
-}
+// ==================== 月下占卜 API ====================
+// 内部接口仍挂在 /matchmaking/*；请求/响应合同见 docs/plans/2026-10-13-moonlit-divination.md。
 export function getMatchmakingStatus() {
   return get("/matchmaking/status");
-}
-export function getLatestMatchmakingReport() {
-  return get("/matchmaking/reports/latest");
-}
-export function createMatchmakingReport(profile) {
-  return post("/matchmaking/reports", profile);
 }
 export function getMatchmakingTasks() {
   return get("/matchmaking/tasks");
@@ -117,19 +109,16 @@ export function getMatchmakingTask(taskId, options = {}) {
     ...options, method: 'GET', timeoutMs: 15000,
   });
 }
-export function getMatchmakingReports() {
-  return get("/matchmaking/reports");
-}
 export function getMatchmakingReportArchive(page = 1, pageSize = 10, owner = "") {
   const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
   if (owner) params.set("owner", owner);
   return get(`/matchmaking/reports/archive?${params.toString()}`);
 }
 export function getMatchmakingReport(reportId) {
-  return get(`/matchmaking/reports/${reportId}`);
+  return get(`/matchmaking/reports/${encodeURIComponent(reportId)}`);
 }
 export function deleteMatchmakingReport(reportId) {
-  return requestWithOptions(`/matchmaking/reports/${reportId}`, { method: "DELETE" });
+  return requestWithOptions(`/matchmaking/reports/${encodeURIComponent(reportId)}`, { method: "DELETE" });
 }
 export function deleteMatchmakingData() {
   return requestWithOptions("/matchmaking/data", { method: "DELETE" });
@@ -137,12 +126,23 @@ export function deleteMatchmakingData() {
 export function redeemMatchmakingTrial(code) {
   return post("/matchmaking/trial/redeem", { code });
 }
-export function drawMatchmakingTarot() {
-  return post("/matchmaking/tarot-draws", {});
+/** Shuffles a fresh deck for one question; the server keeps the order hidden until picks arrive. */
+export function createTarotDraw({ spreadId, topicId, question, optionA = "", optionB = "" }) {
+  return post("/matchmaking/tarot-draws", { spreadId, topicId, question, optionA, optionB });
+}
+export function pickTarotCards(drawId, positions) {
+  return post(`/matchmaking/tarot-draws/${encodeURIComponent(drawId)}/picks`, { positions });
 }
 export function getCurrentMatchmakingTarot() {
   return get("/matchmaking/tarot-draws/current");
 }
+export function createTarotReadingReport(drawId) {
+  return post("/matchmaking/reports", { reportVersion: "tarot-reading-v1", drawId });
+}
+
+export function getMoonlitState() { return get("/moonlit/state"); }
+export function drawMoonlitCard(method, count = 1) { return post("/moonlit/draw", { method, count }); }
+export function setMoonlitDisplay(cardId, theme) { return put("/moonlit/display", { cardId, theme }); }
 
 // ==================== 留言板与站内通知 API ====================
 
@@ -226,10 +226,6 @@ export function createInviteCode({ code, credits, maxUses, expiresAt = "" }) {
   return post("/admin/accounts/invites", { code, credits, maxUses, expiresAt });
 }
 
-export function createMatchmakingTrialCode(expiresAt = "") {
-  return post("/admin/accounts/matchmaking-trial-codes", { expiresAt });
-}
-
 export function updateMatchmakingTrialCode(id, enabled, expiresAt = "") {
   return requestWithOptions(`/admin/accounts/matchmaking-trial-codes/${id}`, {
     method: "PATCH",
@@ -245,6 +241,7 @@ export function updateQuotaSettings({
   translationCreditPerPage,
   pptCreditPerTask,
   matchmakingCreditPerReport,
+  moonlitCreditPerDraw,
   imageLowCredits,
   imageMediumCredits,
   imageHighCredits,
@@ -258,6 +255,7 @@ export function updateQuotaSettings({
     translationCreditPerPage,
     pptCreditPerTask,
     matchmakingCreditPerReport,
+    moonlitCreditPerDraw,
     imageLowCredits,
     imageMediumCredits,
     imageHighCredits,

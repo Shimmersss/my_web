@@ -25,6 +25,7 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MatchmakingTrialTaskTest {
+    @org.junit.jupiter.api.AfterEach void cleanup() { matchmaking.shutdown(); database.shutdown(); }
     private JdbcTemplate jdbc;
     private EmbeddedDatabase database;
     private MatchmakingTrialService trials;
@@ -53,16 +54,16 @@ class MatchmakingTrialTaskTest {
         QuotaService quota = new QuotaService(jdbc);
         quota.initializeDefaults();
         matchmaking = new MatchmakingService(
-                jdbc, new ObjectMapper(), null, quota, null,
-                new TransactionTemplate(new DataSourceTransactionManager(database)), null, trials,
+                jdbc, new ObjectMapper(), null, quota,
+                new TransactionTemplate(new DataSourceTransactionManager(database)), TarotTestSupport.enabled(), trials, TarotTestSupport.tarot(jdbc),
                 Files.createTempDirectory("matchmaking-trial-task").toString());
     }
 
     @Test
     void successfulWorkerPersistsReportAndPermanentlyCompletesTrial() throws Exception {
         MatchmakingService workerService = new MatchmakingService(
-                jdbc, new ObjectMapper(), input -> Map.of(), new QuotaService(jdbc), null,
-                new TransactionTemplate(new DataSourceTransactionManager(database)), null, trials,
+                jdbc, new ObjectMapper(), TarotTestSupport::reading, new QuotaService(jdbc),
+                new TransactionTemplate(new DataSourceTransactionManager(database)), TarotTestSupport.enabled(), trials, TarotTestSupport.tarot(jdbc),
                 Files.createTempDirectory("matchmaking-trial-success").toString());
         workerService.init();
 
@@ -85,6 +86,7 @@ class MatchmakingTrialTaskTest {
         assertEquals(reportId, trials.accessForUser(trialUser.id()).get("reportId"));
         assertEquals(0, jdbc.queryForObject(
                 "SELECT COUNT(*) FROM credit_transactions WHERE user_id=?", Integer.class, trialUser.id()));
+        workerService.shutdown();
     }
 
     @Test
@@ -99,24 +101,25 @@ class MatchmakingTrialTaskTest {
                 () -> matchmaking.createTask(trialUser, validProfile(false))).getStatus());
 
         String taskId = String.valueOf(queued.get("taskId"));
-        trials.markRetryable(trialUser.id(), taskId);
-        assertEquals(MatchmakingTrialService.STATUS_RETRYABLE, trials.accessForUser(trialUser.id()).get("status"));
 
+        // Trial and draw compensation are one transaction in the service, not independent retry switches.
+        matchmaking.init();
+        String failedId=String.valueOf(queued.get("taskId"));
+        for(int i=0;i<100 && !"error".equals(matchmaking.task(trialUser,failedId).get("status"));i++) {
+            try { Thread.sleep(10); } catch(InterruptedException e) { throw new RuntimeException(e); }
+        }
         Map<String, Object> retry = matchmaking.createTask(trialUser, validProfile(false));
         String retryTaskId = String.valueOf(retry.get("taskId"));
+        matchmaking.shutdown();
         trials.markCompleted(trialUser.id(), retryTaskId, "report-one");
         assertEquals(MatchmakingTrialService.STATUS_COMPLETED, trials.accessForUser(trialUser.id()).get("status"));
         assertEquals(409, assertThrows(AuthException.class,
                 () -> matchmaking.createTask(trialUser, validProfile(false))).getStatus());
     }
 
-    private Map<String, Object> validProfile(boolean includePartnerImage) {
-        Map<String, Object> profile = new LinkedHashMap<>();
-        profile.put("city", "上海");
-        profile.put("education", "本科");
-        profile.put("industry", "软件");
-        profile.put("incomeBand", "8千-1万");
-        profile.put("includePartnerImage", includePartnerImage);
-        return profile;
+    private Map<String,Object> validProfile(boolean unused) {
+        Object current=TarotTestSupport.tarot(jdbc).current(trialUser.id()).get("draw");
+        if(current instanceof Map<?,?> draw) return Map.of("reportVersion","tarot-reading-v1","drawId",draw.get("drawId"));
+        return TarotTestSupport.body(jdbc,trialUser.id());
     }
 }

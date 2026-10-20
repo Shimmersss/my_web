@@ -24,7 +24,7 @@ class MatchmakingTaskRetentionTest {
         return jdbc;
     }
     private MatchmakingService service(JdbcTemplate jdbc, QuotaService quota, Path dir) {
-        return new MatchmakingService(jdbc, mapper, null, quota, null, null, null, null, dir.toString());
+        return new MatchmakingService(jdbc, mapper, null, quota, null, null, null, dir.toString());
     }
     private Path writeTask(Path dir, String state, Instant at, long transaction) throws Exception {
         MatchmakingTask task = new MatchmakingTask(UUID.randomUUID().toString(), 1L, transaction, 2, false, false, Map.of("city", "上海"));

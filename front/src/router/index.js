@@ -41,16 +41,37 @@ const routes = [
     meta: { title: 'GPT 生图', visibility: 'ImageGenerate' }
   },
   {
-    path: '/matchmaking-report',
-    name: 'MatchmakingReport',
-    component: () => import('@/views/MatchmakingReport/index.vue'),
-    meta: { title: '月下会客厅', visibility: 'Matchmaking', trialEntry: true }
+    path: '/tarot-reading',
+    name: 'TarotReading',
+    component: () => import('@/views/TarotReading/index.vue'),
+    meta: { title: '月下占卜', visibility: 'Matchmaking', trialEntry: true }
   },
   {
-    path: '/matchmaking-report/:reportId',
-    name: 'MatchmakingReportDetail',
-    component: () => import('@/views/MatchmakingReport/ReportView.vue'),
-    meta: { title: '月下会客厅', visibility: 'Matchmaking' }
+    path: '/tarot-reading/report/:reportId',
+    name: 'TarotReadingReport',
+    component: () => import('@/views/TarotReading/ReportView.vue'),
+    meta: { title: '占卜报告', visibility: 'Matchmaking' }
+  },
+  {
+    // Reports saved before 月下占卜 stay readable here until their retention period ends.
+    path: '/tarot-reading/legacy/:reportId',
+    name: 'TarotReadingLegacyReport',
+    component: () => import('@/views/TarotReading/legacy/LegacyReportView.vue'),
+    meta: { title: '旧版报告', visibility: 'Matchmaking' }
+  },
+  { path: '/matchmaking-report', redirect: '/tarot-reading' },
+  { path: '/matchmaking-report/:reportId', redirect: to => `/tarot-reading/report/${to.params.reportId}` },
+  {
+    path: '/moonlit-collection',
+    name: 'MoonlitCollection',
+    component: () => import('@/views/MoonlitCollection/index.vue'),
+    meta: { title: '月下收藏库' }
+  },
+  {
+    path: '/moonlit-draw',
+    name: 'MoonlitDraw',
+    component: () => import('@/views/MoonlitDraw/index.vue'),
+    meta: { title: '月下抽卡' }
   },
   {
     path: '/publications',
@@ -111,7 +132,7 @@ router.beforeEach(async (to, from, next) => {
     })
     if (decision === 'login') {
       auth.requestLogin(to.fullPath)
-      return next(visibility === 'Matchmaking' ? '/matchmaking-report' : '/')
+      return next(visibility === 'Matchmaking' ? '/tarot-reading' : '/')
     }
     if (decision === 'forbidden') {
       auth.requestPermissionDenied()

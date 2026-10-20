@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "prepare:pptd-editor": "node scripts/prepare-pptd-editor.mjs",
-    "build": "npm run prepare:pptd-editor && node ../backen/scripts/check_html_template_previews.mjs && npm run check:navigation && npm run check:matchmaking-trial && npm run test:task-poller && npm run check:android-webview && vite build && npm run check:pwa && npm run test:pwa-check && npm run check:pdf-preview -- --dist dist",
+    "build": "npm run prepare:pptd-editor && node ../backen/scripts/check_html_template_previews.mjs && npm run check:navigation && npm run check:matchmaking-trial && npm run test:tarot-reading && npm run test:task-poller && npm run check:android-webview && vite build && npm run check:pwa && npm run test:pwa-check && npm run check:pdf-preview -- --dist dist",
     "check:navigation": "node scripts/check-navigation.mjs",
     "check:matchmaking-trial": "node scripts/check-matchmaking-trial.mjs",
     "check:pwa": "node scripts/check-pwa.mjs dist",
@@ -14,7 +14,8 @@
     "check:pdf-preview": "node scripts/check-pdf-preview.mjs",
     "check:android-webview": "node scripts/check-android-webview.mjs",
     "preview": "vite preview",
-    "test:task-poller": "node --test scripts/task-poller.test.mjs scripts/request.test.mjs"
+    "test:task-poller": "node --test scripts/task-poller.test.mjs scripts/request.test.mjs",
+    "test:tarot-reading": "node --test scripts/tarot-reading.test.mjs"
   },
   "dependencies": {
     "@vicons/ionicons5": "^0.12.0",

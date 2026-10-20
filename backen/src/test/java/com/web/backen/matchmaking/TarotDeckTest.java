@@ -20,7 +20,7 @@ class TarotDeckTest {
 
     @Test
     void publicCatalogueContainsOnlyCompleteCardSummaries() {
-        List<java.util.Map<String, Object>> catalogue = TarotDeck.catalogue();
+        List<java.util.Map<String, Object>> catalogue = TarotDeck.CARDS.stream().map(card -> TarotDeck.dailyCard(card.id())).toList();
 
         assertEquals(22, catalogue.size());
         assertTrue(catalogue.stream().allMatch(card -> String.valueOf(card.get("cardId")).matches("major-(0[0-9]|1[0-9]|2[01])")));

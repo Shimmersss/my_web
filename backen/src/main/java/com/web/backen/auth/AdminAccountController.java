@@ -77,9 +77,8 @@ public class AdminAccountController {
                                                          @RequestBody Map<String, Object> body) {
         try {
             authService.requireCsrf(request);
-            AuthUser root = authService.requireRoot(request);
-            return ResponseEntity.ok(Map.of("code", 200, "message", "success", "data",
-                    matchmakingTrialService.createCode(root.id(), value(body.get("expiresAt")))));
+            authService.requireRoot(request);
+            throw new AuthException(410,"内测邀请码已停止发放");
         } catch (AuthException e) {
             return error(e);
         }
@@ -136,6 +135,7 @@ public class AdminAccountController {
                     intValue(body.get("imageMediumCredits"), quotaService.imageCredit("medium")),
                     intValue(body.get("imageHighCredits"), quotaService.imageCredit("high")),
                     intValue(body.get("matchmakingCreditPerReport"), quotaService.matchmakingCreditPerReport()));
+            if (body.containsKey("moonlitCreditPerDraw")) quotaService.updateMoonlitCreditPerDraw(intValue(body.get("moonlitCreditPerDraw"), quotaService.moonlitCreditPerDraw()));
             return ResponseEntity.ok(Map.of("code", 200, "data", quotaService.settings(), "message", "success"));
         } catch (AuthException e) {
             return error(e);

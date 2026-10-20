@@ -120,7 +120,7 @@ public class AuthController {
         data.put("root", user.isRoot());
         data.put("matchmakingTrial", user.isMatchmakingTrial());
         if (user.isMatchmakingTrial()) {
-            data.put("username", "婚恋内测");
+            data.put("username", "占卜内测");
             data.put("trialAccess", matchmakingTrialService.requireEnabled(user.id()));
         } else {
             data.put("dailyCheckin", quotaService.dailyCheckinStatus(user.id()));

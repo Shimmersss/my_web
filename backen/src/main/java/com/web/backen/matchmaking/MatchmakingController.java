@@ -16,10 +16,13 @@ import java.util.Map;
 public class MatchmakingController {
     private final MatchmakingService service; private final AuthService auth; private final RuntimeConfigService runtime; private final QuotaService quota; private final MatchmakingTrialService trials;
     public MatchmakingController(MatchmakingService service, AuthService auth, RuntimeConfigService runtime, QuotaService quota, MatchmakingTrialService trials) { this.service=service; this.auth=auth; this.runtime=runtime; this.quota=quota; this.trials=trials; }
-    @GetMapping("/catalogue") public Map<String,Object> catalogue() { return ok(service.catalogue()); }
     @GetMapping("/status") public Map<String,Object> status(HttpServletRequest request) { return ok(service.status(access(request))); }
-    @PostMapping("/tarot-draws") public ResponseEntity<?> draw(HttpServletRequest request) {
-        try { AuthUser user=access(request); auth.requireCsrf(request); return ResponseEntity.ok(ok(service.drawTarot(user))); }
+    @PostMapping("/tarot-draws") public ResponseEntity<?> draw(@RequestBody Map<String,Object> body, HttpServletRequest request) {
+        try { AuthUser user=access(request); auth.requireCsrf(request); return ResponseEntity.ok(ok(service.drawTarot(user,body))); }
+        catch(AuthException e) { return error(e); }
+    }
+    @PostMapping("/tarot-draws/{drawId}/picks") public ResponseEntity<?> picks(@PathVariable String drawId,@RequestBody Map<String,Object> body,HttpServletRequest request) {
+        try { AuthUser user=access(request);auth.requireCsrf(request);return ResponseEntity.ok(ok(service.pickTarot(user,drawId,body.get("positions")))); }
         catch(AuthException e) { return error(e); }
     }
     @GetMapping("/tarot-draws/current") public ResponseEntity<?> currentDraw(HttpServletRequest request) {

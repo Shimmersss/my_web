@@ -34,7 +34,7 @@ class MatchmakingReportAccessTest {
                 .setType(EmbeddedDatabaseType.H2).addScript("schema.sql").build());
         runtime = new RuntimeConfigService(jdbc, new LlmConfig(), new BabelDocConfig(),
                 new ZoteroConfig(), new PptGenerationConfig(), new TranslationConfig(), new ImageGenerationConfig());
-        service = new MatchmakingService(jdbc, new ObjectMapper(), null, null, null, null,
+        service = new MatchmakingService(jdbc, new ObjectMapper(), null, null, null,
                 runtime, null, Files.createTempDirectory("matchmaking-report-access").toString());
         jdbc.update("INSERT INTO users (username,password_hash,role,credits,enabled) VALUES ('alice','x','USER',0,TRUE)");
         jdbc.update("INSERT INTO users (username,password_hash,role,credits,enabled) VALUES ('bob','x','USER',0,TRUE)");

@@ -1,0 +1,1875 @@
+{
+  "version": "moonlit-110-v1",
+  "cards": [
+    {
+      "variantId": "major-00-theme-01",
+      "cardId": "major-00",
+      "themeId": "theme-01",
+      "sourceId": 0,
+      "name": "愚者",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "愚者",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "给新的开始留一点空间，今天先做一件一直想尝试的小事。",
+      "meaningZh": "给新的开始留一点空间，今天先做一件一直想尝试的小事。",
+      "image": "/tarot/flashcards/covers/major-00-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-00/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-00-theme-02",
+      "cardId": "major-00",
+      "themeId": "theme-02",
+      "sourceId": 0,
+      "name": "愚者",
+      "themeName": "云鲸初航",
+      "keywordsZh": [
+        "愚者",
+        "云鲸初航"
+      ],
+      "dailyGuidanceZh": "像云鲸离港一样，允许自己带着好奇出发；向一个新朋友发出轻松的邀请。",
+      "meaningZh": "像云鲸离港一样，允许自己带着好奇出发；向一个新朋友发出轻松的邀请。",
+      "image": "/tarot/flashcards/covers/major-00-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-00/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-00-theme-03",
+      "cardId": "major-00",
+      "themeId": "theme-03",
+      "sourceId": 0,
+      "name": "愚者",
+      "themeName": "沙海驿客",
+      "keywordsZh": [
+        "愚者",
+        "沙海驿客"
+      ],
+      "dailyGuidanceZh": "长路需要补给，今天先确认自己的精力，再决定下一站，不必跟随别人的速度。",
+      "meaningZh": "长路需要补给，今天先确认自己的精力，再决定下一站，不必跟随别人的速度。",
+      "image": "/tarot/flashcards/covers/major-00-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-00/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-00-theme-04",
+      "cardId": "major-00",
+      "themeId": "theme-04",
+      "sourceId": 0,
+      "name": "愚者",
+      "themeName": "极光邮路",
+      "keywordsZh": [
+        "愚者",
+        "极光邮路"
+      ],
+      "dailyGuidanceZh": "把想说的话送出去；今天用一条真诚的消息，让远方的在意得到回应。",
+      "meaningZh": "把想说的话送出去；今天用一条真诚的消息，让远方的在意得到回应。",
+      "image": "/tarot/flashcards/covers/major-00-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-00/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-00-theme-05",
+      "cardId": "major-00",
+      "themeId": "theme-05",
+      "sourceId": 0,
+      "name": "愚者",
+      "themeName": "纸界远行",
+      "keywordsZh": [
+        "愚者",
+        "纸界远行"
+      ],
+      "dailyGuidanceZh": "纸页可以翻开新世界；换一种写法记录今天，试着重述一个困住你的问题。",
+      "meaningZh": "纸页可以翻开新世界；换一种写法记录今天，试着重述一个困住你的问题。",
+      "image": "/tarot/flashcards/covers/major-00-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-00/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-01-theme-01",
+      "cardId": "major-01",
+      "themeId": "theme-01",
+      "sourceId": 1,
+      "name": "魔术师",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "魔术师",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "你已有把想法落地的工具，今天挑一件最小的事情开始行动。",
+      "meaningZh": "你已有把想法落地的工具，今天挑一件最小的事情开始行动。",
+      "image": "/tarot/flashcards/covers/major-01-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-01/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-01-theme-02",
+      "cardId": "major-01",
+      "themeId": "theme-02",
+      "sourceId": 1,
+      "name": "魔术师",
+      "themeName": "潮汐炼金",
+      "keywordsZh": [
+        "魔术师",
+        "潮汐炼金"
+      ],
+      "dailyGuidanceZh": "潮汐让材料相遇，今天把两个零散想法组合起来，试做一个能看见的成果。",
+      "meaningZh": "潮汐让材料相遇，今天把两个零散想法组合起来，试做一个能看见的成果。",
+      "image": "/tarot/flashcards/covers/major-01-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-01/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-01-theme-03",
+      "cardId": "major-01",
+      "themeId": "theme-03",
+      "sourceId": 1,
+      "name": "魔术师",
+      "themeName": "琥珀机坊",
+      "keywordsZh": [
+        "魔术师",
+        "琥珀机坊"
+      ],
+      "dailyGuidanceZh": "齿轮需要配合，今天理清一项工作的步骤，找出最值得修整的小环节。",
+      "meaningZh": "齿轮需要配合，今天理清一项工作的步骤，找出最值得修整的小环节。",
+      "image": "/tarot/flashcards/covers/major-01-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-01/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-01-theme-04",
+      "cardId": "major-01",
+      "themeId": "theme-04",
+      "sourceId": 1,
+      "name": "魔术师",
+      "themeName": "霜晶织术",
+      "keywordsZh": [
+        "魔术师",
+        "霜晶织术"
+      ],
+      "dailyGuidanceZh": "冰晶织出细密纹路，今天把杂乱的念头逐条写下，用耐心替代仓促。",
+      "meaningZh": "冰晶织出细密纹路，今天把杂乱的念头逐条写下，用耐心替代仓促。",
+      "image": "/tarot/flashcards/covers/major-01-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-01/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-01-theme-05",
+      "cardId": "major-01",
+      "themeId": "theme-05",
+      "sourceId": 1,
+      "name": "魔术师",
+      "themeName": "星核工房",
+      "keywordsZh": [
+        "魔术师",
+        "星核工房"
+      ],
+      "dailyGuidanceZh": "星核的光来自聚焦，今天把精力集中在一个真正重要的目标上。",
+      "meaningZh": "星核的光来自聚焦，今天把精力集中在一个真正重要的目标上。",
+      "image": "/tarot/flashcards/covers/major-01-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-01/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-02-theme-01",
+      "cardId": "major-02",
+      "themeId": "theme-01",
+      "sourceId": 2,
+      "name": "女祭司",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "女祭司",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "先听见自己的感受，再做回应；今天给自己一段安静的思考时间。",
+      "meaningZh": "先听见自己的感受，再做回应；今天给自己一段安静的思考时间。",
+      "image": "/tarot/flashcards/covers/major-02-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-02/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-02-theme-02",
+      "cardId": "major-02",
+      "themeId": "theme-02",
+      "sourceId": 2,
+      "name": "女祭司",
+      "themeName": "潮底秘典",
+      "keywordsZh": [
+        "女祭司",
+        "潮底秘典"
+      ],
+      "dailyGuidanceZh": "海底的书需要慢慢读，今天留意一个被忽略的细节，不急着下结论。",
+      "meaningZh": "海底的书需要慢慢读，今天留意一个被忽略的细节，不急着下结论。",
+      "image": "/tarot/flashcards/covers/major-02-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-02/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-02-theme-03",
+      "cardId": "major-02",
+      "themeId": "theme-03",
+      "sourceId": 2,
+      "name": "女祭司",
+      "themeName": "雪寺无声",
+      "keywordsZh": [
+        "女祭司",
+        "雪寺无声"
+      ],
+      "dailyGuidanceZh": "雪寺的安静不是空白，今天暂停无休止的信息输入，听听自己的需要。",
+      "meaningZh": "雪寺的安静不是空白，今天暂停无休止的信息输入，听听自己的需要。",
+      "image": "/tarot/flashcards/covers/major-02-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-02/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-02-theme-04",
+      "cardId": "major-02",
+      "themeId": "theme-04",
+      "sourceId": 2,
+      "name": "女祭司",
+      "themeName": "墨池藏意",
+      "keywordsZh": [
+        "女祭司",
+        "墨池藏意"
+      ],
+      "dailyGuidanceZh": "墨落水面会渐渐清晰，今天把说不出的感受写下来，允许它慢慢成形。",
+      "meaningZh": "墨落水面会渐渐清晰，今天把说不出的感受写下来，允许它慢慢成形。",
+      "image": "/tarot/flashcards/covers/major-02-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-02/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-02-theme-05",
+      "cardId": "major-02",
+      "themeId": "theme-05",
+      "sourceId": 2,
+      "name": "女祭司",
+      "themeName": "镜海档案",
+      "keywordsZh": [
+        "女祭司",
+        "镜海档案"
+      ],
+      "dailyGuidanceZh": "镜海映出多种视角，今天核对一件事实，分清直觉与自己投射的期待。",
+      "meaningZh": "镜海映出多种视角，今天核对一件事实，分清直觉与自己投射的期待。",
+      "image": "/tarot/flashcards/covers/major-02-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-02/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-03-theme-01",
+      "cardId": "major-03",
+      "themeId": "theme-01",
+      "sourceId": 3,
+      "name": "皇后",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "皇后",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "照顾好具体的生活需要，今天为自己或在意的人做一件温柔的小事。",
+      "meaningZh": "照顾好具体的生活需要，今天为自己或在意的人做一件温柔的小事。",
+      "image": "/tarot/flashcards/covers/major-03-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-03/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-03-theme-02",
+      "cardId": "major-03",
+      "themeId": "theme-02",
+      "sourceId": 3,
+      "name": "皇后",
+      "themeName": "珊瑚丰庭",
+      "keywordsZh": [
+        "皇后",
+        "珊瑚丰庭"
+      ],
+      "dailyGuidanceZh": "珊瑚丰庭由共生长成，今天感谢一个支持你的人，也为对方留一点空间。",
+      "meaningZh": "珊瑚丰庭由共生长成，今天感谢一个支持你的人，也为对方留一点空间。",
+      "image": "/tarot/flashcards/covers/major-03-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-03/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-03-theme-03",
+      "cardId": "major-03",
+      "themeId": "theme-03",
+      "sourceId": 3,
+      "name": "皇后",
+      "themeName": "秋实庄园",
+      "keywordsZh": [
+        "皇后",
+        "秋实庄园"
+      ],
+      "dailyGuidanceZh": "秋实来自长久照料，今天承认一个已有的小成果，不只盯着尚未完成的事。",
+      "meaningZh": "秋实来自长久照料，今天承认一个已有的小成果，不只盯着尚未完成的事。",
+      "image": "/tarot/flashcards/covers/major-03-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-03/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-03-theme-04",
+      "cardId": "major-03",
+      "themeId": "theme-04",
+      "sourceId": 3,
+      "name": "皇后",
+      "themeName": "雪中花房",
+      "keywordsZh": [
+        "皇后",
+        "雪中花房"
+      ],
+      "dailyGuidanceZh": "雪中的花房需要温度，今天给疲惫的自己安排一次踏实的休息。",
+      "meaningZh": "雪中的花房需要温度，今天给疲惫的自己安排一次踏实的休息。",
+      "image": "/tarot/flashcards/covers/major-03-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-03/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-03-theme-05",
+      "cardId": "major-03",
+      "themeId": "theme-05",
+      "sourceId": 3,
+      "name": "皇后",
+      "themeName": "浮岛母庭",
+      "keywordsZh": [
+        "皇后",
+        "浮岛母庭"
+      ],
+      "dailyGuidanceZh": "浮岛有连接也有独立，今天确认你愿意给予什么，同时保留自己的生活。",
+      "meaningZh": "浮岛有连接也有独立，今天确认你愿意给予什么，同时保留自己的生活。",
+      "image": "/tarot/flashcards/covers/major-03-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-03/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-04-theme-01",
+      "cardId": "major-04",
+      "themeId": "theme-01",
+      "sourceId": 4,
+      "name": "皇帝",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "皇帝",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "清楚的边界带来安稳，今天兑现一个能做到的安排。",
+      "meaningZh": "清楚的边界带来安稳，今天兑现一个能做到的安排。",
+      "image": "/tarot/flashcards/covers/major-04-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-04/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-04-theme-02",
+      "cardId": "major-04",
+      "themeId": "theme-02",
+      "sourceId": 4,
+      "name": "皇帝",
+      "themeName": "玄武岩座",
+      "keywordsZh": [
+        "皇帝",
+        "玄武岩座"
+      ],
+      "dailyGuidanceZh": "岩座稳固也需要出口，今天检查一条旧规则是否仍在保护你。",
+      "meaningZh": "岩座稳固也需要出口，今天检查一条旧规则是否仍在保护你。",
+      "image": "/tarot/flashcards/covers/major-04-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-04/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-04-theme-03",
+      "cardId": "major-04",
+      "themeId": "theme-03",
+      "sourceId": 4,
+      "name": "皇帝",
+      "themeName": "冰岭契约",
+      "keywordsZh": [
+        "皇帝",
+        "冰岭契约"
+      ],
+      "dailyGuidanceZh": "冰岭上的契约需要清楚，今天把一项承诺说具体，不让含糊成为压力。",
+      "meaningZh": "冰岭上的契约需要清楚，今天把一项承诺说具体，不让含糊成为压力。",
+      "image": "/tarot/flashcards/covers/major-04-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-04/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-04-theme-04",
+      "cardId": "major-04",
+      "themeId": "theme-04",
+      "sourceId": 4,
+      "name": "皇帝",
+      "themeName": "沙城基石",
+      "keywordsZh": [
+        "皇帝",
+        "沙城基石"
+      ],
+      "dailyGuidanceZh": "沙城从基石开始，今天先完成一个基础步骤，再规划更大的目标。",
+      "meaningZh": "沙城从基石开始，今天先完成一个基础步骤，再规划更大的目标。",
+      "image": "/tarot/flashcards/covers/major-04-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-04/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-04-theme-05",
+      "cardId": "major-04",
+      "themeId": "theme-05",
+      "sourceId": 4,
+      "name": "皇帝",
+      "themeName": "轨道城邦",
+      "keywordsZh": [
+        "皇帝",
+        "轨道城邦"
+      ],
+      "dailyGuidanceZh": "轨道城邦依靠协调，今天为一项共同事务明确分工与可协商的边界。",
+      "meaningZh": "轨道城邦依靠协调，今天为一项共同事务明确分工与可协商的边界。",
+      "image": "/tarot/flashcards/covers/major-04-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-04/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-05-theme-01",
+      "cardId": "major-05",
+      "themeId": "theme-01",
+      "sourceId": 5,
+      "name": "教皇",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "教皇",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "说清自己看重的原则，今天找一个能互相理解的共同点。",
+      "meaningZh": "说清自己看重的原则，今天找一个能互相理解的共同点。",
+      "image": "/tarot/flashcards/covers/major-05-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-05/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-05-theme-02",
+      "cardId": "major-05",
+      "themeId": "theme-02",
+      "sourceId": 5,
+      "name": "教皇",
+      "themeName": "灯塔议会",
+      "keywordsZh": [
+        "教皇",
+        "灯塔议会"
+      ],
+      "dailyGuidanceZh": "灯塔引导而不强迫，今天听取不同意见，再决定自己的方向。",
+      "meaningZh": "灯塔引导而不强迫，今天听取不同意见，再决定自己的方向。",
+      "image": "/tarot/flashcards/covers/major-05-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-05/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-05-theme-03",
+      "cardId": "major-05",
+      "themeId": "theme-03",
+      "sourceId": 5,
+      "name": "教皇",
+      "themeName": "沙漠书院",
+      "keywordsZh": [
+        "教皇",
+        "沙漠书院"
+      ],
+      "dailyGuidanceZh": "沙漠书院保存经验，今天向一个可信的人请教具体问题。",
+      "meaningZh": "沙漠书院保存经验，今天向一个可信的人请教具体问题。",
+      "image": "/tarot/flashcards/covers/major-05-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-05/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-05-theme-04",
+      "cardId": "major-05",
+      "themeId": "theme-04",
+      "sourceId": 5,
+      "name": "教皇",
+      "themeName": "林间共席",
+      "keywordsZh": [
+        "教皇",
+        "林间共席"
+      ],
+      "dailyGuidanceZh": "林间共席需要平等的位置，今天让较少发言的人也有表达的机会。",
+      "meaningZh": "林间共席需要平等的位置，今天让较少发言的人也有表达的机会。",
+      "image": "/tarot/flashcards/covers/major-05-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-05/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-05-theme-05",
+      "cardId": "major-05",
+      "themeId": "theme-05",
+      "sourceId": 5,
+      "name": "教皇",
+      "themeName": "星际共识",
+      "keywordsZh": [
+        "教皇",
+        "星际共识"
+      ],
+      "dailyGuidanceZh": "星际共识跨越距离，今天用彼此都能理解的语言重新确认约定。",
+      "meaningZh": "星际共识跨越距离，今天用彼此都能理解的语言重新确认约定。",
+      "image": "/tarot/flashcards/covers/major-05-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-05/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-06-theme-01",
+      "cardId": "major-06",
+      "themeId": "theme-01",
+      "sourceId": 6,
+      "name": "恋人",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "恋人",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "心动也包含选择，今天诚实表达一个期待，同时尊重对方的回应。",
+      "meaningZh": "心动也包含选择，今天诚实表达一个期待，同时尊重对方的回应。",
+      "image": "/tarot/flashcards/covers/major-06-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-06/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-06-theme-02",
+      "cardId": "major-06",
+      "themeId": "theme-02",
+      "sourceId": 6,
+      "name": "恋人",
+      "themeName": "潮桥双灯",
+      "keywordsZh": [
+        "恋人",
+        "潮桥双灯"
+      ],
+      "dailyGuidanceZh": "潮桥需要两端相连，今天迈出小半步，也给对方主动靠近的空间。",
+      "meaningZh": "潮桥需要两端相连，今天迈出小半步，也给对方主动靠近的空间。",
+      "image": "/tarot/flashcards/covers/major-06-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-06/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-06-theme-03",
+      "cardId": "major-06",
+      "themeId": "theme-03",
+      "sourceId": 6,
+      "name": "恋人",
+      "themeName": "雪夜站台",
+      "keywordsZh": [
+        "恋人",
+        "雪夜站台"
+      ],
+      "dailyGuidanceZh": "雪夜站台让等待有落点，今天明确约见时间，避免让沉默替代回应。",
+      "meaningZh": "雪夜站台让等待有落点，今天明确约见时间，避免让沉默替代回应。",
+      "image": "/tarot/flashcards/covers/major-06-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-06/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-06-theme-04",
+      "cardId": "major-06",
+      "themeId": "theme-04",
+      "sourceId": 6,
+      "name": "恋人",
+      "themeName": "空中双园",
+      "keywordsZh": [
+        "恋人",
+        "空中双园"
+      ],
+      "dailyGuidanceZh": "双园各自生长又彼此相通，今天安排共同的时间，也照顾各自的兴趣。",
+      "meaningZh": "双园各自生长又彼此相通，今天安排共同的时间，也照顾各自的兴趣。",
+      "image": "/tarot/flashcards/covers/major-06-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-06/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-06-theme-05",
+      "cardId": "major-06",
+      "themeId": "theme-05",
+      "sourceId": 6,
+      "name": "恋人",
+      "themeName": "双星会合",
+      "keywordsZh": [
+        "恋人",
+        "双星会合"
+      ],
+      "dailyGuidanceZh": "双星保持各自轨道，今天检查一段亲近是否仍允许双方自由选择。",
+      "meaningZh": "双星保持各自轨道，今天检查一段亲近是否仍允许双方自由选择。",
+      "image": "/tarot/flashcards/covers/major-06-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-06/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-07-theme-01",
+      "cardId": "major-07",
+      "themeId": "theme-01",
+      "sourceId": 7,
+      "name": "战车",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "战车",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "把想推进的事定成一个小目标，今天专注于能控制的下一步。",
+      "meaningZh": "把想推进的事定成一个小目标，今天专注于能控制的下一步。",
+      "image": "/tarot/flashcards/covers/major-07-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-07/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-07-theme-02",
+      "cardId": "major-07",
+      "themeId": "theme-02",
+      "sourceId": 7,
+      "name": "战车",
+      "themeName": "浪脊御航",
+      "keywordsZh": [
+        "战车",
+        "浪脊御航"
+      ],
+      "dailyGuidanceZh": "浪脊御航靠调整方向，今天遇到变化时先稳住节奏，再作回应。",
+      "meaningZh": "浪脊御航靠调整方向，今天遇到变化时先稳住节奏，再作回应。",
+      "image": "/tarot/flashcards/covers/major-07-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-07/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-07-theme-03",
+      "cardId": "major-07",
+      "themeId": "theme-03",
+      "sourceId": 7,
+      "name": "战车",
+      "themeName": "赤沙竞途",
+      "keywordsZh": [
+        "战车",
+        "赤沙竞途"
+      ],
+      "dailyGuidanceZh": "赤沙竞途需要分辨赛道，今天不比较速度，只确认你是否朝自己的目标前进。",
+      "meaningZh": "赤沙竞途需要分辨赛道，今天不比较速度，只确认你是否朝自己的目标前进。",
+      "image": "/tarot/flashcards/covers/major-07-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-07/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-07-theme-04",
+      "cardId": "major-07",
+      "themeId": "theme-04",
+      "sourceId": 7,
+      "name": "战车",
+      "themeName": "冰原疾行",
+      "keywordsZh": [
+        "战车",
+        "冰原疾行"
+      ],
+      "dailyGuidanceZh": "冰原疾行更需要刹车，今天行动前检查风险，给自己留一条安全的退路。",
+      "meaningZh": "冰原疾行更需要刹车，今天行动前检查风险，给自己留一条安全的退路。",
+      "image": "/tarot/flashcards/covers/major-07-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-07/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-07-theme-05",
+      "cardId": "major-07",
+      "themeId": "theme-05",
+      "sourceId": 7,
+      "name": "战车",
+      "themeName": "星桥远征",
+      "keywordsZh": [
+        "战车",
+        "星桥远征"
+      ],
+      "dailyGuidanceZh": "星桥连接不同站点，今天把一个长目标拆成能够走到的下一站。",
+      "meaningZh": "星桥连接不同站点，今天把一个长目标拆成能够走到的下一站。",
+      "image": "/tarot/flashcards/covers/major-07-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-07/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-08-theme-01",
+      "cardId": "major-08",
+      "themeId": "theme-01",
+      "sourceId": 8,
+      "name": "力量",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "力量",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "温柔可以有力量，今天用平静而清楚的话表达一个边界。",
+      "meaningZh": "温柔可以有力量，今天用平静而清楚的话表达一个边界。",
+      "image": "/tarot/flashcards/covers/major-08-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-08/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-08-theme-02",
+      "cardId": "major-08",
+      "themeId": "theme-02",
+      "sourceId": 8,
+      "name": "力量",
+      "themeName": "雨林静狮",
+      "keywordsZh": [
+        "力量",
+        "雨林静狮"
+      ],
+      "dailyGuidanceZh": "雨林静狮不急于证明，今天先听完对方的话，再坚定地表达自己的需要。",
+      "meaningZh": "雨林静狮不急于证明，今天先听完对方的话，再坚定地表达自己的需要。",
+      "image": "/tarot/flashcards/covers/major-08-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-08/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-08-theme-03",
+      "cardId": "major-08",
+      "themeId": "theme-03",
+      "sourceId": 8,
+      "name": "力量",
+      "themeName": "雪原暖息",
+      "keywordsZh": [
+        "力量",
+        "雪原暖息"
+      ],
+      "dailyGuidanceZh": "雪原暖息是寒冷中的照料，今天用一个小动作安慰疲惫的人，也包括自己。",
+      "meaningZh": "雪原暖息是寒冷中的照料，今天用一个小动作安慰疲惫的人，也包括自己。",
+      "image": "/tarot/flashcards/covers/major-08-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-08/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-08-theme-04",
+      "cardId": "major-08",
+      "themeId": "theme-04",
+      "sourceId": 8,
+      "name": "力量",
+      "themeName": "琉璃花庭",
+      "keywordsZh": [
+        "力量",
+        "琉璃花庭"
+      ],
+      "dailyGuidanceZh": "琉璃花庭既美丽又易碎，今天保护一个脆弱的感受，不嘲笑也不逞强。",
+      "meaningZh": "琉璃花庭既美丽又易碎，今天保护一个脆弱的感受，不嘲笑也不逞强。",
+      "image": "/tarot/flashcards/covers/major-08-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-08/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-08-theme-05",
+      "cardId": "major-08",
+      "themeId": "theme-05",
+      "sourceId": 8,
+      "name": "力量",
+      "themeName": "星兽之憩",
+      "keywordsZh": [
+        "力量",
+        "星兽之憩"
+      ],
+      "dailyGuidanceZh": "星兽之憩让力量恢复，今天允许自己休息，精力不必始终向外输出。",
+      "meaningZh": "星兽之憩让力量恢复，今天允许自己休息，精力不必始终向外输出。",
+      "image": "/tarot/flashcards/covers/major-08-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-08/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-09-theme-01",
+      "cardId": "major-09",
+      "themeId": "theme-01",
+      "sourceId": 9,
+      "name": "隐士",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "隐士",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "独处是整理需要的机会，今天为自己留下十分钟安静的时间。",
+      "meaningZh": "独处是整理需要的机会，今天为自己留下十分钟安静的时间。",
+      "image": "/tarot/flashcards/covers/major-09-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-09/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-09-theme-02",
+      "cardId": "major-09",
+      "themeId": "theme-02",
+      "sourceId": 9,
+      "name": "隐士",
+      "themeName": "雾港守灯",
+      "keywordsZh": [
+        "隐士",
+        "雾港守灯"
+      ],
+      "dailyGuidanceZh": "雾港守灯只照见近处，今天先处理眼前能确认的事，不急着预判整条路。",
+      "meaningZh": "雾港守灯只照见近处，今天先处理眼前能确认的事，不急着预判整条路。",
+      "image": "/tarot/flashcards/covers/major-09-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-09/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-09-theme-03",
+      "cardId": "major-09",
+      "themeId": "theme-03",
+      "sourceId": 9,
+      "name": "隐士",
+      "themeName": "沙夜行者",
+      "keywordsZh": [
+        "隐士",
+        "沙夜行者"
+      ],
+      "dailyGuidanceZh": "沙夜行者带着有限的光，今天减少一项无关负担，珍惜真正重要的需要。",
+      "meaningZh": "沙夜行者带着有限的光，今天减少一项无关负担，珍惜真正重要的需要。",
+      "image": "/tarot/flashcards/covers/major-09-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-09/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-09-theme-04",
+      "cardId": "major-09",
+      "themeId": "theme-04",
+      "sourceId": 9,
+      "name": "隐士",
+      "themeName": "雪岭一灯",
+      "keywordsZh": [
+        "隐士",
+        "雪岭一灯"
+      ],
+      "dailyGuidanceZh": "雪岭一灯提醒你已有方向，今天回看一个曾帮助过你的经验。",
+      "meaningZh": "雪岭一灯提醒你已有方向，今天回看一个曾帮助过你的经验。",
+      "image": "/tarot/flashcards/covers/major-09-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-09/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-09-theme-05",
+      "cardId": "major-09",
+      "themeId": "theme-05",
+      "sourceId": 9,
+      "name": "隐士",
+      "themeName": "星尘档案",
+      "keywordsZh": [
+        "隐士",
+        "星尘档案"
+      ],
+      "dailyGuidanceZh": "星尘档案保存细微线索，今天整理一段经历，找出你愿意延续的选择。",
+      "meaningZh": "星尘档案保存细微线索，今天整理一段经历，找出你愿意延续的选择。",
+      "image": "/tarot/flashcards/covers/major-09-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-09/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-10-theme-01",
+      "cardId": "major-10",
+      "themeId": "theme-01",
+      "sourceId": 10,
+      "name": "命运之轮",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "命运之轮",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "节奏会变化，今天留意可调整的回应，不把偶然当成固定答案。",
+      "meaningZh": "节奏会变化，今天留意可调整的回应，不把偶然当成固定答案。",
+      "image": "/tarot/flashcards/covers/major-10-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-10/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-10-theme-02",
+      "cardId": "major-10",
+      "themeId": "theme-02",
+      "sourceId": 10,
+      "name": "命运之轮",
+      "themeName": "潮汐轮盘",
+      "keywordsZh": [
+        "命运之轮",
+        "潮汐轮盘"
+      ],
+      "dailyGuidanceZh": "潮汐轮盘有来有回，今天给一项计划留余地，顺着现实变化调整节奏。",
+      "meaningZh": "潮汐轮盘有来有回，今天给一项计划留余地，顺着现实变化调整节奏。",
+      "image": "/tarot/flashcards/covers/major-10-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-10/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-10-theme-03",
+      "cardId": "major-10",
+      "themeId": "theme-03",
+      "sourceId": 10,
+      "name": "命运之轮",
+      "themeName": "琥珀时轮",
+      "keywordsZh": [
+        "命运之轮",
+        "琥珀时轮"
+      ],
+      "dailyGuidanceZh": "琥珀时轮保存旧日光影，今天重读一个过去的经验，不让它限制新的选择。",
+      "meaningZh": "琥珀时轮保存旧日光影，今天重读一个过去的经验，不让它限制新的选择。",
+      "image": "/tarot/flashcards/covers/major-10-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-10/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-10-theme-04",
+      "cardId": "major-10",
+      "themeId": "theme-04",
+      "sourceId": 10,
+      "name": "命运之轮",
+      "themeName": "冰火季环",
+      "keywordsZh": [
+        "命运之轮",
+        "冰火季环"
+      ],
+      "dailyGuidanceZh": "冰火季环包含相反的力量，今天承认心里的矛盾，寻找可以共存的安排。",
+      "meaningZh": "冰火季环包含相反的力量，今天承认心里的矛盾，寻找可以共存的安排。",
+      "image": "/tarot/flashcards/covers/major-10-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-10/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-10-theme-05",
+      "cardId": "major-10",
+      "themeId": "theme-05",
+      "sourceId": 10,
+      "name": "命运之轮",
+      "themeName": "宇宙回环",
+      "keywordsZh": [
+        "命运之轮",
+        "宇宙回环"
+      ],
+      "dailyGuidanceZh": "宇宙回环让轨迹交错，今天重新连接一个被搁置的机会，先从小行动开始。",
+      "meaningZh": "宇宙回环让轨迹交错，今天重新连接一个被搁置的机会，先从小行动开始。",
+      "image": "/tarot/flashcards/covers/major-10-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-10/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-11-theme-01",
+      "cardId": "major-11",
+      "themeId": "theme-01",
+      "sourceId": 11,
+      "name": "正义",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "正义",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "把事实和感受分开看，今天明确一件事里自己与对方的责任。",
+      "meaningZh": "把事实和感受分开看，今天明确一件事里自己与对方的责任。",
+      "image": "/tarot/flashcards/covers/major-11-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-11/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-11-theme-02",
+      "cardId": "major-11",
+      "themeId": "theme-02",
+      "sourceId": 11,
+      "name": "正义",
+      "themeName": "潮镜天平",
+      "keywordsZh": [
+        "正义",
+        "潮镜天平"
+      ],
+      "dailyGuidanceZh": "潮镜天平需要平静的水面，今天冷静核对信息后，再作判断。",
+      "meaningZh": "潮镜天平需要平静的水面，今天冷静核对信息后，再作判断。",
+      "image": "/tarot/flashcards/covers/major-11-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-11/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-11-theme-03",
+      "cardId": "major-11",
+      "themeId": "theme-03",
+      "sourceId": 11,
+      "name": "正义",
+      "themeName": "雪庭衡光",
+      "keywordsZh": [
+        "正义",
+        "雪庭衡光"
+      ],
+      "dailyGuidanceZh": "雪庭衡光照出细小差别，今天检查一项安排是否对双方都公平。",
+      "meaningZh": "雪庭衡光照出细小差别，今天检查一项安排是否对双方都公平。",
+      "image": "/tarot/flashcards/covers/major-11-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-11/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-11-theme-04",
+      "cardId": "major-11",
+      "themeId": "theme-04",
+      "sourceId": 11,
+      "name": "正义",
+      "themeName": "墨玉裁衡",
+      "keywordsZh": [
+        "正义",
+        "墨玉裁衡"
+      ],
+      "dailyGuidanceZh": "墨玉裁衡不是苛责，今天清楚提出一个合理要求，也愿意听取回应。",
+      "meaningZh": "墨玉裁衡不是苛责，今天清楚提出一个合理要求，也愿意听取回应。",
+      "image": "/tarot/flashcards/covers/major-11-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-11/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-11-theme-05",
+      "cardId": "major-11",
+      "themeId": "theme-05",
+      "sourceId": 11,
+      "name": "正义",
+      "themeName": "星轨公衡",
+      "keywordsZh": [
+        "正义",
+        "星轨公衡"
+      ],
+      "dailyGuidanceZh": "星轨公衡让规则可见，今天把默契写成共同确认的约定。",
+      "meaningZh": "星轨公衡让规则可见，今天把默契写成共同确认的约定。",
+      "image": "/tarot/flashcards/covers/major-11-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-11/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-12-theme-01",
+      "cardId": "major-12",
+      "themeId": "theme-01",
+      "sourceId": 12,
+      "name": "倒吊人",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "倒吊人",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "暂停可以带来新视角，今天给一个难题换一种提问方式。",
+      "meaningZh": "暂停可以带来新视角，今天给一个难题换一种提问方式。",
+      "image": "/tarot/flashcards/covers/major-12-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-12/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-12-theme-02",
+      "cardId": "major-12",
+      "themeId": "theme-02",
+      "sourceId": 12,
+      "name": "倒吊人",
+      "themeName": "潮间倒影",
+      "keywordsZh": [
+        "倒吊人",
+        "潮间倒影"
+      ],
+      "dailyGuidanceZh": "潮间倒影改变观看角度，今天试着从对方处境描述同一件事。",
+      "meaningZh": "潮间倒影改变观看角度，今天试着从对方处境描述同一件事。",
+      "image": "/tarot/flashcards/covers/major-12-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-12/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-12-theme-03",
+      "cardId": "major-12",
+      "themeId": "theme-03",
+      "sourceId": 12,
+      "name": "倒吊人",
+      "themeName": "雪林悬思",
+      "keywordsZh": [
+        "倒吊人",
+        "雪林悬思"
+      ],
+      "dailyGuidanceZh": "雪林悬思允许暂时停住，今天不急于答应，先辨认自己的真实意愿。",
+      "meaningZh": "雪林悬思允许暂时停住，今天不急于答应，先辨认自己的真实意愿。",
+      "image": "/tarot/flashcards/covers/major-12-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-12/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-12-theme-04",
+      "cardId": "major-12",
+      "themeId": "theme-04",
+      "sourceId": 12,
+      "name": "倒吊人",
+      "themeName": "纸境换位",
+      "keywordsZh": [
+        "倒吊人",
+        "纸境换位"
+      ],
+      "dailyGuidanceZh": "纸境换位像翻转书页，今天写下另一个可能的解释，别只保留一种结论。",
+      "meaningZh": "纸境换位像翻转书页，今天写下另一个可能的解释，别只保留一种结论。",
+      "image": "/tarot/flashcards/covers/major-12-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-12/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-12-theme-05",
+      "cardId": "major-12",
+      "themeId": "theme-05",
+      "sourceId": 12,
+      "name": "倒吊人",
+      "themeName": "重力花园",
+      "keywordsZh": [
+        "倒吊人",
+        "重力花园"
+      ],
+      "dailyGuidanceZh": "重力花园让习惯失效，今天放下一条自动反应，试用一个新的回应。",
+      "meaningZh": "重力花园让习惯失效，今天放下一条自动反应，试用一个新的回应。",
+      "image": "/tarot/flashcards/covers/major-12-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-12/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-13-theme-01",
+      "cardId": "major-13",
+      "themeId": "theme-01",
+      "sourceId": 13,
+      "name": "死神",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "死神",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "旧方式可以结束，今天放下一项已经消耗你却不再有效的习惯。",
+      "meaningZh": "旧方式可以结束，今天放下一项已经消耗你却不再有效的习惯。",
+      "image": "/tarot/flashcards/covers/major-13-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-13/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-13-theme-02",
+      "cardId": "major-13",
+      "themeId": "theme-02",
+      "sourceId": 13,
+      "name": "死神",
+      "themeName": "霜尽鹿门",
+      "keywordsZh": [
+        "死神",
+        "霜尽鹿门"
+      ],
+      "dailyGuidanceZh": "霜尽鹿门通向新的季节，今天为一个结束做善后，再给新生活留空间。",
+      "meaningZh": "霜尽鹿门通向新的季节，今天为一个结束做善后，再给新生活留空间。",
+      "image": "/tarot/flashcards/covers/major-13-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-13/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-13-theme-03",
+      "cardId": "major-13",
+      "themeId": "theme-03",
+      "sourceId": 13,
+      "name": "死神",
+      "themeName": "灰烬新庭",
+      "keywordsZh": [
+        "死神",
+        "灰烬新庭"
+      ],
+      "dailyGuidanceZh": "灰烬新庭从清理开始，今天整理一处角落，把不再需要的负担放下。",
+      "meaningZh": "灰烬新庭从清理开始，今天整理一处角落，把不再需要的负担放下。",
+      "image": "/tarot/flashcards/covers/major-13-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-13/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-13-theme-04",
+      "cardId": "major-13",
+      "themeId": "theme-04",
+      "sourceId": 13,
+      "name": "死神",
+      "themeName": "珊瑚蜕境",
+      "keywordsZh": [
+        "死神",
+        "珊瑚蜕境"
+      ],
+      "dailyGuidanceZh": "珊瑚蜕境让生命换一种形态，今天允许关系或计划改变，而非强行维持旧样子。",
+      "meaningZh": "珊瑚蜕境让生命换一种形态，今天允许关系或计划改变，而非强行维持旧样子。",
+      "image": "/tarot/flashcards/covers/major-13-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-13/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-13-theme-05",
+      "cardId": "major-13",
+      "themeId": "theme-05",
+      "sourceId": 13,
+      "name": "死神",
+      "themeName": "星骸新生",
+      "keywordsZh": [
+        "死神",
+        "星骸新生"
+      ],
+      "dailyGuidanceZh": "星骸新生保留有价值的部分，今天把一次失败转成一条可用的经验。",
+      "meaningZh": "星骸新生保留有价值的部分，今天把一次失败转成一条可用的经验。",
+      "image": "/tarot/flashcards/covers/major-13-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-13/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-14-theme-01",
+      "cardId": "major-14",
+      "themeId": "theme-01",
+      "sourceId": 14,
+      "name": "节制",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "节制",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "舒服的平衡来自微调，今天协商一个双方都容易做到的小安排。",
+      "meaningZh": "舒服的平衡来自微调，今天协商一个双方都容易做到的小安排。",
+      "image": "/tarot/flashcards/covers/major-14-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-14/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-14-theme-02",
+      "cardId": "major-14",
+      "themeId": "theme-02",
+      "sourceId": 14,
+      "name": "节制",
+      "themeName": "温泉双流",
+      "keywordsZh": [
+        "节制",
+        "温泉双流"
+      ],
+      "dailyGuidanceZh": "温泉双流汇合而不相互吞没，今天说出自己的节奏，寻找温和的交点。",
+      "meaningZh": "温泉双流汇合而不相互吞没，今天说出自己的节奏，寻找温和的交点。",
+      "image": "/tarot/flashcards/covers/major-14-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-14/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-14-theme-03",
+      "cardId": "major-14",
+      "themeId": "theme-03",
+      "sourceId": 14,
+      "name": "节制",
+      "themeName": "沙洲调和",
+      "keywordsZh": [
+        "节制",
+        "沙洲调和"
+      ],
+      "dailyGuidanceZh": "沙洲调和珍惜有限的水，今天合理分配精力，不把所有需要都揽在自己身上。",
+      "meaningZh": "沙洲调和珍惜有限的水，今天合理分配精力，不把所有需要都揽在自己身上。",
+      "image": "/tarot/flashcards/covers/major-14-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-14/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-14-theme-04",
+      "cardId": "major-14",
+      "themeId": "theme-04",
+      "sourceId": 14,
+      "name": "节制",
+      "themeName": "雨林水庭",
+      "keywordsZh": [
+        "节制",
+        "雨林水庭"
+      ],
+      "dailyGuidanceZh": "雨林水庭让资源循环，今天为一件共同事务建立互相支持的方式。",
+      "meaningZh": "雨林水庭让资源循环，今天为一件共同事务建立互相支持的方式。",
+      "image": "/tarot/flashcards/covers/major-14-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-14/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-14-theme-05",
+      "cardId": "major-14",
+      "themeId": "theme-05",
+      "sourceId": 14,
+      "name": "节制",
+      "themeName": "星河调律",
+      "keywordsZh": [
+        "节制",
+        "星河调律"
+      ],
+      "dailyGuidanceZh": "星河调律让不同声音和鸣，今天调整沟通的时间与方式，给回应留下余地。",
+      "meaningZh": "星河调律让不同声音和鸣，今天调整沟通的时间与方式，给回应留下余地。",
+      "image": "/tarot/flashcards/covers/major-14-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-14/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-15-theme-01",
+      "cardId": "major-15",
+      "themeId": "theme-01",
+      "sourceId": 15,
+      "name": "恶魔",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "恶魔",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "强烈吸引也值得检查，今天确认你是否仍能自由说出愿意或不愿意。",
+      "meaningZh": "强烈吸引也值得检查，今天确认你是否仍能自由说出愿意或不愿意。",
+      "image": "/tarot/flashcards/covers/major-15-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-15/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-15-theme-02",
+      "cardId": "major-15",
+      "themeId": "theme-02",
+      "sourceId": 15,
+      "name": "恶魔",
+      "themeName": "绯幕剧场",
+      "keywordsZh": [
+        "恶魔",
+        "绯幕剧场"
+      ],
+      "dailyGuidanceZh": "绯幕剧场容易让角色盖过自己，今天分清真实的喜欢与想要被认可的表演。",
+      "meaningZh": "绯幕剧场容易让角色盖过自己，今天分清真实的喜欢与想要被认可的表演。",
+      "image": "/tarot/flashcards/covers/major-15-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-15/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-15-theme-03",
+      "cardId": "major-15",
+      "themeId": "theme-03",
+      "sourceId": 15,
+      "name": "恶魔",
+      "themeName": "琉璃迷宫",
+      "keywordsZh": [
+        "恶魔",
+        "琉璃迷宫"
+      ],
+      "dailyGuidanceZh": "琉璃迷宫光彩夺目也可能困人，今天识别一个反复消耗你的诱惑。",
+      "meaningZh": "琉璃迷宫光彩夺目也可能困人，今天识别一个反复消耗你的诱惑。",
+      "image": "/tarot/flashcards/covers/major-15-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-15/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-15-theme-04",
+      "cardId": "major-15",
+      "themeId": "theme-04",
+      "sourceId": 15,
+      "name": "恶魔",
+      "themeName": "蔷薇夜宴",
+      "keywordsZh": [
+        "恶魔",
+        "蔷薇夜宴"
+      ],
+      "dailyGuidanceZh": "蔷薇夜宴有甜美也有刺，今天享受亲近的同时，说清不可越过的边界。",
+      "meaningZh": "蔷薇夜宴有甜美也有刺，今天享受亲近的同时，说清不可越过的边界。",
+      "image": "/tarot/flashcards/covers/major-15-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-15/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-15-theme-05",
+      "cardId": "major-15",
+      "themeId": "theme-05",
+      "sourceId": 15,
+      "name": "恶魔",
+      "themeName": "霓城出口",
+      "keywordsZh": [
+        "恶魔",
+        "霓城出口"
+      ],
+      "dailyGuidanceZh": "霓城出口让选择重新可见，今天为自己保留退出或拒绝的权利。",
+      "meaningZh": "霓城出口让选择重新可见，今天为自己保留退出或拒绝的权利。",
+      "image": "/tarot/flashcards/covers/major-15-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-15/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-16-theme-01",
+      "cardId": "major-16",
+      "themeId": "theme-01",
+      "sourceId": 16,
+      "name": "高塔",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "高塔",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "结构松动时先照顾现实，今天确认需要保护什么，再决定如何改变。",
+      "meaningZh": "结构松动时先照顾现实，今天确认需要保护什么，再决定如何改变。",
+      "image": "/tarot/flashcards/covers/major-16-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-16/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-16-theme-02",
+      "cardId": "major-16",
+      "themeId": "theme-02",
+      "sourceId": 16,
+      "name": "高塔",
+      "themeName": "潮塔裂光",
+      "keywordsZh": [
+        "高塔",
+        "潮塔裂光"
+      ],
+      "dailyGuidanceZh": "潮塔裂光让隐患显现，今天面对一个已知问题，先处理最紧迫的小处。",
+      "meaningZh": "潮塔裂光让隐患显现，今天面对一个已知问题，先处理最紧迫的小处。",
+      "image": "/tarot/flashcards/covers/major-16-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-16/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-16-theme-03",
+      "cardId": "major-16",
+      "themeId": "theme-03",
+      "sourceId": 16,
+      "name": "高塔",
+      "themeName": "冰塔解构",
+      "keywordsZh": [
+        "高塔",
+        "冰塔解构"
+      ],
+      "dailyGuidanceZh": "冰塔解构需要耐心拆开，今天把一个难题分层，不急着一次解决所有事。",
+      "meaningZh": "冰塔解构需要耐心拆开，今天把一个难题分层，不急着一次解决所有事。",
+      "image": "/tarot/flashcards/covers/major-16-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-16/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-16-theme-04",
+      "cardId": "major-16",
+      "themeId": "theme-04",
+      "sourceId": 16,
+      "name": "高塔",
+      "themeName": "沙塔新基",
+      "keywordsZh": [
+        "高塔",
+        "沙塔新基"
+      ],
+      "dailyGuidanceZh": "沙塔新基从稳固地面开始，今天修正一项不可靠的假设，再继续计划。",
+      "meaningZh": "沙塔新基从稳固地面开始，今天修正一项不可靠的假设，再继续计划。",
+      "image": "/tarot/flashcards/covers/major-16-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-16/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-16-theme-05",
+      "cardId": "major-16",
+      "themeId": "theme-05",
+      "sourceId": 16,
+      "name": "高塔",
+      "themeName": "天穹重构",
+      "keywordsZh": [
+        "高塔",
+        "天穹重构"
+      ],
+      "dailyGuidanceZh": "天穹重构容纳新的可能，今天与相关的人重新商量一条不再适用的规则。",
+      "meaningZh": "天穹重构容纳新的可能，今天与相关的人重新商量一条不再适用的规则。",
+      "image": "/tarot/flashcards/covers/major-16-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-16/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-17-theme-01",
+      "cardId": "major-17",
+      "themeId": "theme-01",
+      "sourceId": 17,
+      "name": "星星",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "星星",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "希望可以落在行动上，今天完成一件能给自己带来信心的小事。",
+      "meaningZh": "希望可以落在行动上，今天完成一件能给自己带来信心的小事。",
+      "image": "/tarot/flashcards/covers/major-17-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-17/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-17-theme-02",
+      "cardId": "major-17",
+      "themeId": "theme-02",
+      "sourceId": 17,
+      "name": "星星",
+      "themeName": "珊瑚星泉",
+      "keywordsZh": [
+        "星星",
+        "珊瑚星泉"
+      ],
+      "dailyGuidanceZh": "珊瑚星泉为生命补水，今天主动寻求一点支持，不必独自消化所有情绪。",
+      "meaningZh": "珊瑚星泉为生命补水，今天主动寻求一点支持，不必独自消化所有情绪。",
+      "image": "/tarot/flashcards/covers/major-17-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-17/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-17-theme-03",
+      "cardId": "major-17",
+      "themeId": "theme-03",
+      "sourceId": 17,
+      "name": "星星",
+      "themeName": "雪融星溪",
+      "keywordsZh": [
+        "星星",
+        "雪融星溪"
+      ],
+      "dailyGuidanceZh": "雪融星溪由细流开始，今天承认一个微小的改善，让恢复有自己的速度。",
+      "meaningZh": "雪融星溪由细流开始，今天承认一个微小的改善，让恢复有自己的速度。",
+      "image": "/tarot/flashcards/covers/major-17-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-17/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-17-theme-04",
+      "cardId": "major-17",
+      "themeId": "theme-04",
+      "sourceId": 17,
+      "name": "星星",
+      "themeName": "荒园复苏",
+      "keywordsZh": [
+        "星星",
+        "荒园复苏"
+      ],
+      "dailyGuidanceZh": "荒园复苏需要持续照料，今天重拾一件曾让你有力量的日常习惯。",
+      "meaningZh": "荒园复苏需要持续照料，今天重拾一件曾让你有力量的日常习惯。",
+      "image": "/tarot/flashcards/covers/major-17-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-17/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-17-theme-05",
+      "cardId": "major-17",
+      "themeId": "theme-05",
+      "sourceId": 17,
+      "name": "星星",
+      "themeName": "星云温室",
+      "keywordsZh": [
+        "星星",
+        "星云温室"
+      ],
+      "dailyGuidanceZh": "星云温室为愿望保温，今天写下一个想守护的希望，并给它安排具体时间。",
+      "meaningZh": "星云温室为愿望保温，今天写下一个想守护的希望，并给它安排具体时间。",
+      "image": "/tarot/flashcards/covers/major-17-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-17/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-18-theme-01",
+      "cardId": "major-18",
+      "themeId": "theme-01",
+      "sourceId": 18,
+      "name": "月亮",
+      "themeName": "月下银路",
+      "keywordsZh": [
+        "月亮",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "不确定会放大猜测，今天问清一个可以确认的问题，让事实与想象各有位置。",
+      "meaningZh": "不确定会放大猜测，今天问清一个可以确认的问题，让事实与想象各有位置。",
+      "image": "/tarot/flashcards/covers/major-18-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-18/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-18-theme-02",
+      "cardId": "major-18",
+      "themeId": "theme-02",
+      "sourceId": 18,
+      "name": "深海幻月",
+      "themeName": "月亮 · 独立主题",
+      "keywordsZh": [
+        "深海幻月",
+        "月亮 · 独立主题"
+      ],
+      "dailyGuidanceZh": "深海幻月让情绪显得深远，今天给不安命名，不急着把它解释成答案。",
+      "meaningZh": "深海幻月让情绪显得深远，今天给不安命名，不急着把它解释成答案。",
+      "image": "/tarot/flashcards/covers/major-18-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-18/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-18-theme-03",
+      "cardId": "major-18",
+      "themeId": "theme-03",
+      "sourceId": 18,
+      "name": "月亮",
+      "themeName": "赤月荒城",
+      "keywordsZh": [
+        "月亮",
+        "赤月荒城"
+      ],
+      "dailyGuidanceZh": "赤月荒城提醒你辨认警报，今天核对焦虑来自现实风险还是旧日记忆。",
+      "meaningZh": "赤月荒城提醒你辨认警报，今天核对焦虑来自现实风险还是旧日记忆。",
+      "image": "/tarot/flashcards/covers/major-18-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-18/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-18-theme-04",
+      "cardId": "major-18",
+      "themeId": "theme-04",
+      "sourceId": 18,
+      "name": "月亮",
+      "themeName": "机械月宫",
+      "keywordsZh": [
+        "月亮",
+        "机械月宫"
+      ],
+      "dailyGuidanceZh": "机械月宫让规律与感受相遇，今天记录情绪出现的时间，观察自己的节奏。",
+      "meaningZh": "机械月宫让规律与感受相遇，今天记录情绪出现的时间，观察自己的节奏。",
+      "image": "/tarot/flashcards/covers/major-18-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-18/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-18-theme-05",
+      "cardId": "major-18",
+      "themeId": "theme-05",
+      "sourceId": 18,
+      "name": "月亮",
+      "themeName": "梦境之外",
+      "keywordsZh": [
+        "月亮",
+        "梦境之外"
+      ],
+      "dailyGuidanceZh": "梦境之外还有现实的光，今天从反复想象中抽身，做一件具体而踏实的事。",
+      "meaningZh": "梦境之外还有现实的光，今天从反复想象中抽身，做一件具体而踏实的事。",
+      "image": "/tarot/flashcards/covers/major-18-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-18/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-19-theme-01",
+      "cardId": "major-19",
+      "themeId": "theme-01",
+      "sourceId": 19,
+      "name": "太阳",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "太阳",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "分享坦率的快乐，今天说出一件具体开心的事，让回应更有温度。",
+      "meaningZh": "分享坦率的快乐，今天说出一件具体开心的事，让回应更有温度。",
+      "image": "/tarot/flashcards/covers/major-19-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-19/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-19-theme-02",
+      "cardId": "major-19",
+      "themeId": "theme-02",
+      "sourceId": 19,
+      "name": "太阳",
+      "themeName": "晨海花骑",
+      "keywordsZh": [
+        "太阳",
+        "晨海花骑"
+      ],
+      "dailyGuidanceZh": "晨海花骑迎向新的一天，今天主动发出一个轻松而明确的邀请。",
+      "meaningZh": "晨海花骑迎向新的一天，今天主动发出一个轻松而明确的邀请。",
+      "image": "/tarot/flashcards/covers/major-19-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-19/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-19-theme-03",
+      "cardId": "major-19",
+      "themeId": "theme-03",
+      "sourceId": 19,
+      "name": "太阳",
+      "themeName": "雪国暖阳",
+      "keywordsZh": [
+        "太阳",
+        "雪国暖阳"
+      ],
+      "dailyGuidanceZh": "雪国暖阳融化距离，今天给一个冷下来的交流带去真诚而不过度的关心。",
+      "meaningZh": "雪国暖阳融化距离，今天给一个冷下来的交流带去真诚而不过度的关心。",
+      "image": "/tarot/flashcards/covers/major-19-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-19/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-19-theme-04",
+      "cardId": "major-19",
+      "themeId": "theme-04",
+      "sourceId": 19,
+      "name": "太阳",
+      "themeName": "丰收游园",
+      "keywordsZh": [
+        "太阳",
+        "丰收游园"
+      ],
+      "dailyGuidanceZh": "丰收游园让成果被看见，今天庆祝一个小进展，不急着转向下一个目标。",
+      "meaningZh": "丰收游园让成果被看见，今天庆祝一个小进展，不急着转向下一个目标。",
+      "image": "/tarot/flashcards/covers/major-19-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-19/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-19-theme-05",
+      "cardId": "major-19",
+      "themeId": "theme-05",
+      "sourceId": 19,
+      "name": "太阳",
+      "themeName": "云上晴城",
+      "keywordsZh": [
+        "太阳",
+        "云上晴城"
+      ],
+      "dailyGuidanceZh": "云上晴城视野开阔，今天清楚表达你的好意，不用猜测来替代沟通。",
+      "meaningZh": "云上晴城视野开阔，今天清楚表达你的好意，不用猜测来替代沟通。",
+      "image": "/tarot/flashcards/covers/major-19-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-19/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-20-theme-01",
+      "cardId": "major-20",
+      "themeId": "theme-01",
+      "sourceId": 20,
+      "name": "审判",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "审判",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "回看经历是为了获得新选择，今天总结一件事，而非给自己定罪。",
+      "meaningZh": "回看经历是为了获得新选择，今天总结一件事，而非给自己定罪。",
+      "image": "/tarot/flashcards/covers/major-20-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-20/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-20-theme-02",
+      "cardId": "major-20",
+      "themeId": "theme-02",
+      "sourceId": 20,
+      "name": "审判",
+      "themeName": "潮声苏醒",
+      "keywordsZh": [
+        "审判",
+        "潮声苏醒"
+      ],
+      "dailyGuidanceZh": "潮声苏醒把被压住的感受带回来，今天认真听见一个一直未回应的需要。",
+      "meaningZh": "潮声苏醒把被压住的感受带回来，今天认真听见一个一直未回应的需要。",
+      "image": "/tarot/flashcards/covers/major-20-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-20/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-20-theme-03",
+      "cardId": "major-20",
+      "themeId": "theme-03",
+      "sourceId": 20,
+      "name": "审判",
+      "themeName": "雪谷回响",
+      "keywordsZh": [
+        "审判",
+        "雪谷回响"
+      ],
+      "dailyGuidanceZh": "雪谷回响让声音再次抵达，今天重新说清一件曾被误解的事。",
+      "meaningZh": "雪谷回响让声音再次抵达，今天重新说清一件曾被误解的事。",
+      "image": "/tarot/flashcards/covers/major-20-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-20/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-20-theme-04",
+      "cardId": "major-20",
+      "themeId": "theme-04",
+      "sourceId": 20,
+      "name": "审判",
+      "themeName": "荒城破晓",
+      "keywordsZh": [
+        "审判",
+        "荒城破晓"
+      ],
+      "dailyGuidanceZh": "荒城破晓为旧日留出口，今天结束一种无效的自责，尝试一个实际改变。",
+      "meaningZh": "荒城破晓为旧日留出口，今天结束一种无效的自责，尝试一个实际改变。",
+      "image": "/tarot/flashcards/covers/major-20-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-20/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-20-theme-05",
+      "cardId": "major-20",
+      "themeId": "theme-05",
+      "sourceId": 20,
+      "name": "审判",
+      "themeName": "群星应答",
+      "keywordsZh": [
+        "审判",
+        "群星应答"
+      ],
+      "dailyGuidanceZh": "群星应答让回应来自多个方向，今天接纳一条有帮助的反馈，不把它当作判决。",
+      "meaningZh": "群星应答让回应来自多个方向，今天接纳一条有帮助的反馈，不把它当作判决。",
+      "image": "/tarot/flashcards/covers/major-20-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-20/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-21-theme-01",
+      "cardId": "major-21",
+      "themeId": "theme-01",
+      "sourceId": 21,
+      "name": "世界",
+      "themeName": "基础牌面",
+      "keywordsZh": [
+        "世界",
+        "新视角"
+      ],
+      "dailyGuidanceZh": "完整感来自真实参与，今天认可一个阶段的完成，也保留自己的空间。",
+      "meaningZh": "完整感来自真实参与，今天认可一个阶段的完成，也保留自己的空间。",
+      "image": "/tarot/flashcards/covers/major-21-theme-01.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-21/theme-01/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-21-theme-02",
+      "cardId": "major-21",
+      "themeId": "theme-02",
+      "sourceId": 21,
+      "name": "世界",
+      "themeName": "珊瑚圆舞",
+      "keywordsZh": [
+        "世界",
+        "珊瑚圆舞"
+      ],
+      "dailyGuidanceZh": "珊瑚圆舞让个体参与整体，今天为一个共同目标贡献自己能承担的一小部分。",
+      "meaningZh": "珊瑚圆舞让个体参与整体，今天为一个共同目标贡献自己能承担的一小部分。",
+      "image": "/tarot/flashcards/covers/major-21-theme-02.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-21/theme-02/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-21-theme-03",
+      "cardId": "major-21",
+      "themeId": "theme-03",
+      "sourceId": 21,
+      "name": "世界",
+      "themeName": "四季织锦",
+      "keywordsZh": [
+        "世界",
+        "四季织锦"
+      ],
+      "dailyGuidanceZh": "四季织锦让经历连成纹理，今天回看不同阶段，承认变化也属于你。",
+      "meaningZh": "四季织锦让经历连成纹理，今天回看不同阶段，承认变化也属于你。",
+      "image": "/tarot/flashcards/covers/major-21-theme-03.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-21/theme-03/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-21-theme-04",
+      "cardId": "major-21",
+      "themeId": "theme-04",
+      "sourceId": 21,
+      "name": "世界",
+      "themeName": "琉璃万园",
+      "keywordsZh": [
+        "世界",
+        "琉璃万园"
+      ],
+      "dailyGuidanceZh": "琉璃万园容纳不同的生活，今天欣赏一种与你不同的选择，不必比较优劣。",
+      "meaningZh": "琉璃万园容纳不同的生活，今天欣赏一种与你不同的选择，不必比较优劣。",
+      "image": "/tarot/flashcards/covers/major-21-theme-04.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-21/theme-04/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    },
+    {
+      "variantId": "major-21-theme-05",
+      "cardId": "major-21",
+      "themeId": "theme-05",
+      "sourceId": 21,
+      "name": "世界",
+      "themeName": "万象归环",
+      "keywordsZh": [
+        "世界",
+        "万象归环"
+      ],
+      "dailyGuidanceZh": "万象归环让完成也成为开端，今天为一个阶段收尾，再选定下一步想去的方向。",
+      "meaningZh": "万象归环让完成也成为开端，今天为一个阶段收尾，再选定下一步想去的方向。",
+      "image": "/tarot/flashcards/covers/major-21-theme-05.jpg",
+      "viewerUrl": "/tarot/flashcards/v20261009/major-21/theme-05/?embed=1",
+      "deckVersion": "moonlit-110-v1"
+    }
+  ]
+}

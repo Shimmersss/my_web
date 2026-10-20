@@ -57,7 +57,7 @@ It is a complete, self-hostable application rather than a UI demo:
 | 🎨 Image studio | `/image-generate` | Text-to-image and reference-image editing with size and quality options. History is kept, downloads require auth, and failed tasks refund credits. | ✅ Live |
 | 🌙 Moonlit collection | `/moonlit-collection` | 22 Major Arcana × 5 independent themes = 110 theme cards, shown as holographic cards with tilt, thickness and foil effects | ✅ Live |
 | ✨ Moonlit draw | `/moonlit-draw` | Spend credits to draw theme cards; the charge and the draw share one transaction, and the price is set in the admin console. Daily check-in also grants a card of the day, and duplicates add to your count. | ✅ Live |
-| 🔮 Moonlit reading | `/tarot-reading` | Ask → choose a spread (single / three-card / either-or) → shuffle and cut → pick from the fan → 3D flip → instant meanings → optional AI deep reading. The server draws the cards, upright or reversed. | 🚧 Frontend done, backend in progress |
+| 🔮 Moonlit reading | `/tarot-reading` | Ask → choose a spread (single / three-card / either-or) → shuffle and cut → pick from the fan → 3D flip → instant meanings → optional AI deep reading. The server decides card order, orientation and theme; AI readings cost credits. | ✅ Live |
 | 🐙 GitHub radar | `/news` | Featured repositories plus weekly and monthly star rankings of new GitHub projects, with AI summaries. READMEs are fetched through the backend. | ✅ Live |
 | 💬 Guestbook | `/guestbook` | Public messages with single-level replies, likes and in-site notifications. Authors can delete their own posts; root moderates everything. | ✅ Live |
 | 🛠️ Admin | `/admin` | Daily overview, per-section visibility, API and model settings, task file retention, credit pricing and check-in, invite codes, users and the credit ledger | ✅ Live |
@@ -104,9 +104,9 @@ The wall is grouped by the 22 base cards. Open one to switch between its five in
   </tr>
 </table>
 
-### 🔮 Moonlit reading (preview, in development)
+### 🔮 Moonlit reading
 
-The page has a Canvas night sky, an astrolabe, a heptagram shuffle and FLIP fly-ins. Animations only change transform and opacity, and they respect the reduced-motion setting. These screenshots use the frontend mock mode (`VITE_TAROT_MOCK=1`).
+The page has a Canvas night sky, an astrolabe, a heptagram shuffle and FLIP fly-ins. Animations only change transform and opacity, and they respect the reduced-motion setting. These screenshots were taken locally with the frontend mock mode (`VITE_TAROT_MOCK=1`).
 
 <table>
   <tr>
@@ -263,7 +263,7 @@ See [DEPLOYMENT.md](DEPLOYMENT.md) for production steps, backups (always back up
 - [x] Dual-pipeline decks: PPTX (PPTD) and HTML (reveal.js)
 - [x] Image studio, guestbook with notifications, Android client
 - [x] Moonlit collection: 110 independent theme cards, credit draws, daily check-in
-- [ ] Moonlit reading backend: spread draws, upright/reversed cards, AI deep readings ([spec](docs/plans/2026-10-13-moonlit-divination.md))
+- [x] Moonlit reading: server-side draws, upright/reversed cards, AI deep readings ([spec](docs/plans/2026-10-13-moonlit-divination.md))
 - [ ] Fully layered 3D theme assets for the remaining 21 cards ([art guidelines](docs/tarot-v2/README.md))
 - [ ] Per-task container isolation and egress limits for PPTX generation, before opening it to regular users
 

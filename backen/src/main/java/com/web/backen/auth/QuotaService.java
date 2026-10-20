@@ -3,6 +3,8 @@ package com.web.backen.auth;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.web.backen.matchmaking.TarotDeck;
+import com.web.backen.moonlit.MoonlitDeck;
+import com.web.backen.moonlit.MoonlitRecords;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -32,6 +34,7 @@ public class QuotaService {
         ensureSetting("translation.credit_per_page", "1");
         ensureSetting("ppt.credit_per_task", "10");
         ensureSetting("matchmaking.credit_per_report", "2");
+        ensureSetting("moonlit.credit_per_draw", "3");
         ensureSetting("daily_checkin.enabled", "true");
         ensureSetting("daily_checkin.credits", "2");
         ensureSetting("daily_checkin.min_credits", String.valueOf(dailyCheckinCredits()));
@@ -52,6 +55,8 @@ public class QuotaService {
     public int matchmakingCreditPerReport() {
         return intSetting("matchmaking.credit_per_report", 2);
     }
+    public int moonlitCreditPerDraw() { return intSetting("moonlit.credit_per_draw", 3); }
+    public void updateMoonlitCreditPerDraw(int value) { setSetting("moonlit.credit_per_draw", String.valueOf(Math.max(1, value))); }
 
     public int imageCredit(String quality) {
         return switch (quality == null ? "medium" : quality.toLowerCase()) {
@@ -66,6 +71,7 @@ public class QuotaService {
         result.put("translationCreditPerPage", translationCreditPerPage());
         result.put("pptCreditPerTask", pptCreditPerTask());
         result.put("matchmakingCreditPerReport", matchmakingCreditPerReport());
+        result.put("moonlitCreditPerDraw", moonlitCreditPerDraw());
         result.put("imageLowCredits", imageCredit("low"));
         result.put("imageMediumCredits", imageCredit("medium"));
         result.put("imageHighCredits", imageCredit("high"));
@@ -85,7 +91,9 @@ public class QuotaService {
         LocalDate today = today();
         List<Map<String, Object>> rows = dailyCheckinRows(userId, today);
         if (!rows.isEmpty() && rows.get(0).get("tarot_payload") == null) {
-            Map<String, Object> card = newDailyTarot();
+            // An old check-in missing its snapshot remains on its historical 22-card deck.
+            Map<String, Object> card = new LinkedHashMap<>(TarotDeck.randomDailyCard(tarotRandom));
+            card.put("deckVersion", TarotDeck.VERSION);
             jdbc.update("UPDATE daily_checkins SET deck_version=?, card_id=?, tarot_payload=? WHERE user_id=? AND checkin_date=? AND tarot_payload IS NULL",
                     TarotDeck.VERSION, card.get("cardId"), writeDailyTarot(card), userId, today);
             rows = dailyCheckinRows(userId, today);
@@ -114,12 +122,13 @@ public class QuotaService {
         Map<String, Object> card = newDailyTarot();
         try {
             jdbc.update("INSERT INTO daily_checkins (user_id, checkin_date, deck_version, card_id, tarot_payload) VALUES (?, ?, ?, ?, ?)",
-                    userId, today, TarotDeck.VERSION, card.get("cardId"), writeDailyTarot(card));
+                    userId, today, MoonlitDeck.VERSION, card.get("cardId"), writeDailyTarot(card));
         } catch (DuplicateKeyException e) {
             Map<String, Object> existing = new LinkedHashMap<>(dailyCheckinStatus(userId));
             existing.put("balance", balance(userId)); existing.put("granted", 0);
             return existing;
         }
+        MoonlitRecords.record(jdbc, userId, String.valueOf(card.get("variantId")), "daily", today, java.util.UUID.randomUUID().toString());
         int reward = ThreadLocalRandom.current().nextInt(dailyCheckinMinCredits(), dailyCheckinMaxCredits() + 1);
         jdbc.update("UPDATE users SET credits=credits+?, updated_at=CURRENT_TIMESTAMP WHERE id=?", reward, userId);
         int balance = balance(userId);
@@ -140,8 +149,7 @@ public class QuotaService {
     }
 
     private Map<String, Object> newDailyTarot() {
-        Map<String, Object> card = new LinkedHashMap<>(TarotDeck.randomDailyCard(tarotRandom));
-        card.put("deckVersion", TarotDeck.VERSION);
+        Map<String, Object> card = MoonlitDeck.randomCard(tarotRandom);
         return card;
     }
 

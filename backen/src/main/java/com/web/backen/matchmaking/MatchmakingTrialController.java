@@ -43,7 +43,7 @@ public class MatchmakingTrialController {
     private Map<String, Object> userData(AuthUser user, String csrfToken, Map<String, Object> access) {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("id", user.id());
-        data.put("username", "婚恋内测");
+        data.put("username", "占卜内测");
         data.put("role", user.role());
         data.put("credits", 0);
         data.put("root", false);

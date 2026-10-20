@@ -6,7 +6,7 @@ const items = [
   { key: 'Translate', label: '翻译' },
   { key: 'Contact', label: 'PPT 生成' },
   { key: 'ImageGenerate', label: 'GPT 生图' },
-  { key: 'Matchmaking', label: '婚恋报告' },
+  { key: 'Matchmaking', label: '月下占卜' },
   { key: 'News', label: 'GitHub 项目' },
   { key: 'Guestbook', label: '留言板' },
   { key: 'Admin', label: '后台' },
@@ -22,6 +22,8 @@ assert.equal(desktop.find(item => item.key === 'Guestbook').label, '留言板')
 assert.equal(resolveMenuPath('Publications'), '/publications')
 assert.equal(resolveMenuPath('Contact'), '/contact')
 assert.equal(resolveMenuPath('News'), '/news')
+assert.equal(resolveMenuPath('Matchmaking'), '/tarot-reading')
+assert.equal(desktop.find(item => item.key === 'Matchmaking').label, '月下占卜')
 assert.equal(resolveMenuPath('More'), '')
 
 console.log('[navigation-check] desktop primary and More groups verified')

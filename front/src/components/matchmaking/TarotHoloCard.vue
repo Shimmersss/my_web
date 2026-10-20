@@ -2,7 +2,7 @@
   <div
     ref="card"
     class="tarot-holo-card"
-    :class="{ compact }"
+    :class="{ compact, reversed }"
     @pointerdown="startTouchInteraction"
     @pointerenter="setPointerPosition"
     @pointermove="setPointerPosition"
@@ -13,7 +13,7 @@
   >
     <span class="card-thickness" aria-hidden="true"></span>
     <div class="card-surface">
-      <img v-if="!imageFailed" class="tarot-art" :src="src" :alt="alt" loading="lazy" decoding="async" @error="handleImageError" />
+      <img v-if="!imageFailed" class="tarot-art" :src="src" :alt="alt" loading="lazy" decoding="async" @load="$emit('image-load')" @error="handleImageError" />
       <span v-else class="tarot-art tarot-art-fallback" role="img" :aria-label="`${alt}加载失败`">✦</span>
       <span class="card-depth" aria-hidden="true"></span>
       <span class="foil" aria-hidden="true"></span>
@@ -31,13 +31,15 @@
 <script setup>
 import { onBeforeUnmount, ref, watch } from "vue";
 
-const emit = defineEmits(["image-error"]);
+const emit = defineEmits(["image-error", "image-load"]);
 const props = defineProps({
   src: { type: String, required: true },
   alt: { type: String, required: true },
   title: { type: String, default: "" },
   subtitle: { type: String, default: "" },
   compact: { type: Boolean, default: false },
+  // Tarot reversals turn only the artwork; frame, foil and caption stay upright.
+  reversed: { type: Boolean, default: false },
 });
 
 const card = ref(null);
@@ -236,6 +238,10 @@ onBeforeUnmount(() => {
   transform: translate3d(var(--art-offset-x), var(--art-offset-y), 2px) scale(1.025);
 }
 
+.reversed .tarot-art {
+  transform: translate3d(calc(var(--art-offset-x) * -1), calc(var(--art-offset-y) * -1), 2px) rotate(180deg) scale(1.025);
+}
+
 .tarot-art-fallback {
   display: grid;
   place-items: center;
@@ -363,6 +369,10 @@ onBeforeUnmount(() => {
   transform: scale(1.012);
 }
 
+.compact.reversed .tarot-art {
+  transform: rotate(180deg) scale(1.012);
+}
+
 .compact .card-thickness,
 .compact .card-caption {
   display: none;
@@ -400,6 +410,10 @@ onBeforeUnmount(() => {
   .relief-frame,
   .card-caption {
     transform: none;
+  }
+
+  .reversed .tarot-art {
+    transform: rotate(180deg);
   }
 
   .foil {

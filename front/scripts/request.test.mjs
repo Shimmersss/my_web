@@ -29,3 +29,26 @@ test('timeouts and caller cancellation abort fetch; HTTP status survives error n
     await assert.rejects(requestWithOptions('/test', { method: 'POST' }), { status: 403, message: 'Access expired' })
   } finally { globalThis.fetch = originalFetch; globalThis.localStorage = originalStorage; console.error = originalError }
 })
+
+test('admin quota save transmits moonlit draw price with the existing billing fields', async () => {
+  const requestUrl = `data:text/javascript;base64,${Buffer.from(source).toString('base64')}`
+  const apiSource = (await readFile(new URL('../src/api/index.js', import.meta.url), 'utf8'))
+    .replace('"@/utils/request"', JSON.stringify(requestUrl))
+    .replace('import { requestAndroidDownload } from "@/utils/androidBridge";', 'const requestAndroidDownload = () => { throw new Error("unused in quota save") };')
+  const { updateQuotaSettings } = await import(`data:text/javascript;base64,${Buffer.from(apiSource).toString('base64')}`)
+  const originalFetch = globalThis.fetch, originalStorage = globalThis.localStorage
+  const settings = { moonlitCreditPerDraw: 7, translationCreditPerPage: 2, pptCreditPerTask: 12,
+    matchmakingCreditPerReport: 10, imageLowCredits: 2, imageMediumCredits: 4, imageHighCredits: 8,
+    dailyCheckinEnabled: true, dailyCheckinMinCredits: 2, dailyCheckinMaxCredits: 5 }
+  try {
+    globalThis.localStorage = { getItem: () => 'test-csrf' }
+    globalThis.fetch = async (url, options) => {
+      assert.equal(url, '/api/admin/accounts/settings')
+      assert.equal(options.method, 'PUT')
+      assert.equal(options.headers['X-CSRF-Token'], 'test-csrf')
+      assert.deepEqual(JSON.parse(options.body), settings)
+      return new Response(JSON.stringify({ code: 200, data: settings }), { status: 200 })
+    }
+    assert.deepEqual((await updateQuotaSettings(settings)).data, settings)
+  } finally { globalThis.fetch = originalFetch; globalThis.localStorage = originalStorage }
+})

@@ -67,7 +67,7 @@ public class RuntimeConfigService {
     private static final String PRESENTATION_IMAGE_MAX_GLOBAL_HISTORY = "presentation-image.history.max-total";
     private static final String MATCHMAKING_MAX_HISTORY = "matchmaking.history.max-per-user";
     private static final String MATCHMAKING_MAX_GLOBAL_HISTORY = "matchmaking.history.max-total";
-    private static final String MATCHMAKING_RELATIONSHIP_ENABLED = "matchmaking.relationship_enabled";
+    private static final String MATCHMAKING_TAROT_AI_ENABLED = "matchmaking.tarot_ai_enabled";
     private static final String GITHUB_RANKING_ENABLED = "github.ranking.enabled";
     private static final String GITHUB_RANKING_INTERVAL_HOURS = "github.ranking.interval.hours";
     private static final String GITHUB_RANKING_MANUAL_COOLDOWN_MINUTES = "github.ranking.manual.cooldown.minutes";
@@ -280,8 +280,8 @@ public class RuntimeConfigService {
     public Map<String, Object> publicSettings() {
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("llm", provider("LLM / 通用生成", llmUrl(), llmModel(), llmKey(), llmProtocol(), resolvedLlmProtocol()));
-        Map<String, Object> matchmaking = provider("婚恋报告 / Mimo", matchmakingLlmUrl(), matchmakingLlmModel(), matchmakingLlmKey(), matchmakingLlmProtocol(), resolvedMatchmakingLlmProtocol());
-        matchmaking.put("relationshipEnabled", relationshipEnabled());
+        Map<String, Object> matchmaking = provider("月下占卜 AI", matchmakingLlmUrl(), matchmakingLlmModel(), matchmakingLlmKey(), matchmakingLlmProtocol(), resolvedMatchmakingLlmProtocol());
+        matchmaking.put("tarotAiEnabled", tarotAiEnabled());
         data.put("matchmaking", matchmaking);
         data.put("babeldoc", provider("BabelDOC / PDF 翻译", babelUrl(), babelModel(), babelKey(), "openai", "OPENAI"));
         data.put("zotero", new LinkedHashMap<>(Map.of(
@@ -295,7 +295,7 @@ public class RuntimeConfigService {
         data.put("imageRetention", imageRetentionSettings());
         data.put("presentationImageRetention", presentationImageRetentionSettings());
         data.put("matchmakingRetention", matchmakingRetentionSettings());
-        data.put("matchmakingRelationshipEnabled", relationshipEnabled());
+        data.put("matchmakingTarotAiEnabled", tarotAiEnabled());
         data.put("research", new LinkedHashMap<>(Map.of(
                 "name", "Tavily / 演示研究",
                 "baseUrl", tavilyUrl(),
@@ -337,8 +337,8 @@ public class RuntimeConfigService {
             save(MATCHMAKING_LLM_PROTOCOL, normalizeProtocol(string(matchmakingBody, "protocol").isBlank()
                     ? matchmakingLlmProtocol() : string(matchmakingBody, "protocol")));
             saveSecret(MATCHMAKING_LLM_KEY, matchmakingBody.get("apiKey"), matchmakingLlmKey());
-            if (matchmakingBody.containsKey("relationshipEnabled"))
-                save(MATCHMAKING_RELATIONSHIP_ENABLED, Boolean.toString(booleanValue(matchmakingBody.get("relationshipEnabled"), relationshipEnabled())));
+            if (matchmakingBody.containsKey("tarotAiEnabled"))
+                save(MATCHMAKING_TAROT_AI_ENABLED, Boolean.toString(booleanValue(matchmakingBody.get("tarotAiEnabled"), tarotAiEnabled())));
         }
         save(BABEL_URL, url(string(babelBody, "baseUrl"), babelUrl()));
         save(BABEL_MODEL, text(string(babelBody, "model"), babelModel()));
@@ -558,7 +558,7 @@ public class RuntimeConfigService {
     }
     public int matchmakingMaxHistory() { return safeInt(MATCHMAKING_MAX_HISTORY, 20, 1, 100); }
     public int matchmakingMaxGlobalHistory() { return safeInt(MATCHMAKING_MAX_GLOBAL_HISTORY, 200, 1, 1000); }
-    public boolean relationshipEnabled() { return Boolean.parseBoolean(value(MATCHMAKING_RELATIONSHIP_ENABLED, "false")); }
+    public boolean tarotAiEnabled() { return Boolean.parseBoolean(value(MATCHMAKING_TAROT_AI_ENABLED, "false")); }
     private int safeInt(String key, int fallback, int min, int max) { return clamp(intValue(value(key, Integer.toString(fallback)), fallback), min, max); }
     private int clamp(int value, int min, int max) { return Math.max(min, Math.min(max, value)); }
     private int intValue(Object value, int fallback) { try { return Integer.parseInt(value == null ? "" : value.toString().trim()); } catch (Exception e) { return fallback; } }

@@ -71,3 +71,8 @@ backen/**/.env*
 
 
 # Root README.md stays trackable for public project overview.
+
+# Moonlit flashcard viewers (~880 MB of GLB/texture layers) are a release
+# asset deployed separately; keep only covers, line art and the catalogue.
+front/public/tarot/flashcards/v20261009/**/*.*
+!front/public/tarot/flashcards/v20261009/*/*/assets/lineart.png

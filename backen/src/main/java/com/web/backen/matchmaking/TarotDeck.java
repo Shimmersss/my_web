@@ -49,10 +49,6 @@ public final class TarotDeck {
         return result;
     }
 
-    public static List<Map<String, Object>> catalogue() {
-        return CARDS.stream().map(TarotDeck::publicView).toList();
-    }
-
     public static Map<String, Object> randomDailyCard(java.security.SecureRandom random) {
         Card card = CARDS.get(random.nextInt(CARDS.size()));
         Map<String, Object> result = new LinkedHashMap<>(publicView(card));

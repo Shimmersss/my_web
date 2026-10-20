@@ -61,9 +61,9 @@
               <p>账号与账本</p>
               <a href="#billing-panel">计费规则 <span>09</span></a>
               <a href="#invites-panel">邀请码 <span>10</span></a>
-              <a href="#matchmaking-trial-panel">婚恋内测码 <span>11</span></a>
+              <a href="#matchmaking-trial-panel">内测码 <span>11</span></a>
               <a href="#users-panel">用户与流水 <span>12</span></a>
-              <a href="#matchmaking-panel">婚恋模型 <span>13</span></a>
+              <a href="#matchmaking-panel">占卜模型 <span>13</span></a>
             </nav>
             <div class="admin-index__note">
               <span class="admin-index__note-dot" aria-hidden="true"></span>
@@ -473,7 +473,7 @@
             </button>
           </div>
           <p class="panel-desc">
-            PPT、文献翻译、GPT 生图、演示生图素材和婚恋报告分别按用户及全站总量清理；婚恋报告仍受 30 天期限约束。
+            PPT、文献翻译、GPT 生图、演示生图素材和占卜报告分别按用户及全站总量清理；占卜报告仍受 30 天期限约束。
           </p>
           <div class="retention-grid">
             <div>
@@ -533,7 +533,7 @@
               /></label>
             </div>
             <div>
-              <h3>婚恋报告</h3>
+              <h3>占卜报告</h3>
               <label
                 >每用户最多保留（份）<n-input-number
                   v-model:value="matchmakingRetentionForm.maxPerUser"
@@ -621,6 +621,10 @@
               ><label
                 >PPT 生成 / 次<n-input-number
                   v-model:value="settings.pptCreditPerTask"
+                  :min="1" /></label
+              ><label
+                >月下抽卡 / 次<n-input-number
+                  v-model:value="settings.moonlitCreditPerDraw"
                   :min="1" /></label
               ><label
                 >生图 low / 张<n-input-number
@@ -737,15 +741,11 @@
         </section>
         <section id="matchmaking-trial-panel" class="admin-panel">
           <div class="panel-title">
-            <div><span class="eyebrow">MATCHMAKING PRIVATE BETA</span><h2>婚恋内测邀请码</h2></div>
+            <div><span class="eyebrow">PRIVATE BETA · CLOSED</span><h2>内测邀请码（已停止发放）</h2></div>
             <span class="muted">{{ trialCodes.length }} 枚 · root 可随时查看使用情况与完整码</span>
           </div>
-          <p class="panel-desc">访客无需注册即可免费生成一份报告；失败可重试，完成后只能恢复查看。默认首次兑换期限为 7 天。</p>
-          <div class="trial-code-create">
-            <label>首次兑换截止时间<n-input v-model:value="trialExpiresAt" type="datetime-local" /></label>
-            <button class="primary" @click="createTrialCode">生成并复制内测码</button>
-          </div>
-          <div class="table-wrap audit-table-wrap" tabindex="0" role="region" aria-label="婚恋内测邀请码管理，可上下滚动">
+          <p class="panel-desc">新邀请码已停止发放。已发出的邀请码在有效期内仍可兑换一次免费的 AI 深度解读，失败可重试；这里可以查看使用情况、复制或撤销。</p>
+          <div class="table-wrap audit-table-wrap" tabindex="0" role="region" aria-label="内测邀请码管理，可上下滚动">
             <table>
               <thead><tr><th>邀请码</th><th>状态</th><th>首次截止</th><th>兑换时间</th><th>完成时间</th><th>报告</th><th>操作</th></tr></thead>
               <tbody>
@@ -759,7 +759,7 @@
                   <td>{{ formatDate(code.expiresAt) }}</td>
                   <td>{{ formatDate(code.redeemedAt) }}</td>
                   <td>{{ formatDate(code.completedAt) }}</td>
-                  <td><a v-if="code.reportId" :href="`/matchmaking-report/${code.reportId}`">查看</a><span v-else>—</span></td>
+                  <td><a v-if="code.reportId" :href="`/tarot-reading/report/${code.reportId}`">查看</a><span v-else>—</span></td>
                   <td><button class="small" @click="toggleTrialCode(code)">{{ code.enabled ? "撤销" : "恢复" }}</button></td>
                 </tr>
               </tbody>
@@ -856,16 +856,11 @@
             </div>
           </section>
         </div>
-      <section id="matchmaking-panel" class="admin-panel"><div class="panel-title"><div><span class="eyebrow">MATCHMAKING REPORT PROVIDER</span><h2>婚恋报告 / Mimo API</h2></div><button class="primary" @click="saveMatchmakingSettings">保存婚恋报告配置</button></div><p class="panel-desc">默认继承「LLM 通用模型」的 Mimo 配置。填写并保存后，只会覆盖婚恋报告节目；密钥不会返回浏览器。</p><div class="provider-card"><div class="provider-head"><div><h3>专属文本模型</h3><span>不联网检索，仅整理已校验的匿名化条件账本。</span></div><n-tag :type="matchmakingApiHint !== '未配置' ? 'success' : 'warning'" size="small" :bordered="false">{{ matchmakingApiHint }}</n-tag></div><label class="feature-switch"><input v-model="matchmakingForm.relationshipEnabled" type="checkbox" /> 开放“关系探索报告”新建入口 <small>关闭后仍可读取已有新版报告</small></label><n-input v-model:value="matchmakingForm.baseUrl" placeholder="Base URL" /><label class="provider-protocol field-gap">接口协议<select v-model="matchmakingForm.protocol"><option value="auto">自动识别（推荐）</option><option value="openai">OpenAI Chat Completions</option><option value="claude">Claude Messages</option></select></label><n-input v-model:value="matchmakingForm.model" class="field-gap" placeholder="模型名称" /><n-input v-model:value="matchmakingForm.apiKey" class="field-gap" type="password" show-password-on="click" :placeholder="matchmakingApiHint === '未配置' ? '输入 Key' : '留空保留当前 Key'" /><div class="provider-actions"><button class="small" :disabled="testingProvider === 'matchmaking'" @click="testMatchmakingConnection">{{ testingProvider === 'matchmaking' ? '测试中…' : '测试连通性' }}</button><span v-if="testResults.matchmaking" class="test-result" :class="testResults.matchmaking.type">{{ testResults.matchmaking.text }}<em v-if="testResults.matchmaking.latencyMs"> · {{ testResults.matchmaking.latencyMs }} ms</em></span></div></div></section>
-      <section id="matchmaking-billing-panel" class="admin-panel"><div class="panel-title"><div><span class="eyebrow">MATCHMAKING BILLING</span><h2>婚恋报告积分</h2></div><button class="primary" @click="saveSettings">保存计费规则</button></div><p class="panel-desc">每份专属报告在模型成功生成后扣除一次积分；调用、结构校验或保存失败会自动退款。</p><div class="form-grid"><label>婚恋报告 / 份<n-input-number v-model:value="settings.matchmakingCreditPerReport" :min="1" /></label></div></section>
+      <section id="matchmaking-panel" class="admin-panel"><div class="panel-title"><div><span class="eyebrow">TAROT READING PROVIDER</span><h2>月下占卜 / 文本模型</h2></div><button class="primary" @click="saveMatchmakingSettings">保存占卜模型配置</button></div><p class="panel-desc">默认继承「LLM 通用模型」的配置。填写并保存后，只会覆盖月下占卜的 AI 深度解读；密钥不会返回浏览器。</p><div class="provider-card"><div class="provider-head"><div><h3>专属文本模型</h3><span>不联网检索，只依据服务器抽定的牌阵、牌义与用户问题撰写解读。</span></div><n-tag :type="matchmakingApiHint !== '未配置' ? 'success' : 'warning'" size="small" :bordered="false">{{ matchmakingApiHint }}</n-tag></div><label class="feature-switch"><input v-model="matchmakingForm.tarotAiEnabled" type="checkbox" /> 开放“AI 深度解读” <small>关闭后即时牌义、抽牌与已有报告不受影响</small></label><n-input v-model:value="matchmakingForm.baseUrl" placeholder="Base URL" /><label class="provider-protocol field-gap">接口协议<select v-model="matchmakingForm.protocol"><option value="auto">自动识别（推荐）</option><option value="openai">OpenAI Chat Completions</option><option value="claude">Claude Messages</option></select></label><n-input v-model:value="matchmakingForm.model" class="field-gap" placeholder="模型名称" /><n-input v-model:value="matchmakingForm.apiKey" class="field-gap" type="password" show-password-on="click" :placeholder="matchmakingApiHint === '未配置' ? '输入 Key' : '留空保留当前 Key'" /><div class="provider-actions"><button class="small" :disabled="testingProvider === 'matchmaking'" @click="testMatchmakingConnection">{{ testingProvider === 'matchmaking' ? '测试中…' : '测试连通性' }}</button><span v-if="testResults.matchmaking" class="test-result" :class="testResults.matchmaking.type">{{ testResults.matchmaking.text }}<em v-if="testResults.matchmaking.latencyMs"> · {{ testResults.matchmaking.latencyMs }} ms</em></span></div></div></section>
+      <section id="matchmaking-billing-panel" class="admin-panel"><div class="panel-title"><div><span class="eyebrow">TAROT READING BILLING</span><h2>AI 深度解读积分</h2></div><button class="primary" @click="saveSettings">保存计费规则</button></div><p class="panel-desc">每份 AI 深度解读在提交时扣除一次积分；调用、结构校验或保存失败会自动退款。抽牌与即时牌义不收费。</p><div class="form-grid"><label>AI 深度解读 / 份<n-input-number v-model:value="settings.matchmakingCreditPerReport" :min="1" /></label></div></section>
           </div>
         </div>
       </template>
-      <n-modal v-model:show="trialCodeModalOpen" preset="dialog" title="婚恋内测邀请码已生成" :mask-closable="false">
-        <p>邀请码已保存，可随时在本页查看使用情况、完整内容并再次复制。</p>
-        <code class="trial-code-once">{{ createdTrialCode }}</code>
-        <template #action><button class="primary" @click="copyCreatedTrialCode">复制邀请码</button><button class="small" @click="trialCodeModalOpen = false">我已保存</button></template>
-      </n-modal>
       <n-modal v-model:show="passwordResetModalOpen" preset="dialog" :title="`重置 ${passwordResetTarget?.username || ''} 的密码`" :mask-closable="!passwordResetSubmitting">
         <form class="password-reset-form" @submit.prevent="resetPassword">
           <p>新密码至少 10 位。保存后，该账户当前所有登录会话都会退出。</p>
@@ -884,7 +879,6 @@ import { NAlert, NInput, NInputNumber, NModal, NTag, useMessage } from "naive-ui
 import {
   adjustUserCredits,
   createInviteCode,
-  createMatchmakingTrialCode,
   deleteAdminGuestbookEntry,
   deleteInviteCode,
   getAdminAccounts,
@@ -914,7 +908,7 @@ const visibilityItems = [
   { key: "Translate", label: "论文翻译" },
   { key: "Contact", label: "PPT 生成" },
   { key: "ImageGenerate", label: "GPT 生图" },
-  { key: "Matchmaking", label: "婚恋条件报告" },
+  { key: "Matchmaking", label: "月下占卜" },
   { key: "News", label: "GitHub 项目" },
   { key: "Guestbook", label: "留言板" },
 ];
@@ -934,9 +928,6 @@ const apiKeyHints = reactive({
 const users = ref([]);
 const invites = ref([]);
 const trialCodes = ref([]);
-const trialExpiresAt = ref(defaultTrialExpiry());
-const createdTrialCode = ref("");
-const trialCodeModalOpen = ref(false);
 const transactions = ref([]);
 const guestbookEntries = ref([]);
 const guestbookType = ref("all");
@@ -958,6 +949,7 @@ const passwordResetForm = reactive({ password: "", confirmPassword: "" });
 const settings = reactive({
   translationCreditPerPage: 1,
   pptCreditPerTask: 10,
+  moonlitCreditPerDraw: 3,
   matchmakingCreditPerReport: 2,
   imageLowCredits: 2,
   imageMediumCredits: 4,
@@ -986,7 +978,7 @@ const matchmakingForm = reactive({
   model: "",
   apiKey: "",
   protocol: "auto",
-  relationshipEnabled: false,
+  tarotAiEnabled: false,
 });
 const matchmakingApiHint = ref("未配置");
 const pptRetentionForm = reactive({ maxPerUser: 5, maxTotal: 20 });
@@ -1100,7 +1092,7 @@ function applyMatchmakingSettings(setting) {
   matchmakingForm.baseUrl = setting.baseUrl || "";
   matchmakingForm.model = setting.model || "";
   matchmakingForm.protocol = String(setting.protocol || "auto").toLowerCase();
-  matchmakingForm.relationshipEnabled = Boolean(setting.relationshipEnabled);
+  matchmakingForm.tarotAiEnabled = Boolean(setting.tarotAiEnabled);
   matchmakingForm.apiKey = "";
   matchmakingApiHint.value = setting.apiKeyHint || "未配置";
 }
@@ -1108,9 +1100,9 @@ async function saveMatchmakingSettings() {
   try {
     const result = await updateAdminApiSettings({ matchmaking: matchmakingForm });
     applyMatchmakingSettings(result.data?.matchmaking);
-    message.success("婚恋报告 API 配置已保存");
+    message.success("月下占卜模型配置已保存");
   } catch (e) {
-    errorMsg.value = e.message || "婚恋报告 API 配置保存失败";
+    errorMsg.value = e.message || "月下占卜模型配置保存失败";
   }
 }
 async function testMatchmakingConnection() {
@@ -1174,21 +1166,6 @@ async function createInvite() {
     errorMsg.value = e.message || "邀请码生成失败";
   }
 }
-async function createTrialCode() {
-  try {
-    const expiresAt = trialExpiresAt.value ? new Date(trialExpiresAt.value).toISOString() : "";
-    const result = (await createMatchmakingTrialCode(expiresAt)).data || {};
-    createdTrialCode.value = result.code || "";
-    await navigator.clipboard?.writeText(createdTrialCode.value).catch(() => {});
-    trialCodeModalOpen.value = true;
-    await loadDashboard();
-  } catch (e) {
-    errorMsg.value = e.message || "婚恋内测邀请码生成失败";
-  }
-}
-async function copyCreatedTrialCode() {
-  await copyTrialCode(createdTrialCode.value);
-}
 async function copyTrialCode(code) {
   if (!code) return;
   await navigator.clipboard?.writeText(code).catch(() => {});
@@ -1200,15 +1177,10 @@ async function toggleTrialCode(code) {
     const result = await updateMatchmakingTrialCode(code.id, !code.enabled, expiresAt);
     trialCodes.value = result.data || [];
   } catch (e) {
-    errorMsg.value = e.message || "婚恋内测邀请码状态更新失败";
+    errorMsg.value = e.message || "内测邀请码状态更新失败";
   }
 }
 function trialCodeStatus(code) { return resolveTrialCodeStatus(code); }
-function defaultTrialExpiry() {
-  const date = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-  const offset = date.getTimezoneOffset() * 60 * 1000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
 function formatDate(value) {
   if (!value) return "—";
   const date = new Date(value);

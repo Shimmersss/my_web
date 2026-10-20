@@ -39,7 +39,10 @@ class MatchmakingMySqlIT {
             jdbc.execute("ALTER TABLE matchmaking_trial_codes DROP COLUMN code_plain");
             jdbc.execute("ALTER TABLE matchmaking_reports MODIFY COLUMN report_payload TEXT NOT NULL");
             jdbc.execute("ALTER TABLE daily_checkins DROP COLUMN deck_version, DROP COLUMN card_id, DROP COLUMN tarot_payload");
+            jdbc.execute("ALTER TABLE matchmaking_tarot_draws DROP COLUMN spread_id, DROP COLUMN topic_id, DROP COLUMN reading_context, DROP COLUMN deck_order_json, DROP COLUMN pick_positions, DROP COLUMN picked_at");
             new MatchmakingSchemaMigration(jdbc).addAccountOwnedPayloadColumns();
+            new MatchmakingSchemaMigration(jdbc).addAccountOwnedPayloadColumns();
+            assertEquals(6,jdbc.queryForObject("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='matchmaking_tarot_draws' AND COLUMN_NAME IN ('spread_id','topic_id','reading_context','deck_order_json','pick_positions','picked_at')",Integer.class));
             new DailyCheckinSchemaMigration(jdbc).addDailyTarotColumns();
             assertEquals("mediumtext", jdbc.queryForObject("SELECT DATA_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='matchmaking_reports' AND COLUMN_NAME='report_payload'", String.class));
             assertEquals(3, jdbc.queryForObject("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='daily_checkins' AND COLUMN_NAME IN ('deck_version','card_id','tarot_payload')", Integer.class));
@@ -79,16 +82,26 @@ class MatchmakingMySqlIT {
             } finally { pool.shutdownNow(); }
             assertEquals(20, quota.balance(1));
             assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM credit_transactions WHERE kind='REFUND'", Integer.class));
+            var tarot=TarotTestSupport.tarot(jdbc);
+            String drawId=(String)tarot.draw(1,TarotTestSupport.form("choice")).get("drawId");
+            var pickPool=Executors.newFixedThreadPool(4);var pickStart=new CountDownLatch(1);
+            try {
+                var picks=new ArrayList<Future<Map<String,Object>>>();
+                for(int i=0;i<4;i++) picks.add(pickPool.submit(()->{pickStart.await();return tarot.picks(1,drawId,List.of(3,17,8,4,21));}));
+                pickStart.countDown();var expected=picks.get(0).get(10,TimeUnit.SECONDS);
+                for(var pick:picks)assertEquals(expected,pick.get(10,TimeUnit.SECONDS));
+                assertEquals(5,((List<?>)expected.get("cards")).size());
+            }finally{pickPool.shutdownNow();}
             var user = new AuthUser(1, "test", "USER", 20, true);
             String directory = Files.createTempDirectory("web-mysql-recovery").toString();
-            service = new MatchmakingService(jdbc, new ObjectMapper(), input -> Map.of(), quota, null, tx, null, null, directory);
+            service = new MatchmakingService(jdbc, new ObjectMapper(), TarotTestSupport::reading, quota, tx, TarotTestSupport.enabled(), null, TarotTestSupport.tarot(jdbc), directory);
             service.init();
-            String task = (String) service.createTask(user, Map.of("city", "上海", "education", "本科", "industry", "软件", "incomeBand", "8千-1万")).get("taskId");
+            String task = (String) service.createTask(user, TarotTestSupport.body(jdbc,1)).get("taskId");
             long until = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
             while (!"done".equals(service.task(user, task).get("status")) && System.nanoTime() < until) Thread.sleep(20);
             assertEquals("done", service.task(user, task).get("status"));
             String reportId = (String) service.task(user, task).get("reportId"); service.shutdown();
-            service = new MatchmakingService(jdbc, new ObjectMapper(), null, quota, null, tx, null, null, directory);
+            service = new MatchmakingService(jdbc, new ObjectMapper(), null, quota, tx, TarotTestSupport.enabled(), null, TarotTestSupport.tarot(jdbc), directory);
             service.init(); assertEquals("done", service.task(user, task).get("status")); assertEquals(18, quota.balance(1));
             service.deleteReport(user, reportId);
             assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM matchmaking_profiles", Integer.class));

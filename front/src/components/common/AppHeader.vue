@@ -37,7 +37,7 @@
           </n-button>
           <div v-else class="account-chip desktop-auth-action">
             <button type="button" class="account-button" @click="auth.isRoot ? navigateTo('/admin') : null">
-              <span>{{ auth.isMatchmakingTrial ? '婚恋内测' : auth.user?.username }}</span>
+              <span>{{ auth.isMatchmakingTrial ? '占卜内测' : auth.user?.username }}</span>
               <strong v-if="!auth.isMatchmakingTrial">{{ auth.credits }} credits</strong>
             </button>
             <n-button v-if="!auth.isMatchmakingTrial" size="small" secondary :disabled="!auth.dailyCheckin?.enabled && !auth.dailyCheckin?.claimed" @click="handleDailyCheckin">
@@ -74,7 +74,7 @@
           <template v-if="auth.isLoggedIn">
             <NotificationPanel v-if="!auth.isMatchmakingTrial" class="mobile-notification" />
             <button type="button" class="mobile-account" @click="auth.isRoot ? navigateTo('/admin') : null">
-              <span>{{ auth.isMatchmakingTrial ? '婚恋内测' : auth.user?.username }}</span>
+              <span>{{ auth.isMatchmakingTrial ? '占卜内测' : auth.user?.username }}</span>
               <strong v-if="!auth.isMatchmakingTrial">{{ auth.credits }} credits</strong>
             </button>
             <n-button v-if="!auth.isMatchmakingTrial" block secondary :disabled="!auth.dailyCheckin?.enabled && !auth.dailyCheckin?.claimed" @click="handleDailyCheckin">
@@ -118,8 +118,8 @@
 
     <n-modal v-model:show="dailyTarotOpen" preset="card" class="daily-tarot-modal" title="今日塔罗" :bordered="false" closable>
       <div v-if="dailyTarotCard" class="daily-tarot-content">
-        <TarotHoloCard class="daily-tarot-card" :src="`/tarot/${dailyTarotCard.cardId}.webp`" :alt="`${dailyTarotCard.name}牌面`" :title="dailyTarotCard.name" :subtitle="dailyTarotCard.keywordsZh?.join(' · ')" />
-        <div><p class="daily-tarot-kicker">DAILY GUIDANCE · {{ dailyTarotCard.date }}</p><h3>{{ dailyTarotCard.name }}</h3><p>{{ dailyTarotCard.dailyGuidanceZh }}</p><small>牌面提供一种观察今天的视角，不是预测或确定性结论。</small></div>
+        <MoonlitCardArtwork v-if="dailyVariant" :card="dailyVariant" />
+        <div><p class="daily-tarot-kicker">DAILY GUIDANCE · {{ dailyTarotCard.date }}</p><h3>{{ dailyTarotCard.name }} · {{ dailyVariant?.themeName }}</h3><p>{{ dailyTarotCard.dailyGuidanceZh }}</p><small>牌面提供一种观察今天的视角，不是预测或确定性结论。</small></div>
       </div>
     </n-modal>
 
@@ -146,7 +146,8 @@ import {
 import { useThemeStore } from '@/stores/theme'
 import { useAuthStore } from '@/stores/auth'
 import NotificationPanel from './NotificationPanel.vue'
-import TarotHoloCard from '@/components/matchmaking/TarotHoloCard.vue'
+import MoonlitCardArtwork from '@/components/matchmaking/MoonlitCardArtwork.vue'
+import { cardForResult } from '@/data/moonlitCollectionDemo'
 import { isAndroidMobileWeb } from '@/utils/androidBridge'
 import { buildDesktopMenuOptions, resolveMenuPath } from '@/utils/navigation'
 
@@ -167,6 +168,7 @@ const passwordError = ref('')
 const downloadReminderOpen = ref(false)
 const dailyTarotOpen = ref(false)
 const dailyTarotCard = ref(null)
+const dailyVariant = computed(() => cardForResult(dailyTarotCard.value))
 const authForm = reactive({
   username: '',
   password: '',
@@ -203,7 +205,8 @@ const inviteInputProps = {
 }
 
 const isDark = computed(() => themeStore.isDark)
-const activeKey = computed(() => route.name === 'MatchmakingReportDetail' ? 'Matchmaking' : route.name)
+const TAROT_ROUTES = new Set(['TarotReading', 'TarotReadingReport', 'TarotReadingLegacyReport'])
+const activeKey = computed(() => TAROT_ROUTES.has(route.name) ? 'Matchmaking' : route.name)
 
 const MenuIcon = MenuOutline
 const MoonIcon = MoonOutline
@@ -213,7 +216,7 @@ watch(() => auth.authPrompt, prompt => {
   if (prompt === 'login') {
     openLogin()
   } else if (prompt === 'forbidden') {
-    message.error(auth.isMatchmakingTrial ? '内测身份只能使用婚恋报告' : '权限不足：该节目需要 root 权限')
+    message.error(auth.isMatchmakingTrial ? '内测身份只能使用月下占卜' : '权限不足：该节目需要 root 权限')
     auth.clearAuthPrompt()
   }
 })
@@ -257,8 +260,12 @@ const allMenuOptions = computed(() => [
     key: 'ImageGenerate'
   },
   {
-    label: '月下会客厅',
+    label: '月下占卜',
     key: 'Matchmaking'
+  },
+  {
+    label: '月下收藏',
+    key: 'MoonlitCollection'
   },
   {
     label: 'GitHub 项目',
@@ -375,7 +382,7 @@ async function handleLogout() {
   await auth.logout()
   message.success('已退出')
   if (route.name === 'Admin') navigateTo('/')
-  else if (wasTrial && route.name === 'MatchmakingReportDetail') navigateTo('/matchmaking-report')
+  else if (wasTrial && route.name !== 'TarotReading' && TAROT_ROUTES.has(route.name)) navigateTo('/tarot-reading')
 }
 
 async function handleDailyCheckin() {
@@ -803,8 +810,8 @@ async function handleDailyCheckin() {
   }
 }
 
-:global(.daily-tarot-modal) { width: min(760px, calc(100vw - 28px)); }
-.daily-tarot-content { display: grid; grid-template-columns: minmax(210px, 300px) 1fr; gap: 28px; align-items: center; }
+:global(.daily-tarot-modal) { width: min(520px, calc(100vw - 28px)); }
+.daily-tarot-content { display: grid; grid-template-columns: 1fr; gap: 28px; align-items: center; }
 .daily-tarot-card { height: auto; aspect-ratio: 2 / 3; }
 .daily-tarot-kicker { margin: 0 0 10px; color: #a47a44; font-size: 11px; font-weight: 800; letter-spacing: .13em; }
 .daily-tarot-content h3 { margin: 0 0 12px; color: #17213d; font: 500 28px/1.3 Georgia, "Noto Serif SC", serif; }

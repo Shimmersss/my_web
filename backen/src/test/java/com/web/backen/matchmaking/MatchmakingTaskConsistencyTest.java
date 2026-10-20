@@ -19,17 +19,18 @@ class MatchmakingTaskConsistencyTest {
     private QuotaService quota;
     private MatchmakingService service;
     private final AuthUser user = new AuthUser(1, "alice", "USER", 20, true);
-    private final Map<String, Object> body = Map.of("city", "上海", "education", "本科", "industry", "软件", "incomeBand", "8千-1万");
+    private Map<String,Object> body;
     @BeforeEach void setup() throws Exception {
         db = new EmbeddedDatabaseBuilder().generateUniqueName(true).setType(EmbeddedDatabaseType.H2).addScript("schema.sql").build();
         jdbc = new JdbcTemplate(db);
         jdbc.update("INSERT INTO users(id,username,password_hash,role,credits) VALUES(1,'alice','x','USER',20)");
         quota = new QuotaService(jdbc); quota.initializeDefaults();
-        service = newService(jdbc, input -> Map.of());
+        body=TarotTestSupport.body(jdbc,1);
+        service = newService(jdbc, TarotTestSupport::reading);
     }
     @AfterEach void cleanup() { service.shutdown(); db.shutdown(); }
     private MatchmakingService newService(JdbcTemplate template, MatchmakingReportAgent agent) throws Exception {
-        return new MatchmakingService(template, new ObjectMapper(), agent, quota, null, null, null, null,
+        return new MatchmakingService(template, new ObjectMapper(), agent, quota, null, TarotTestSupport.enabled(), null, TarotTestSupport.tarot(jdbc),
                 Files.createTempDirectory("matchmaking-consistency").toString());
     }
     private void awaitTerminal(String id) throws Exception {
@@ -45,7 +46,7 @@ class MatchmakingTaskConsistencyTest {
         JdbcTemplate broken = spy(jdbc);
         doThrow(new IllegalStateException("task store unavailable")).when(broken)
                 .update(eq("INSERT INTO matchmaking_tasks(id,user_id,payload) VALUES (?,?,?)"), any(), any(), any());
-        service = newService(broken, input -> Map.of());
+        service = newService(broken, TarotTestSupport::reading);
         assertThrows(IllegalStateException.class, () -> service.createTask(user, body));
         assertEquals(20, quota.balance(1));
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM credit_transactions", Integer.class));
@@ -68,7 +69,7 @@ class MatchmakingTaskConsistencyTest {
             if (payload.contains("\"status\":\"done\"")) throw new IllegalStateException("terminal save failed");
             return call.callRealMethod();
         }).when(broken).update(eq("UPDATE matchmaking_tasks SET payload=? WHERE id=?"), anyString(), anyString());
-        service = newService(broken, input -> Map.of()); service.init();
+        service = newService(broken, TarotTestSupport::reading); service.init();
         String id = (String) service.createTask(user, body).get("taskId"); awaitTerminal(id);
         assertEquals("error", service.task(user, id).get("status"));
         assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM matchmaking_reports", Integer.class));
@@ -81,7 +82,7 @@ class MatchmakingTaskConsistencyTest {
             writing.countDown();
             try { assertTrue(release.await(5, TimeUnit.SECONDS)); }
             catch (InterruptedException e) { throw new RuntimeException(e); }
-            finished.countDown(); return Map.of();
+            finished.countDown(); return TarotTestSupport.reading(input);
         });
         service.init(); service.createTask(user, body);
         try {
@@ -90,6 +91,7 @@ class MatchmakingTaskConsistencyTest {
             assertEquals(20, quota.balance(1));
             release.countDown(); assertTrue(finished.await(5, TimeUnit.SECONDS));
             // Waiting for a subsequent task proves the serial worker finished the cancelled one.
+            body=TarotTestSupport.body(jdbc,1);
             String next = (String) service.createTask(user, body).get("taskId"); awaitTerminal(next);
             assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM matchmaking_reports", Integer.class));
             assertEquals(1, jdbc.queryForObject("SELECT COUNT(*) FROM matchmaking_profiles", Integer.class));
@@ -117,8 +119,8 @@ class MatchmakingTaskConsistencyTest {
                     throw new org.springframework.transaction.TransactionSystemException("commit acknowledgement lost");
             }
         };
-        service = new MatchmakingService(jdbc, new ObjectMapper(), input -> Map.of(), quota, null,
-                new org.springframework.transaction.support.TransactionTemplate(manager), null, null,
+        service = new MatchmakingService(jdbc, new ObjectMapper(), TarotTestSupport::reading, quota,
+                new org.springframework.transaction.support.TransactionTemplate(manager), TarotTestSupport.enabled(), null, TarotTestSupport.tarot(jdbc),
                 Files.createTempDirectory("matchmaking-commit-ack").toString());
         service.init(); String id = (String) service.createTask(user, body).get("taskId"); awaitTerminal(id);
         assertFalse(once.get());
@@ -131,7 +133,7 @@ class MatchmakingTaskConsistencyTest {
     @Test void cancelledQueuedTaskRefundFailureKeepsDataAndRecoveryEvidence() throws Exception {
         QuotaService failing = spy(quota);
         doThrow(new IllegalStateException("refund unavailable")).when(failing).refund(anyLong(), anyString());
-        service = new MatchmakingService(jdbc, new ObjectMapper(), null, failing, null, null, null, null,
+        service = new MatchmakingService(jdbc, new ObjectMapper(), null, failing, null, TarotTestSupport.enabled(), null, TarotTestSupport.tarot(jdbc),
                 Files.createTempDirectory("matchmaking-delete-rollback").toString());
         service.createTask(user, body);
         assertThrows(IllegalStateException.class, () -> service.deleteAll(user));

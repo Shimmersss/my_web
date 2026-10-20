@@ -1,0 +1,76 @@
+// 月下占卜 page shell: night palette shared by the ritual page and its reports.
+@font-face { font-family: "Moonlit Serif"; src: url("@/assets/fonts/noto-serif-sc-zh-500.woff2") format("woff2"); font-weight: 500; font-display: swap; }
+
+.tarot-page {
+  --tarot-night: #0a0f1f;
+  --tarot-ink: #f4ead4;
+  --tarot-gold: #e0be78;
+  --tarot-violet: #b7a8ff;
+  --tarot-muted: #9ea4b8;
+  position: relative;
+  isolation: isolate;
+  min-height: calc(100vh - 120px);
+  padding: 28px 20px 90px;
+  color: var(--tarot-ink);
+  background:
+    radial-gradient(ellipse 60% 40% at 85% 0%, #4b3a6e66, transparent 70%),
+    radial-gradient(ellipse 50% 40% at 0% 35%, #1d3a6a55, transparent 70%),
+    radial-gradient(ellipse 70% 50% at 50% 100%, #3a2a4f66, transparent 70%),
+    linear-gradient(170deg, #070b18, #0e1430 45%, #171433);
+
+  .tarot-shell { position: relative; z-index: 1; display: grid; gap: 20px; width: min(1180px, 100%); margin: 0 auto; }
+
+  .tarot-eyebrow { margin: 0 0 8px; color: var(--tarot-gold); font: 700 11px/1.4 system-ui, sans-serif; letter-spacing: .16em; text-transform: uppercase; }
+  .tarot-panel {
+    padding: 28px;
+    border: 1px solid #c7a45d4d;
+    border-radius: 22px;
+    background: linear-gradient(160deg, #10172ee6, #161430e6);
+    box-shadow: 0 20px 50px #0006;
+  }
+  .tarot-notice { margin: 0; padding: 14px 18px; border: 1px solid #c7a45d55; border-radius: 14px; background: #10172ecc; color: #e9dcc0; }
+  .tarot-notice.error { border-color: #d4828277; color: #f6c8bd; }
+  .tarot-disclaimer { margin: 0; color: var(--tarot-muted); font-size: 12px; line-height: 1.7; }
+
+  .tarot-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 42px;
+    padding: 10px 18px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    color: #1b1428;
+    font: 700 14px/1.2 system-ui, sans-serif;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform .2s ease, opacity .2s ease, background-color .2s ease;
+  }
+  .tarot-button.primary { background: linear-gradient(120deg, #f6dc9c, #d6a95c); }
+  .tarot-button.primary:not(:disabled):hover { transform: translateY(-2px); }
+  .tarot-button.quiet { border-color: #c7a45d88; background: #ffffff08; color: #f1dfb6; }
+  .tarot-button.quiet:not(:disabled):hover { background: #e0be7818; }
+  .tarot-button:disabled { opacity: .45; cursor: not-allowed; }
+  .tarot-button:focus-visible, .tarot-text-button:focus-visible { outline: 2px solid #f1d18b; outline-offset: 3px; }
+  .tarot-text-button { padding: 4px 2px; border: 0; background: transparent; color: var(--tarot-gold); font: 700 13px system-ui, sans-serif; cursor: pointer; }
+  .tarot-text-button.danger { color: #f2a99b; }
+  .stage-actions { display: flex; justify-content: flex-end; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+  .stage-actions.centered { justify-content: center; }
+  .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+
+  @media (max-width: 600px) {
+    padding: 14px 12px 60px;
+    .tarot-panel { padding: 22px 16px; border-radius: 18px; }
+    .stage-actions { justify-content: stretch; }
+    .stage-actions .tarot-button { flex: 1 1 auto; }
+  }
+  @media (max-width: 340px) {
+    padding-left: 8px;
+    padding-right: 8px;
+    .tarot-panel { padding: 18px 12px; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tarot-button { transition: none; }
+  }
+}

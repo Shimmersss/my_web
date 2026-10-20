@@ -75,16 +75,18 @@ llm:
 babeldoc:
   # 排版版 PDF 由 BabelDOC CLI 生成；首次运行 uvx 会自动下载运行时和模型资源
   enabled: ${BABELDOC_ENABLED:true}
-  command: ${BABELDOC_COMMAND:uv run --with babeldoc python}
+  command: ${BABELDOC_COMMAND:uv run --with babeldoc==0.6.2 --with bitstring==4.4.0 python}
   openai-base-url: ${BABELDOC_OPENAI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
   openai-api-key: ${BABELDOC_OPENAI_API_KEY:${LLM_API_KEY:}}
   openai-model: ${BABELDOC_OPENAI_MODEL:mimo-v2.5-pro}
   timeout-seconds: ${BABELDOC_TIMEOUT_SECONDS:21600}
   qps: ${BABELDOC_QPS:2}
-  resource-cgroup-limit-mi-b: ${BABELDOC_RESOURCE_CGROUP_LIMIT_MIB:2600}
+  # Keep the application stop threshold below systemd MemoryHigh so the
+  # watchdog can terminate BabelDOC before the whole backend is throttled.
+  resource-cgroup-limit-mi-b: ${BABELDOC_RESOURCE_CGROUP_LIMIT_MIB:2850}
   resource-min-available-mi-b: ${BABELDOC_RESOURCE_MIN_AVAILABLE_MIB:400}
   resource-max-swap-used-mi-b: ${BABELDOC_RESOURCE_MAX_SWAP_USED_MIB:1200}
-  max-pages-per-chunk: ${BABELDOC_MAX_PAGES_PER_CHUNK:5}
+  max-pages-per-chunk: ${BABELDOC_MAX_PAGES_PER_CHUNK:1}
   resource-recovery-timeout-seconds: ${BABELDOC_RESOURCE_RECOVERY_TIMEOUT_SECONDS:120}
 
 translation:

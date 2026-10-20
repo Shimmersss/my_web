@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Configuration;
 public class BabelDocConfig {
 
     private boolean enabled = true;
-    private String command = "uv run --with babeldoc python";
+    private String command = "uv run --with babeldoc==0.6.2 --with bitstring==4.4.0 python";
     private String openaiBaseUrl = "https://token-plan-cn.xiaomimimo.com/v1";
     private String openaiApiKey = "";
     private String openaiModel = "mimo-v2.5-pro";

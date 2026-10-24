@@ -188,6 +188,7 @@ public class TranslationService {
             session.setResourceDowngradeReason(null);
             session.setResourceDowngradeCount(0);
             session.setSinglePageFallback(false);
+            session.setKeptSourceWarning(null);
             session.setQuotaRequired(user != null && quotaService != null && !user.isRoot());
             session.setCreationReady(true);
             session.setStatus("creating");
@@ -392,6 +393,7 @@ public class TranslationService {
                             "qps", session.getQps()));
                     babelDocService.awaitResourceRecovery();
                 }
+                BabelDocService.TranslationResult result = null;
                 if (session.isImageInput()) {
                     imageTranslationService.translateImage(
                             session.getInputImagePath(), session.getTaskDir(), session.getFileName(), session.getFontFamily(),
@@ -403,22 +405,24 @@ public class TranslationService {
                         // long-document mode can restore requested QPS after its first
                         // recovery chunk, but this path is entered only after stable QPS
                         // itself has exhausted the available memory headroom.
-                        babelDocService.translatePdf(session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
+                        result = babelDocService.translatePdf(session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
                                 session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
                                 session.getQps(), STABLE_LONG_DOCUMENT_CHUNK_PAGES,
                                 progress -> sendProgress(session, progress));
                     } else if (session.getQps() <= stableQps() && pages >= STABLE_LONG_DOCUMENT_MIN_PAGES) {
-                        babelDocService.translatePdf(session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
+                        result = babelDocService.translatePdf(session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
                                 session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
                                 session.getRequestedQps(), STABLE_LONG_DOCUMENT_CHUNK_PAGES,
                                 progress -> sendProgress(session, progress));
                     } else {
-                        babelDocService.translatePdf(session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
+                        result = babelDocService.translatePdf(session.getInputPdfPath(), session.getTaskDir(), session.getFileName(),
                                 session.getStartPage(), session.getEndPage(), session.getFontFamily(), session.getQps(),
                                 progress -> sendProgress(session, progress));
                     }
                 }
                 if ("cancelled".equals(session.getStatus())) break;
+                // Partial delivery is charged as a full task; the warning says which pages kept source text.
+                session.setKeptSourceWarning(result == null ? null : BabelDocService.keptSourceWarning(result.paragraphs()));
                 session.setProgress(100);
                 session.setProgressStage("completed");
                 session.setCompletedAt(System.currentTimeMillis());

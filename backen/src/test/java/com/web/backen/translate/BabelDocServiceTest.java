@@ -15,12 +15,15 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -318,6 +321,84 @@ class BabelDocServiceTest {
                 "1-4@4", "5-8@4", "1-4@2", "5-8@2", "9-10@2"), service.calls);
     }
 
+    @Test
+    void parsesRunnerParagraphReport() {
+        RecordingBabelDocService service = newService();
+        assertEquals(new BabelDocService.ParagraphStats(20, 2, Map.of(5, 2)), service.parseParagraphs(
+                "{\"type\": \"paragraphs\", \"translated\": 20, \"failed\": 2, "
+                        + "\"failedPages\": {\"5\": 2}, \"reason\": \"RuntimeError: forced\"}").orElseThrow());
+        assertTrue(service.parseParagraphs("{\"type\": \"finish\"}").isEmpty());
+        assertTrue(service.parseParagraphs("Traceback (most recent call last):").isEmpty());
+    }
+
+    @Test
+    void deliversAtMostThreeKeptSourceParagraphsAndTwoPercent() {
+        assertFalse(BabelDocService.exceedsKeptSourceLimit(BabelDocService.ParagraphStats.NONE));
+        assertFalse(BabelDocService.exceedsKeptSourceLimit(stats(147, 3, Map.of(5, 3))));
+        assertTrue(BabelDocService.exceedsKeptSourceLimit(stats(97, 3, Map.of(5, 3))));
+        assertTrue(BabelDocService.exceedsKeptSourceLimit(stats(400, 4, Map.of(5, 4))));
+        assertFalse(BabelDocService.exceedsKeptSourceLimit(stats(49, 1, Map.of(2, 1))));
+        assertTrue(BabelDocService.exceedsKeptSourceLimit(stats(48, 1, Map.of(2, 1))));
+    }
+
+    @Test
+    void describesPagesThatKeptSourceText() {
+        assertNull(BabelDocService.keptSourceWarning(BabelDocService.ParagraphStats.NONE));
+        assertEquals("第 5、11 页有 3 段翻译失败，已保留原文",
+                BabelDocService.keptSourceWarning(stats(200, 3, Map.of(11, 1, 5, 2))));
+    }
+
+    @Test
+    void aggregatesKeptSourceParagraphsAcrossChunksIncludingReusedOnes() throws Exception {
+        RecordingBabelDocService service = newService();
+        service.failAcceleratedSecondChunk.set(true);
+        service.paragraphs.put("1-4", stats(80, 1, Map.of(2, 1)));
+        service.paragraphs.put("5-8", stats(80, 1, Map.of(6, 1)));
+        service.paragraphs.put("9-10", stats(40, 0, Map.of()));
+        Path resultDir = tempDir.resolve("result");
+        assertThrows(BabelDocService.ResourcePressureException.class,
+                () -> service.translatePdf(tempDir.resolve("input.pdf"), resultDir,
+                        "paper.pdf", 1, 10, "auto", 4, ignored -> { }));
+
+        BabelDocService.TranslationResult result = service.translatePdf(
+                tempDir.resolve("input.pdf"), resultDir, "paper.pdf", 1, 10, "auto", 2, ignored -> { });
+
+        // 1-4 is reused from the first attempt and still counts.
+        assertEquals(List.of("1-4@4", "5-8@4", "5-8@2", "9-10@2"), service.calls);
+        assertEquals(stats(200, 2, Map.of(2, 1, 6, 1)), result.paragraphs());
+    }
+
+    @Test
+    void failsAndDropsOnlyChunksWithKeptSourceWhenOverTheLimit() throws Exception {
+        RecordingBabelDocService service = newService();
+        service.paragraphs.put("1-4", stats(60, 2, Map.of(1, 2)));
+        service.paragraphs.put("5-8", stats(60, 2, Map.of(7, 2)));
+        Path resultDir = tempDir.resolve("result");
+
+        assertThrows(IllegalStateException.class, () -> service.translatePdf(
+                tempDir.resolve("input.pdf"), resultDir, "paper.pdf", 1, 10, "auto", 2, ignored -> { }));
+        assertFalse(Files.exists(resultDir.resolve("translated.pdf")));
+
+        service.paragraphs.clear();
+        service.translatePdf(tempDir.resolve("input.pdf"), resultDir, "paper.pdf", 1, 10, "auto", 2, ignored -> { });
+        assertEquals(List.of("1-4@2", "5-8@2", "9-10@2", "1-4@2", "5-8@2"), service.calls);
+    }
+
+    @Test
+    void rejectsASinglePageTaskOverTheLimit() {
+        RecordingBabelDocService service = newService();
+        service.paragraphs.put("3-3", stats(10, 1, Map.of(3, 1)));
+        Path resultDir = tempDir.resolve("single");
+
+        assertThrows(IllegalStateException.class, () -> service.translatePdf(
+                tempDir.resolve("input.pdf"), resultDir, "paper.pdf", 3, 3, "auto", 2, ignored -> { }));
+        assertFalse(Files.exists(resultDir.resolve("translated.pdf")));
+    }
+
+    private static BabelDocService.ParagraphStats stats(int translated, int failed, Map<Integer, Integer> pages) {
+        return new BabelDocService.ParagraphStats(translated, failed, pages);
+    }
+
     private RecordingBabelDocService newService() {
         BabelDocConfig config = new BabelDocConfig();
         config.setMaxPagesPerChunk(4);
@@ -343,6 +424,7 @@ class BabelDocServiceTest {
         private final List<String> calls = new ArrayList<>();
         private final List<String> forcedReferenceRanges = new ArrayList<>();
         private final AtomicBoolean failAcceleratedSecondChunk = new AtomicBoolean();
+        private final Map<String, ParagraphStats> paragraphs = new HashMap<>();
 
         private RecordingBabelDocService(BabelDocConfig config,
                                          RuntimeConfigService runtimeConfig) {
@@ -374,7 +456,8 @@ class BabelDocServiceTest {
                 }
                 return new TranslationResult(
                         resultDir.resolve("translated.pdf"),
-                        resultDir.resolve("bilingual.pdf"));
+                        resultDir.resolve("bilingual.pdf"),
+                        paragraphs.getOrDefault(startPage + "-" + endPage, ParagraphStats.NONE));
             } catch (IOException e) {
                 throw new IllegalStateException(e);
             }

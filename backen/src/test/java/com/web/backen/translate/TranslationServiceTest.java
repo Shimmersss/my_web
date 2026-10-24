@@ -14,6 +14,7 @@ import java.awt.image.BufferedImage;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -83,7 +84,9 @@ class TranslationServiceTest {
                     Path bilingual = resultDir.resolve("bilingual.pdf");
                     Files.writeString(translated, "translated");
                     Files.writeString(bilingual, "bilingual");
-                    return new BabelDocService.TranslationResult(translated, bilingual);
+                    // One paragraph kept its source text: delivered with a warning.
+                    return new BabelDocService.TranslationResult(translated, bilingual,
+                            new BabelDocService.ParagraphStats(60, 1, Map.of(2, 1)));
                 });
 
         TranslationService service = new TranslationService(
@@ -102,6 +105,7 @@ class TranslationServiceTest {
             TranslationSession completed = service.getSession(session.getTaskId());
             assertTrue(Files.isRegularFile(completed.getTranslatedPdfPath()));
             assertTrue(Files.isRegularFile(completed.getBilingualPdfPath()));
+            assertEquals("第 2 页有 1 段翻译失败，已保留原文", completed.getKeptSourceWarning());
             assertEquals("paper-翻译版.pdf", service.buildPdfDownloadFileName(session.getTaskId(), "translated"));
             assertEquals("paper-双语对照版.pdf", service.buildPdfDownloadFileName(session.getTaskId(), "bilingual"));
             assertEquals("paper-翻译结果.txt", service.buildTextDownloadFileName(session.getTaskId()));
@@ -121,6 +125,7 @@ class TranslationServiceTest {
             assertNotNull(taskId);
             assertEquals(taskId, restoredService.getRecentSessions().get(0).getTaskId());
             assertEquals("completed", restoredService.getSession(taskId).getStatus());
+            assertEquals("第 2 页有 1 段翻译失败，已保留原文", restoredService.getSession(taskId).getKeptSourceWarning());
         } finally {
             restoredService.shutdown();
         }

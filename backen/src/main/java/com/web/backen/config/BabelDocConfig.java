@@ -11,7 +11,7 @@ public class BabelDocConfig {
     private String command = "uv run --with babeldoc==0.6.2 --with bitstring==4.4.0 python";
     private String openaiBaseUrl = "https://token-plan-cn.xiaomimimo.com/v1";
     private String openaiApiKey = "";
-    private String openaiModel = "mimo-v2.5-pro";
+    private String openaiModel = "mimo-v2.6-pro";
     private int timeoutSeconds = 21600;
     private int qps = 2;
     private int resourceCgroupLimitMiB = 2600;

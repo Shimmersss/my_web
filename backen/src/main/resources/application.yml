@@ -61,7 +61,7 @@ llm:
   # Anthropic Messages API（支持 Claude 模型）
   api-url: ${LLM_API_URL:https://token-plan-cn.xiaomimimo.com/anthropic}
   api-key: ${LLM_API_KEY:}
-  model: ${LLM_MODEL:mimo-v2.5-pro}
+  model: ${LLM_MODEL:mimo-v2.6-pro}
   max-tokens: ${LLM_MAX_TOKENS:8192}
   # 每段文本最大字符数，超长段落会按句号拆分后分批翻译
   chunk-size: ${LLM_CHUNK_SIZE:6000}
@@ -78,7 +78,7 @@ babeldoc:
   command: ${BABELDOC_COMMAND:uv run --with babeldoc==0.6.2 --with bitstring==4.4.0 python}
   openai-base-url: ${BABELDOC_OPENAI_BASE_URL:https://token-plan-cn.xiaomimimo.com/v1}
   openai-api-key: ${BABELDOC_OPENAI_API_KEY:${LLM_API_KEY:}}
-  openai-model: ${BABELDOC_OPENAI_MODEL:mimo-v2.5-pro}
+  openai-model: ${BABELDOC_OPENAI_MODEL:mimo-v2.6-pro}
   timeout-seconds: ${BABELDOC_TIMEOUT_SECONDS:21600}
   qps: ${BABELDOC_QPS:2}
   # Keep the application stop threshold below systemd MemoryHigh so the

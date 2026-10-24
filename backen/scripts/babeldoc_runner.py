@@ -9,7 +9,9 @@ import statistics
 from pathlib import Path
 
 from tokenizer_cache import configure_tokenizer_cache
-from translation_completion import COMPLETION_CACHE_VERSION, complete_translation
+from translation_completion import (
+    COMPLETION_CACHE_VERSION, complete_translation, disable_thinking, fail_closed,
+)
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 import openai
 from pdf_ocr import line_fill_boxes, prepare_pdf_text, preserve_textless_pages
@@ -327,16 +329,22 @@ class RepairingOpenAITranslator(OpenAITranslator):
         super().__init__(*args, **kwargs)
         self.add_cache_impact_parameters("pdf_font_text_repair", "shift-v1")
         self.add_cache_impact_parameters("translation_completeness", COMPLETION_CACHE_VERSION)
+        disable_thinking(self)
 
     @retry(retry=retry_if_exception_type(openai.RateLimitError),
            stop=stop_after_attempt(100), wait=wait_exponential(multiplier=1, min=1, max=15))
+    def _complete_with_retry(self, text, rate_limit_params, plain):
+        return complete_translation(self, text, rate_limit_params, plain=plain)
+
     def do_translate(self, text, rate_limit_params=None):
-        return complete_translation(self, repair_pdf_font_text(text), rate_limit_params, plain=True)
+        # Last resort for a paragraph: BabelDOC swallows this error and keeps the
+        # source text, so mark the document incomplete.
+        return fail_closed(self, lambda: self._complete_with_retry(
+            repair_pdf_font_text(text), rate_limit_params, True))
 
-    @retry(retry=retry_if_exception_type(openai.RateLimitError),
-           stop=stop_after_attempt(100), wait=wait_exponential(multiplier=1, min=1, max=15))
     def do_llm_translate(self, text, rate_limit_params=None):
-        return complete_translation(self, repair_pdf_font_text(text), rate_limit_params)
+        # A failed batch is retried paragraph by paragraph through do_translate.
+        return self._complete_with_retry(repair_pdf_font_text(text), rate_limit_params, False)
 
 
 async def run(args):
@@ -402,7 +410,10 @@ async def run(args):
             raise RuntimeError(event.get("error", "BabelDOC 翻译失败"))
         elif event_type == "finish":
             if getattr(translator, "_web_incomplete_translation", False):
-                raise RuntimeError("部分段落翻译不完整，已阻止交付缺字 PDF，请重试")
+                reason = getattr(translator, "_web_incomplete_reason", "")
+                raise RuntimeError(
+                    "部分段落翻译不完整，已阻止交付缺字 PDF，请重试"
+                    + (f"（{reason}）" if reason else ""))
             emit({"type": "finish"})
             break
 

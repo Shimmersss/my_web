@@ -3,7 +3,8 @@ from types import SimpleNamespace as NS
 from unittest.mock import Mock
 
 from translation_completion import (
-    IncompleteTranslationError, checked_content, complete_translation,
+    IncompleteTranslationError, checked_content, complete_translation, disable_thinking,
+    fail_closed,
 )
 
 
@@ -19,6 +20,7 @@ def translator(*responses):
         enable_json_mode_if_requested=True, send_dashscope_header=False,
         extra_body={"reasoning_effort": "minimal"}, update_token_count=Mock(),
         prompt=lambda text: [{"role": "user", "content": text}],
+        add_cache_impact_parameters=Mock(),
     )
 
 
@@ -48,9 +50,40 @@ class TranslationCompletionTest(unittest.TestCase):
     def test_empty_responses_with_stop_are_retried_and_fail_closed(self):
         engine = translator(response(""), response(""), response(""))
         with self.assertRaises(IncompleteTranslationError):
-            complete_translation(engine, "source")
+            fail_closed(engine, lambda: complete_translation(engine, "source", plain=True))
         self.assertTrue(engine._web_incomplete_translation)
+        self.assertIn("IncompleteTranslationError", engine._web_incomplete_reason)
         self.assertEqual(3, engine.client.chat.completions.create.call_count)
+
+    def test_failed_batch_does_not_mark_document_before_paragraph_fallback(self):
+        # 2026-10-24: one empty "output" in a JSON batch failed whole pages even
+        # though BabelDOC re-translated each paragraph successfully afterwards.
+        engine = translator(*[response('[{"id":0,"output":""}]')] * 3, response("译文"))
+        with self.assertRaises(IncompleteTranslationError):
+            complete_translation(engine, "batch", {"request_json_mode": True})
+        self.assertFalse(getattr(engine, "_web_incomplete_translation", False))
+        self.assertEqual("译文", fail_closed(
+            engine, lambda: complete_translation(engine, "paragraph", plain=True)))
+        self.assertFalse(getattr(engine, "_web_incomplete_translation", False))
+
+    def test_provider_errors_mark_the_document_incomplete(self):
+        engine = translator(RuntimeError("Error code: 400 - Unsupported model"))
+        with self.assertRaises(RuntimeError):
+            fail_closed(engine, lambda: complete_translation(engine, "Hello", plain=True))
+        self.assertTrue(engine._web_incomplete_translation)
+        self.assertIn("Unsupported model", engine._web_incomplete_reason)
+
+    def test_disables_thinking_only_for_mimo_models(self):
+        mimo = translator()
+        mimo.model, mimo.extra_body = "mimo-v2.6-pro", {}
+        disable_thinking(mimo)
+        self.assertEqual({"thinking": {"type": "disabled"}}, mimo.extra_body)
+        mimo.add_cache_impact_parameters.assert_called_once_with("thinking", "disabled")
+        other = translator()
+        other.model, other.extra_body = "gpt-4o-mini", {}
+        disable_thinking(other)
+        self.assertEqual({}, other.extra_body)
+        other.add_cache_impact_parameters.assert_not_called()
 
     def test_preserves_provider_options_and_plain_prompt(self):
         engine = translator(response("译文"), response("译文"))

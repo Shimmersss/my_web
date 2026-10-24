@@ -6,6 +6,16 @@ import re
 
 LOG = logging.getLogger(__name__)
 COMPLETION_CACHE_VERSION = "complete-v1"
+# MiMo v2.6 models reason by default. Runaway reasoning can use the whole output
+# budget on every retry, and translation does not need it.
+THINKING_DISABLED_MODEL_PREFIXES = ("mimo-",)
+
+
+def disable_thinking(translator):
+    """Turn off provider reasoning for models known to accept the switch."""
+    if str(translator.model).lower().startswith(THINKING_DISABLED_MODEL_PREFIXES):
+        translator.extra_body["thinking"] = {"type": "disabled"}
+        translator.add_cache_impact_parameters("thinking", "disabled")
 
 
 class IncompleteTranslationError(RuntimeError):
@@ -45,11 +55,30 @@ def checked_content(response):
     return content
 
 
+def fail_closed(translator, call):
+    """Mark the document incomplete when a paragraph finally fails.
+
+    BabelDOC logs a failed paragraph and carries on, so without this a rejected
+    model name, an invalid key or an exhausted rate-limit retry would still end
+    in "finish" with the original text left in the PDF. Callers wrap the whole
+    retry loop, so a rate limit that later succeeds does not trip it.
+    """
+    try:
+        return call()
+    except Exception as exc:
+        translator._web_incomplete_translation = True
+        # Exception text from the provider or our checks; never document text.
+        translator._web_incomplete_reason = f"{type(exc).__name__}: {exc}"[:300]
+        raise
+
+
 def complete_translation(translator, text, rate_limit_params=None, *, plain=False):
     """Retry incomplete responses with bounded, increasing output budgets.
 
     Network/provider exceptions keep the upstream retry policy. No response is
-    returned to BabelDOC's cache until completeness checks have passed.
+    returned to BabelDOC's cache until completeness checks have passed. This
+    does not mark the document: a failed JSON batch falls back to per-paragraph
+    translation, so only the final paragraph path is wrapped in fail_closed.
     """
     if text is None:
         return None
@@ -78,5 +107,4 @@ def complete_translation(translator, text, rate_limit_params=None, *, plain=Fals
             last_error = exc
             # Do not put document text or provider credentials in logs.
             LOG.warning("拒绝不完整译文: budget=%s, reason=%s", budget, exc)
-    translator._web_incomplete_translation = True
     raise IncompleteTranslationError(f"翻译完整性检查失败，重试后仍无完整译文: {last_error}")

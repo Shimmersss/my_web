@@ -60,7 +60,7 @@
           </div>
 
           <nav class="workflow-list" aria-label="研究工作流入口">
-            <a v-for="(tool, index) in tools" :key="tool.path" :href="tool.path" @click.prevent="navigateTo(tool.path)">
+            <a v-for="(tool, index) in visibleTools" :key="tool.path" :href="tool.path" @click.prevent="navigateTo(tool.path)">
               <span class="row-index">{{ String(index + 1).padStart(2, '0') }}</span>
               <span class="tool-icon"><n-icon size="22"><component :is="tool.icon" /></n-icon></span>
               <span class="tool-copy"><strong>{{ tool.title }}</strong><small>{{ tool.description }}</small></span>
@@ -132,8 +132,10 @@ import {
 } from '@vicons/ionicons5'
 import { getDailyCheckinLeaderboard, getGithubRankings, getHomeDailyStatus } from '@/api'
 import workspaceImage from '@/assets/images/home-workspace-aurora.png'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const auth = useAuthStore()
 const rankingData = ref({})
 const rankingPeriod = ref('weekly')
 const dailyStatus = ref({})
@@ -141,17 +143,19 @@ const checkinLeaders = ref([])
 const heroPointer = ref({ x: 0, y: 0 })
 
 const tools = [
-  { title: '文献库', description: '管理与阅读学术文献', path: '/publications', icon: BookOutline },
+  { title: '文献库', description: '管理与阅读学术文献', path: '/publications', icon: BookOutline, feature: 'Publications' },
   { title: '论文翻译', description: '保留版式输出双语 PDF', path: '/translate', icon: DocumentTextOutline },
-  { title: 'PPT 生成', description: '从论文生成答辩材料', path: '/contact', icon: SchoolOutline },
-  { title: 'GPT 生图', description: '生成图片或用参考图继续创作', path: '/image-generate', icon: ImagesOutline },
+  { title: 'PPT 生成', description: '从论文生成答辩材料', path: '/contact', icon: SchoolOutline, feature: 'Contact' },
+  { title: 'GPT 生图', description: '生成图片或用参考图继续创作', path: '/image-generate', icon: ImagesOutline, feature: 'ImageGenerate' },
   { title: '月下占卜', description: '静心提问、洗牌抽牌，正逆位牌义即时解读', path: '/tarot-reading', icon: SparklesOutline },
   { title: '开源项目', description: '浏览 GitHub 仓库与 README', path: '/news', icon: LogoGithub },
   { title: '留言板', description: '留下建议或查看站内交流', path: '/guestbook', icon: ChatbubbleEllipsesOutline }
 ]
 
+const visibleTools = computed(() => tools.filter(tool => !tool.feature || !auth.isPaused(tool.feature)))
+
 const dailyProgress = computed(() => [
-  statusItem('文献库同步', dailyStatus.value.zoteroReady, dailyStatus.value.zoteroUpdatedAt),
+  ...(auth.isPaused('Publications') ? [] : [statusItem('文献库同步', dailyStatus.value.zoteroReady, dailyStatus.value.zoteroUpdatedAt)]),
   statusItem('GitHub 排行榜', dailyStatus.value.githubReady, dailyStatus.value.githubUpdatedAt),
   statusItem('研究任务', dailyStatus.value.siteTaskReady, dailyStatus.value.siteTaskUpdatedAt)
 ])

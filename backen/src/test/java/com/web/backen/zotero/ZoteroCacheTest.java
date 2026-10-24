@@ -46,6 +46,23 @@ class ZoteroCacheTest {
     }
 
     @Test
+    void pausedLibraryMakesNoUpstreamCalls() throws Exception {
+        ZoteroService service = mock(ZoteroService.class);
+        when(service.isConfigured()).thenReturn(true);
+        com.web.backen.auth.RuntimeConfigService runtime = mock(com.web.backen.auth.RuntimeConfigService.class);
+        when(runtime.isPaused("Publications")).thenReturn(true);
+        cache = new ZoteroCache(service, runtime);
+
+        cache.refreshAsync();
+        cache.scheduledRefresh();
+        Thread.sleep(200);
+
+        verify(service, never()).listCollections();
+        verify(service, never()).listAllItems();
+        assertFalse(cache.isRefreshing());
+    }
+
+    @Test
     void preservesPreviousCompleteSnapshotWhenEitherUpstreamResourceFails() {
         ZoteroService service = mock(ZoteroService.class);
         when(service.listCollections()).thenReturn(List.of(collection("ROOT0001", "Root", null, false)));

@@ -108,7 +108,9 @@ public class AuthController {
 
     @GetMapping("/site-settings")
     public Map<String, Object> siteSettings() {
-        return Map.of("code", 200, "message", "success", "data", Map.of("visibility", runtimeConfigService.publicSettings().get("visibility")));
+        Map<String, Object> settings = runtimeConfigService.publicSettings();
+        return Map.of("code", 200, "message", "success", "data", Map.of(
+                "visibility", settings.get("visibility"), "pausedFeatures", settings.get("pausedFeatures")));
     }
 
     private Map<String, Object> userData(AuthUser user) {

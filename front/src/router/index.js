@@ -121,6 +121,7 @@ router.beforeEach(async (to, from, next) => {
   if (visibility) {
     const auth = useAuthStore()
     if (!auth.user) await auth.refresh().catch(() => {})
+    if (auth.isPaused(visibility)) return next('/')
     const level = auth.visibility[visibility] || 'PUBLIC'
     const decision = routeAccessDecision({
       visibility,

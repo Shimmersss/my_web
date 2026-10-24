@@ -37,7 +37,9 @@ public class BabelDocService {
     private static final Logger log = LoggerFactory.getLogger(BabelDocService.class);
     private static final int MAX_OUTPUT_CHARS = 64 * 1024;
     private static final long MONITOR_INTERVAL_MILLIS = 2000;
-    private static final String CHUNK_CACHE_VERSION = "version=4";
+    // Host-wide guard; the configured swap ceiling applies to this service's cgroup.
+    private static final long MIN_SYSTEM_SWAP_FREE_MIB = 256;
+    private static final String CHUNK_CACHE_VERSION = "version=5";
     private static final String COMPLETION_POLICY = "completion=complete-v1";
     private static final Pattern CHUNK_RANGE = Pattern.compile("^(\\d+)-(\\d+)$");
     private static final Pattern REFERENCE_HEADING = Pattern.compile(
@@ -46,8 +48,10 @@ public class BabelDocService {
     // Mirrors REFERENCE_SECTION_END_RE in scripts/reference_layout.py. Appendix
     // headings usually carry an identifier and title ("Appendix A. Derivation");
     // only keywords are case-insensitive so prose like "Appendix is" is ignored.
+    // A short title prefix ("GraspGen-X: Supplementary Material") is allowed when
+    // it has no period and does not start like a numbered reference entry.
     private static final Pattern REFERENCE_SECTION_END = Pattern.compile(
-            "\\s*(?:(?:[A-Z]|\\d{1,2}(?:\\.\\d{1,2})*)[.)]?\\s+)?(?:"
+            "\\s*(?:(?![\\[(\\d])[^.:\\uff1a\\n]{1,80}[:\\uff1a]\\s*)?(?:(?:[A-Z]|\\d{1,2}(?:\\.\\d{1,2})*)[.)]?\\s+)?(?:"
                     + "(?i:appendix|appendices)(?:\\s+(?:[A-Z]|[IVX]{1,4}|\\d{1,2})(?:\\.\\d{1,2})*)?"
                     + "(?:\\s*[.:\\uff1a\\u2014\\u2013-]\\s*\\S.*|\\s+[A-Z(].*)?"
                     + "|(?:(?i:supplementary|supplemental|supporting)\\s+(?i:materials?|information|data)"
@@ -623,11 +627,24 @@ public class BabelDocService {
             return Optional.of("系统可用内存 " + formatMiB(memoryInfo.memAvailableBytes)
                     + " MiB 低于阈值 " + config.getResourceMinAvailableMiB() + " MiB");
         }
-        long swapUsed = memoryInfo.swapTotalBytes - memoryInfo.swapFreeBytes;
+        if (memoryInfo.swapTotalBytes <= 0) {
+            return Optional.empty();
+        }
+        // Other daemons (MySQL, frps) keep cold pages in swap for weeks, so the
+        // host total drifts up to the ceiling while idle. Measure what this
+        // service and its BabelDOC children use, as systemd MemorySwapMax does.
+        long serviceSwap = cgroupMemory.swapBytes();
+        long swapUsed = serviceSwap >= 0
+                ? serviceSwap : memoryInfo.swapTotalBytes - memoryInfo.swapFreeBytes;
         long maxSwapUsedBytes = mibToBytes(config.getResourceMaxSwapUsedMiB());
-        if (memoryInfo.swapTotalBytes > 0 && swapUsed > maxSwapUsedBytes) {
-            return Optional.of("Swap 已用 " + formatMiB(swapUsed)
+        if (swapUsed > maxSwapUsedBytes) {
+            return Optional.of((serviceSwap >= 0 ? "服务 Swap 已用 " : "Swap 已用 ")
+                    + formatMiB(swapUsed)
                     + " MiB 超过阈值 " + config.getResourceMaxSwapUsedMiB() + " MiB");
+        }
+        if (memoryInfo.swapFreeBytes < mibToBytes(MIN_SYSTEM_SWAP_FREE_MIB)) {
+            return Optional.of("系统 Swap 剩余 " + formatMiB(memoryInfo.swapFreeBytes)
+                    + " MiB 低于阈值 " + MIN_SYSTEM_SWAP_FREE_MIB + " MiB");
         }
         return Optional.empty();
     }
@@ -692,12 +709,24 @@ public class BabelDocService {
                     Path memoryStat = path.resolveSibling("memory.stat");
                     long inactiveFileBytes = Files.isRegularFile(memoryStat)
                             ? inactiveFileBytes(Files.readString(memoryStat)) : 0;
-                    return new CgroupMemory(currentBytes, inactiveFileBytes);
+                    return new CgroupMemory(currentBytes, inactiveFileBytes,
+                            readCgroupSwapBytes(path.resolveSibling("memory.swap.current")));
                 }
             } catch (Exception ignored) {
             }
         }
         return new CgroupMemory(-1, 0);
+    }
+
+    /** cgroup v2 swap usage of this service, or -1 when the controller is unavailable. */
+    private static long readCgroupSwapBytes(Path swapCurrent) {
+        try {
+            if (Files.isRegularFile(swapCurrent)) {
+                return Math.max(0, Long.parseLong(Files.readString(swapCurrent).trim()));
+            }
+        } catch (Exception ignored) {
+        }
+        return -1;
     }
 
     static long inactiveFileBytes(String memoryStat) {
@@ -796,7 +825,11 @@ public class BabelDocService {
 
     record MemoryInfo(long memAvailableBytes, long swapTotalBytes, long swapFreeBytes) {}
 
-    record CgroupMemory(long currentBytes, long inactiveFileBytes) {
+    record CgroupMemory(long currentBytes, long inactiveFileBytes, long swapBytes) {
+        CgroupMemory(long currentBytes, long inactiveFileBytes) {
+            this(currentBytes, inactiveFileBytes, -1);
+        }
+
         long workingSetBytes() {
             return BabelDocService.workingSetBytes(currentBytes, inactiveFileBytes);
         }

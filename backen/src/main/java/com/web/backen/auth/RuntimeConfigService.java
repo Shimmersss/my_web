@@ -78,6 +78,9 @@ public class RuntimeConfigService {
             "Publications", "PUBLIC", "Translate", "USER", "Contact", "USER",
             "ImageGenerate", "USER", "News", "PUBLIC", "Guestbook", "PUBLIC", "Matchmaking", "USER");
     private static final String VISIBILITY_POLICY_VERSION = "visibility.policy.version";
+    // Comma-separated visibility keys (e.g. "Contact,ImageGenerate,Publications") that are
+    // switched off for everyone, root included, so the host can be dedicated to translation.
+    private static final String PAUSED_FEATURES = "service.paused_features";
 
     private final JdbcTemplate jdbc;
     private final LlmConfig llm;
@@ -275,6 +278,11 @@ public class RuntimeConfigService {
         if (status == 403) return new AuthException(403, "Images API 被上游拒绝（HTTP 403），请检查中转账户权限");
         return new AuthException(502, "Images API 延迟测试失败：HTTP " + status);
     }
+    public List<String> pausedFeatures() {
+        return java.util.Arrays.stream(value(PAUSED_FEATURES, "").split(","))
+                .map(String::trim).filter(VISIBILITY_DEFAULTS::containsKey).distinct().toList();
+    }
+    public boolean isPaused(String feature) { return pausedFeatures().contains(feature); }
     public String visibilityLevel(String feature) { return value("visibility." + feature, VISIBILITY_DEFAULTS.getOrDefault(feature, "PUBLIC")); }
 
     public Map<String, Object> publicSettings() {
@@ -318,6 +326,7 @@ public class RuntimeConfigService {
         Map<String, String> visibility = new LinkedHashMap<>();
         VISIBILITY_DEFAULTS.forEach((feature, fallback) -> visibility.put(feature, value("visibility." + feature, fallback)));
         data.put("visibility", visibility);
+        data.put("pausedFeatures", pausedFeatures());
         return data;
     }
 

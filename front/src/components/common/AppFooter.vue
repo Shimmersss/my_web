@@ -14,10 +14,10 @@
         <h4 class="footer-title">快捷入口</h4>
         <ul class="footer-links">
           <li><a href="/" @click.prevent="navigateTo('/')">{{ $t('common.home') }}</a></li>
-          <li><a href="/publications" @click.prevent="navigateTo('/publications')">文献</a></li>
+          <li v-if="!auth.isPaused('Publications')"><a href="/publications" @click.prevent="navigateTo('/publications')">文献</a></li>
           <li><a href="/translate" @click.prevent="navigateTo('/translate')">翻译</a></li>
-          <li><a href="/contact" @click.prevent="navigateTo('/contact')">PPT 生成</a></li>
-          <li><a href="/image-generate" @click.prevent="navigateTo('/image-generate')">GPT 生图</a></li>
+          <li v-if="!auth.isPaused('Contact')"><a href="/contact" @click.prevent="navigateTo('/contact')">PPT 生成</a></li>
+          <li v-if="!auth.isPaused('ImageGenerate')"><a href="/image-generate" @click.prevent="navigateTo('/image-generate')">GPT 生图</a></li>
           <li><a href="/tarot-reading" @click.prevent="navigateTo('/tarot-reading')">月下占卜</a></li>
           <li><a href="/news" @click.prevent="navigateTo('/news')">GitHub 项目</a></li>
           <li><a href="/guestbook" @click.prevent="navigateTo('/guestbook')">留言板</a></li>
@@ -36,8 +36,10 @@
 
 <script setup>
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const auth = useAuthStore()
 
 const navigateTo = (path) => {
   router.push(path)

@@ -1,9 +1,11 @@
 package com.web.backen.zotero;
 
+import com.web.backen.auth.RuntimeConfigService;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -19,6 +21,7 @@ public class ZoteroCache {
     private static final Logger log = LoggerFactory.getLogger(ZoteroCache.class);
 
     private final ZoteroService zoteroService;
+    private final RuntimeConfigService runtimeConfig;
     private final AtomicReference<Snapshot> snapshot = new AtomicReference<>(Snapshot.empty());
     private final AtomicBoolean refreshQueued = new AtomicBoolean(false);
     private final ExecutorService refreshExecutor = Executors.newSingleThreadExecutor(r -> {
@@ -29,7 +32,22 @@ public class ZoteroCache {
     private volatile boolean refreshing;
     private volatile String lastError;
 
-    public ZoteroCache(ZoteroService zoteroService) { this.zoteroService = zoteroService; }
+    public ZoteroCache(ZoteroService zoteroService) { this(zoteroService, null); }
+
+    @Autowired
+    public ZoteroCache(ZoteroService zoteroService, RuntimeConfigService runtimeConfig) {
+        this.zoteroService = zoteroService;
+        this.runtimeConfig = runtimeConfig;
+    }
+
+    /** A paused library keeps its last snapshot and makes no upstream calls. */
+    private boolean paused() {
+        try {
+            return runtimeConfig != null && runtimeConfig.isPaused("Publications");
+        } catch (Exception e) {
+            return false;
+        }
+    }
 
     @PostConstruct
     public void init() {
@@ -56,7 +74,7 @@ public class ZoteroCache {
 
     private void enqueueRefresh(boolean force) {
         Snapshot current = snapshot.get();
-        if (!zoteroService.isConfigured()
+        if (!zoteroService.isConfigured() || paused()
                 || (!force && current.warmedUp() && System.currentTimeMillis() - current.updatedAt() < 60_000)
                 || !refreshQueued.compareAndSet(false, true)) return;
         refreshExecutor.execute(() -> {

@@ -8,6 +8,7 @@
             <AppHeader />
           </n-layout-header>
           <n-layout-content>
+            <ServicePauseNotice />
             <main id="main-content" tabindex="-1">
               <router-view />
             </main>
@@ -35,6 +36,7 @@ import {
 import AppHeader from './components/common/AppHeader.vue'
 import AppFooter from './components/common/AppFooter.vue'
 import ScrollToTop from './components/common/ScrollToTop.vue'
+import ServicePauseNotice from './components/common/ServicePauseNotice.vue'
 import CustomerService from './components/business/CustomerService.vue'
 import { useThemeStore } from './stores/theme'
 import { zhCN, dateZhCN } from 'naive-ui'

@@ -81,8 +81,27 @@ class BabelDocServiceTest {
         resourceService(2519, 915, 580).waitForResourceRecovery();
     }
 
+    @Test
+    void otherDaemonsColdSwapDoesNotStopTranslation() {
+        // Production 2026-10-21: host swap 1135 MiB while idle, service only 176 MiB.
+        assertTrue(resourceService(2454, 1272, 176, 580).detectRecoveryRisk().isEmpty());
+        assertTrue(resourceService(2454, 1272, 1201, 580).detectRecoveryRisk()
+                .orElseThrow().contains("服务 Swap"));
+    }
+
+    @Test
+    void stillStopsWhenHostSwapIsNearlyExhausted() {
+        assertTrue(resourceService(2454, 1800, 176, 580).detectRecoveryRisk()
+                .orElseThrow().contains("系统 Swap 剩余"));
+    }
+
     private BabelDocService resourceService(long availableMiB, long swapUsedMiB,
                                              long workingSetMiB) {
+        return resourceService(availableMiB, swapUsedMiB, -1, workingSetMiB);
+    }
+
+    private BabelDocService resourceService(long availableMiB, long swapUsedMiB,
+                                             long serviceSwapMiB, long workingSetMiB) {
         BabelDocConfig config = new BabelDocConfig();
         config.setResourceRecoveryTimeoutSeconds(5);
         return new BabelDocService(config, mock(RuntimeConfigService.class)) {
@@ -94,7 +113,8 @@ class BabelDocServiceTest {
 
             @Override
             CgroupMemory readCgroupMemory() {
-                return new CgroupMemory(workingSetMiB * 1024 * 1024, 0);
+                return new CgroupMemory(workingSetMiB * 1024 * 1024, 0,
+                        serviceSwapMiB < 0 ? -1 : serviceSwapMiB * 1024 * 1024);
             }
         };
     }
@@ -273,6 +293,11 @@ class BabelDocServiceTest {
         assertTrue(BabelDocService.referenceSectionActiveAfter(
                 "Appendix is cited here\nMethods Appl. Mech. Eng. 200 (2011)", true));
         assertFalse(BabelDocService.referenceSectionActiveAfter("Supporting Information", true));
+        // Production c5f2f327: the appendix heading carries the paper's short title.
+        assertFalse(BabelDocService.referenceSectionActiveAfter(
+                "References\n[71] Z. Wei. D(r,o) grasp. 2025.\nGraspGen-X: Supplementary Material\nA. Procedural Gripper Generator", false));
+        assertTrue(BabelDocService.referenceSectionActiveAfter("[12] Smith: Supplementary Material", true));
+        assertTrue(BabelDocService.referenceSectionActiveAfter("J. Smith: Supporting Information", true));
     }
 
     @Test

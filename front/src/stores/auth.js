@@ -6,6 +6,7 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref(null)
   const loading = ref(false)
   const visibility = ref({ Publications: 'PUBLIC', Translate: 'USER', Contact: 'USER', ImageGenerate: 'USER', Matchmaking: 'USER', News: 'PUBLIC', Guestbook: 'PUBLIC' })
+  const pausedFeatures = ref([])
   const unreadNotifications = ref(0)
   const authPrompt = ref('')
   const pendingPath = ref('')
@@ -48,6 +49,7 @@ export const useAuthStore = defineStore('auth', () => {
       try {
         const site = await getSiteSettings()
         visibility.value = { ...visibility.value, ...(site.data?.visibility || {}) }
+        pausedFeatures.value = Array.isArray(site.data?.pausedFeatures) ? site.data.pausedFeatures : []
       } catch {}
       if (user.value && !isMatchmakingTrial.value) await refreshUnreadNotifications().catch(() => {})
       return user.value
@@ -104,7 +106,12 @@ export const useAuthStore = defineStore('auth', () => {
     return res.data
   }
 
+  function isPaused(feature) {
+    return pausedFeatures.value.includes(feature)
+  }
+
   function canView(feature) {
+    if (isPaused(feature)) return false
     const level = visibility.value[feature] || 'PUBLIC'
     if (isMatchmakingTrial.value) return level === 'PUBLIC' || feature === 'Matchmaking'
     return level === 'PUBLIC' || (level === 'USER' && isLoggedIn.value) || (level === 'ROOT' && isRoot.value)
@@ -122,5 +129,5 @@ export const useAuthStore = defineStore('auth', () => {
   function clearAuthPrompt() { authPrompt.value = '' }
   function consumePendingPath() { const path = pendingPath.value; pendingPath.value = ''; authPrompt.value = ''; return path }
 
-  return { user, loading, isLoggedIn, isRoot, isMatchmakingTrial, credits, dailyCheckin, visibility, unreadNotifications, authPrompt, canView, requestLogin, requestPermissionDenied, clearAuthPrompt, consumePendingPath, refresh, refreshUnreadNotifications, login, register, redeemTrial, logout, changePassword, updateCredits, checkIn }
+  return { user, loading, isLoggedIn, isRoot, isMatchmakingTrial, credits, dailyCheckin, visibility, pausedFeatures, unreadNotifications, authPrompt, isPaused, canView, requestLogin, requestPermissionDenied, clearAuthPrompt, consumePendingPath, refresh, refreshUnreadNotifications, login, register, redeemTrial, logout, changePassword, updateCredits, checkIn }
 })

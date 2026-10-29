@@ -176,7 +176,7 @@ class BabelDocServiceTest {
         writeTextPdf(cached.resolve("translated.pdf"), 4, 0, "");
         writeTextPdf(cached.resolve("bilingual.pdf"), 4, 0, "");
         Files.writeString(resultDir.resolve(".babeldoc-chunks/shared/manifest.txt"), String.join("\n",
-                "version=2", "completion=complete-v1", "input=" + tempDir.resolve("input.pdf").toAbsolutePath().normalize(),
+                "version=2", "completion=complete-v1", "references=lettered-appendix-v1", "input=" + tempDir.resolve("input.pdf").toAbsolutePath().normalize(),
                 "chunkSize=4", "fontFamily=auto", "model=null"));
 
         service.translatePdf(tempDir.resolve("input.pdf"), resultDir, "paper.pdf",
@@ -218,7 +218,7 @@ class BabelDocServiceTest {
         writeTextPdf(legacyChunk.resolve("translated.pdf"), 4, 0, "");
         writeTextPdf(legacyChunk.resolve("bilingual.pdf"), 4, 0, "");
         Files.writeString(resultDir.resolve(".babeldoc-chunks/1-10/manifest.txt"), String.join("\n",
-                "version=1", "completion=complete-v1", "input=" + Files.size(tempDir.resolve("input.pdf"))
+                "version=1", "completion=complete-v1", "references=lettered-appendix-v1", "input=" + Files.size(tempDir.resolve("input.pdf"))
                         + ":" + Files.getLastModifiedTime(tempDir.resolve("input.pdf")).toMillis(),
                 "pages=1-10", "chunkSize=4", "fontFamily=auto", "model=null"));
 
@@ -274,6 +274,29 @@ class BabelDocServiceTest {
     }
 
     @Test
+    void retranslatesChunksCachedBeforeTheLetteredAppendixFix() throws Exception {
+        // Lettered appendix headings ("A. Contributions") changed which pages are
+        // kept as references, so chunks left by an interrupted run before that fix
+        // may hold untranslated appendices. The version line alone is ignored for
+        // legacy compatibility.
+        RecordingBabelDocService service = newService();
+        service.failAcceleratedSecondChunk.set(true);
+        Path resultDir = tempDir.resolve("result");
+        assertThrows(BabelDocService.ResourcePressureException.class,
+                () -> service.translatePdf(tempDir.resolve("input.pdf"), resultDir,
+                        "paper.pdf", 1, 8, "auto", 4, ignored -> { }));
+        Path manifest = resultDir.resolve(".babeldoc-chunks/shared/manifest.txt");
+        assertTrue(Files.readString(manifest).startsWith("version=5\n"));
+        Files.writeString(manifest, Files.readString(manifest)
+                .replace("references=lettered-appendix-v1\n", ""));
+
+        service.translatePdf(tempDir.resolve("input.pdf"), resultDir, "paper.pdf",
+                1, 8, "auto", 2, ignored -> { });
+
+        assertEquals(List.of("1-4@4", "5-8@4", "1-4@2", "5-8@2"), service.calls);
+    }
+
+    @Test
     void rejectsOldChunksWithoutCompletionChecksEvenWithMatchingPageCount() throws Exception {
         RecordingBabelDocService service = newService();
         Path resultDir = tempDir.resolve("result");
@@ -299,6 +322,15 @@ class BabelDocServiceTest {
         // Production c5f2f327: the appendix heading carries the paper's short title.
         assertFalse(BabelDocService.referenceSectionActiveAfter(
                 "References\n[71] Z. Wei. D(r,o) grasp. 2025.\nGraspGen-X: Supplementary Material\nA. Procedural Gripper Generator", false));
+        // RT-2 and Mamba: LaTeX appendices numbered with a bare letter.
+        assertFalse(BabelDocService.referenceSectionActiveAfter(
+                "References\nA. Radford, J. W. Kim, et al. Learning. 2021.\nA. Contributions\nBody", false));
+        assertFalse(BabelDocService.referenceSectionActiveAfter("A\nDiscussion: Selection Mechanism", true));
+        assertFalse(BabelDocService.referenceSectionActiveAfter("A.1 Training Details", true));
+        assertTrue(BabelDocService.referenceSectionActiveAfter("A. Radford. Improving language understanding.", true));
+        assertTrue(BabelDocService.referenceSectionActiveAfter("B. Datasets", true));
+        assertTrue(BabelDocService.referenceSectionActiveAfter("and\nA.\nZisserman,", true));
+        assertTrue(BabelDocService.referenceSectionActiveAfter("Mish:\nA\nself", true));
         assertTrue(BabelDocService.referenceSectionActiveAfter("[12] Smith: Supplementary Material", true));
         assertTrue(BabelDocService.referenceSectionActiveAfter("J. Smith: Supporting Information", true));
     }

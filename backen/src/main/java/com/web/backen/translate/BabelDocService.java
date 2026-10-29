@@ -48,6 +48,11 @@ public class BabelDocService {
     private static final long MIN_SYSTEM_SWAP_FREE_MIB = 256;
     private static final String CHUNK_CACHE_VERSION = "version=5";
     private static final String COMPLETION_POLICY = "completion=complete-v1";
+    // isCompatibleChunkManifest ignores the version line so compatible legacy
+    // chunks survive upgrades; output-changing fixes add a policy line instead.
+    // Chunks cached before lettered appendix headings ("A. Contributions") were
+    // recognised may hold untranslated appendices.
+    private static final String REFERENCE_POLICY = "references=lettered-appendix-v1";
     private static final Pattern CHUNK_RANGE = Pattern.compile("^(\\d+)-(\\d+)$");
     // A document may be delivered with at most this many paragraphs left in the
     // source language (BabelDOC keeps the original text when a paragraph fails).
@@ -62,14 +67,24 @@ public class BabelDocService {
     // only keywords are case-insensitive so prose like "Appendix is" is ignored.
     // A short title prefix ("GraspGen-X: Supplementary Material") is allowed when
     // it has no period and does not start like a numbered reference entry.
+    // LaTeX's \appendix numbers appendices with a bare letter ("A. Contributions",
+    // "A.1 Training Details"); only "A" counts, and its title may not contain a
+    // comma, semicolon, ". ", a year or "et al" or end with a period, so author
+    // lines such as "A. Radford, J. W. Kim, ..." stay in the bibliography.
+    private static final String APPENDIX_TITLE =
+            "[A-Z](?:(?!\\.\\s|[,;]|\\b(?:18|19|20)\\d{2}\\b|\\bet\\s+al\\b).){0,60}(?<![.,;])";
     private static final Pattern REFERENCE_SECTION_END = Pattern.compile(
-            "\\s*(?:(?![\\[(\\d])[^.:\\uff1a\\n]{1,80}[:\\uff1a]\\s*)?(?:(?:[A-Z]|\\d{1,2}(?:\\.\\d{1,2})*)[.)]?\\s+)?(?:"
+            "\\s*(?:(?:(?![\\[(\\d])[^.:\\uff1a\\n]{1,80}[:\\uff1a]\\s*)?(?:(?:[A-Z]|\\d{1,2}(?:\\.\\d{1,2})*)[.)]?\\s+)?(?:"
                     + "(?i:appendix|appendices)(?:\\s+(?:[A-Z]|[IVX]{1,4}|\\d{1,2})(?:\\.\\d{1,2})*)?"
                     + "(?:\\s*[.:\\uff1a\\u2014\\u2013-]\\s*\\S.*|\\s+[A-Z(].*)?"
                     + "|(?:(?i:supplementary|supplemental|supporting)\\s+(?i:materials?|information|data)"
                     + "|(?i:online\\s+)?(?i:methods)|(?i:extended\\s+data)"
                     + "|(?i:acknowledge?ments?)|(?i:author\\s+contributions))\\s*[.:\\uff1a]?"
-                    + ")\\s*");
+                    + ")|A(?:\\.\\d{1,2})*\\.?\\s+" + APPENDIX_TITLE + ")\\s*");
+    // A lone "A" is also a word of a reference split one word per line, so it
+    // ends the bibliography only before a title-like line.
+    private static final Pattern BARE_APPENDIX_LETTER = Pattern.compile("\\s*A\\.?\\s*");
+    private static final Pattern APPENDIX_TITLE_LINE = Pattern.compile("\\s*" + APPENDIX_TITLE + "\\s*");
 
     private final BabelDocConfig config;
     private final RuntimeConfigService runtimeConfig;
@@ -350,6 +365,7 @@ public class BabelDocService {
         String fingerprint = String.join("\n",
                 CHUNK_CACHE_VERSION,
                 COMPLETION_POLICY,
+                REFERENCE_POLICY,
                 "input=" + inputFingerprint(inputPdf),
                 "fontFamily=" + String.valueOf(fontFamily),
                 "model=" + String.valueOf(runtimeConfig.babelModel()));
@@ -401,6 +417,7 @@ public class BabelDocService {
                 .replaceFirst("(?m)^chunkSize=.*\\R?", "");
         return String.join("\n",
                 COMPLETION_POLICY,
+                REFERENCE_POLICY,
                 "input=" + inputFingerprint(inputPdf),
                 "fontFamily=" + String.valueOf(fontFamily),
                 "model=" + String.valueOf(runtimeConfig.babelModel())).equals(normalized);
@@ -518,14 +535,22 @@ public class BabelDocService {
 
     /** Lines are read in order: a page may close the bibliography and open an appendix. */
     static boolean referenceSectionActiveAfter(String pageText, boolean active) {
-        for (String line : pageText.lines().toList()) {
+        List<String> lines = pageText.lines().filter(line -> !line.isBlank()).toList();
+        for (int i = 0; i < lines.size(); i++) {
+            String line = lines.get(i);
             if (REFERENCE_HEADING.matcher(line).matches()) {
                 active = true;
-            } else if (active && REFERENCE_SECTION_END.matcher(line).matches()) {
+            } else if (active && endsReferenceSection(line, i + 1 < lines.size() ? lines.get(i + 1) : "")) {
                 active = false;
             }
         }
         return active;
+    }
+
+    private static boolean endsReferenceSection(String line, String nextLine) {
+        return REFERENCE_SECTION_END.matcher(line).matches()
+                || (BARE_APPENDIX_LETTER.matcher(line).matches()
+                        && APPENDIX_TITLE_LINE.matcher(nextLine).matches());
     }
 
     private List<String> splitCommand(String command) {

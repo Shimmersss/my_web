@@ -7,6 +7,7 @@ export const useAuthStore = defineStore('auth', () => {
   const loading = ref(false)
   const visibility = ref({ Publications: 'PUBLIC', Translate: 'USER', Contact: 'USER', ImageGenerate: 'USER', Matchmaking: 'USER', News: 'PUBLIC', Guestbook: 'PUBLIC' })
   const pausedFeatures = ref([])
+  const announcement = ref({ enabled: false, title: '公告', content: '', tone: 'info' })
   const unreadNotifications = ref(0)
   const authPrompt = ref('')
   const pendingPath = ref('')
@@ -50,6 +51,7 @@ export const useAuthStore = defineStore('auth', () => {
         const site = await getSiteSettings()
         visibility.value = { ...visibility.value, ...(site.data?.visibility || {}) }
         pausedFeatures.value = Array.isArray(site.data?.pausedFeatures) ? site.data.pausedFeatures : []
+        if (site.data?.announcement) announcement.value = { ...announcement.value, ...site.data.announcement }
       } catch {}
       if (user.value && !isMatchmakingTrial.value) await refreshUnreadNotifications().catch(() => {})
       return user.value
@@ -129,5 +131,5 @@ export const useAuthStore = defineStore('auth', () => {
   function clearAuthPrompt() { authPrompt.value = '' }
   function consumePendingPath() { const path = pendingPath.value; pendingPath.value = ''; authPrompt.value = ''; return path }
 
-  return { user, loading, isLoggedIn, isRoot, isMatchmakingTrial, credits, dailyCheckin, visibility, pausedFeatures, unreadNotifications, authPrompt, isPaused, canView, requestLogin, requestPermissionDenied, clearAuthPrompt, consumePendingPath, refresh, refreshUnreadNotifications, login, register, redeemTrial, logout, changePassword, updateCredits, checkIn }
+  return { user, loading, isLoggedIn, isRoot, isMatchmakingTrial, credits, dailyCheckin, visibility, pausedFeatures, announcement, unreadNotifications, authPrompt, isPaused, canView, requestLogin, requestPermissionDenied, clearAuthPrompt, consumePendingPath, refresh, refreshUnreadNotifications, login, register, redeemTrial, logout, changePassword, updateCredits, checkIn }
 })

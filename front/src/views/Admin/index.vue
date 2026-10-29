@@ -51,19 +51,20 @@
               <a href="#overview">总览 <span>01</span></a>
               <p>访问与社区</p>
               <a href="#access-panel">节目权限 <span>02</span></a>
-              <a href="#community-panel">留言审核 <span>03</span></a>
+              <a href="#announcement-panel">站点公告 <span>03</span></a>
+              <a href="#community-panel">留言审核 <span>04</span></a>
               <p>能力与运行</p>
-              <a href="#providers-panel">通用 API <span>04</span></a>
-              <a href="#presentation-panel">演示生成 <span>05</span></a>
-              <a href="#image-panel">图片服务 <span>06</span></a>
-              <a href="#storage-panel">任务保留 <span>07</span></a>
-              <a href="#ranking-panel">GitHub 榜单 <span>08</span></a>
+              <a href="#providers-panel">通用 API <span>05</span></a>
+              <a href="#presentation-panel">演示生成 <span>06</span></a>
+              <a href="#image-panel">图片服务 <span>07</span></a>
+              <a href="#storage-panel">任务保留 <span>08</span></a>
+              <a href="#ranking-panel">GitHub 榜单 <span>09</span></a>
               <p>账号与账本</p>
-              <a href="#billing-panel">计费规则 <span>09</span></a>
-              <a href="#invites-panel">邀请码 <span>10</span></a>
-              <a href="#matchmaking-trial-panel">内测码 <span>11</span></a>
-              <a href="#users-panel">用户与流水 <span>12</span></a>
-              <a href="#matchmaking-panel">占卜模型 <span>13</span></a>
+              <a href="#billing-panel">计费规则 <span>10</span></a>
+              <a href="#invites-panel">邀请码 <span>11</span></a>
+              <a href="#matchmaking-trial-panel">内测码 <span>12</span></a>
+              <a href="#users-panel">用户与流水 <span>13</span></a>
+              <a href="#matchmaking-panel">占卜模型 <span>14</span></a>
             </nav>
             <div class="admin-index__note">
               <span class="admin-index__note-dot" aria-hidden="true"></span>
@@ -96,6 +97,29 @@
                 <option value="ROOT">仅 root</option>
               </select></label
             >
+          </div>
+        </section>
+        <section id="announcement-panel" class="admin-panel">
+          <div class="panel-title">
+            <div>
+              <span class="eyebrow">SITE ANNOUNCEMENT</span>
+              <h2>站点公告</h2>
+            </div>
+            <button class="primary" :disabled="announcementSaving" @click="saveAnnouncement">
+              {{ announcementSaving ? "保存中…" : "保存公告" }}
+            </button>
+          </div>
+          <p class="panel-desc">
+            开启后在全站顶部横幅显示，访客与登录用户均可见；仅支持纯文本单行内容。功能暂停提示仍会自动附加显示。
+          </p>
+          <div class="announcement-form">
+            <label class="feature-switch"><input v-model="announcementForm.enabled" type="checkbox" /> 显示公告</label>
+            <label>标题<n-input v-model:value="announcementForm.title" maxlength="20" show-count placeholder="公告" /></label>
+            <label>内容<n-input v-model:value="announcementForm.content" type="textarea" maxlength="200" show-count :autosize="{ minRows: 2, maxRows: 4 }" placeholder="例如：今晚 22:00–23:00 维护，期间论文翻译暂停提交。" /></label>
+            <label>样式<select v-model="announcementForm.tone">
+                <option value="info">普通（中性底色）</option>
+                <option value="warning">提醒（强调色）</option>
+              </select></label>
           </div>
         </section>
         <section id="community-panel" class="admin-panel">
@@ -903,6 +927,8 @@ const visibilityForm = reactive({
   News: "PUBLIC",
   Guestbook: "PUBLIC",
 });
+const announcementForm = reactive({ enabled: false, title: "公告", content: "", tone: "info" });
+const announcementSaving = ref(false);
 const visibilityItems = [
   { key: "Publications", label: "文献库" },
   { key: "Translate", label: "论文翻译" },
@@ -1075,6 +1101,7 @@ function applyApiSettings(d = {}) {
   if (d.llm?.protocol)
     apiForm.llm.protocol = String(d.llm.protocol).toLowerCase();
   applyMatchmakingSettings(d.matchmaking);
+  applyAnnouncement(d.announcement);
   if (d.githubRanking) Object.assign(rankingForm, d.githubRanking);
   if (d.pptRetention) Object.assign(pptRetentionForm, d.pptRetention);
   if (d.translationRetention)
@@ -1335,6 +1362,22 @@ watch(
   },
   { deep: true },
 );
+function applyAnnouncement(value) {
+  if (value) Object.assign(announcementForm, value);
+}
+async function saveAnnouncement() {
+  announcementSaving.value = true;
+  try {
+    const data = (await updateAdminApiSettings({ announcement: { ...announcementForm } })).data || {};
+    applyApiSettings(data);
+    auth.announcement = { ...auth.announcement, ...(data.announcement || announcementForm) };
+    message.success(announcementForm.enabled ? "公告已发布" : "公告已保存（未显示）");
+  } catch (e) {
+    errorMsg.value = e.message || "公告保存失败";
+  } finally {
+    announcementSaving.value = false;
+  }
+}
 async function saveVisibility() {
   try {
     await updateAdminApiSettings({ visibility: visibilityForm });
@@ -2328,7 +2371,29 @@ code {
   margin-top: 18px;
 }
 
+.announcement-form {
+  display: grid;
+  gap: 12px;
+  max-width: 640px;
+  margin-top: 16px;
+}
+.announcement-form > label:not(.feature-switch) {
+  display: grid;
+  gap: 6px;
+  color: #62727c;
+  font-size: 12px;
+  font-weight: 600;
+}
+.announcement-form .feature-switch {
+  margin: 0;
+}
+.announcement-form select {
+  max-width: 240px;
+  border: 1px solid #d7e0e4;
+}
+
 .visibility-grid select,
+.announcement-form select,
 .provider-protocol select,
 .form-grid select {
   min-height: 40px;

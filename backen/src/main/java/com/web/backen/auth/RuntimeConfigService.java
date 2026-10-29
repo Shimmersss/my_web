@@ -81,6 +81,13 @@ public class RuntimeConfigService {
     // Comma-separated visibility keys (e.g. "Contact,ImageGenerate,Publications") that are
     // switched off for everyone, root included, so the host can be dedicated to translation.
     private static final String PAUSED_FEATURES = "service.paused_features";
+    // Site-wide banner edited by root; stored as plain text (escaped by the UI), so it fits app_settings' 255 chars.
+    private static final String ANNOUNCEMENT_ENABLED = "site.announcement.enabled";
+    private static final String ANNOUNCEMENT_TITLE = "site.announcement.title";
+    private static final String ANNOUNCEMENT_CONTENT = "site.announcement.content";
+    private static final String ANNOUNCEMENT_TONE = "site.announcement.tone";
+    private static final int ANNOUNCEMENT_TITLE_MAX = 20;
+    private static final int ANNOUNCEMENT_CONTENT_MAX = 200;
 
     private final JdbcTemplate jdbc;
     private final LlmConfig llm;
@@ -283,6 +290,14 @@ public class RuntimeConfigService {
                 .map(String::trim).filter(VISIBILITY_DEFAULTS::containsKey).distinct().toList();
     }
     public boolean isPaused(String feature) { return pausedFeatures().contains(feature); }
+    public Map<String, Object> announcement() {
+        String tone = value(ANNOUNCEMENT_TONE, "info");
+        return new LinkedHashMap<>(Map.of(
+                "enabled", Boolean.parseBoolean(value(ANNOUNCEMENT_ENABLED, "false")),
+                "title", value(ANNOUNCEMENT_TITLE, "公告"),
+                "content", value(ANNOUNCEMENT_CONTENT, ""),
+                "tone", "warning".equals(tone) ? "warning" : "info"));
+    }
     public String visibilityLevel(String feature) { return value("visibility." + feature, VISIBILITY_DEFAULTS.getOrDefault(feature, "PUBLIC")); }
 
     public Map<String, Object> publicSettings() {
@@ -327,6 +342,7 @@ public class RuntimeConfigService {
         VISIBILITY_DEFAULTS.forEach((feature, fallback) -> visibility.put(feature, value("visibility." + feature, fallback)));
         data.put("visibility", visibility);
         data.put("pausedFeatures", pausedFeatures());
+        data.put("announcement", announcement());
         return data;
     }
 
@@ -426,6 +442,21 @@ public class RuntimeConfigService {
             save(MATCHMAKING_MAX_HISTORY, Integer.toString(clamp(intValue(matchmakingRetentionBody.get("maxPerUser"), matchmakingMaxHistory()), 1, 100)));
             save(MATCHMAKING_MAX_GLOBAL_HISTORY, Integer.toString(clamp(intValue(matchmakingRetentionBody.get("maxTotal"), matchmakingMaxGlobalHistory()), 1, 1000)));
         }
+        Map<String, Object> announcementBody = map(body.get("announcement"));
+        if (!announcementBody.isEmpty()) {
+            String title = announcementText(string(announcementBody, "title"));
+            String content = announcementText(string(announcementBody, "content"));
+            String tone = string(announcementBody, "tone").toLowerCase(Locale.ROOT);
+            boolean enabled = booleanValue(announcementBody.get("enabled"), false);
+            if (title.length() > ANNOUNCEMENT_TITLE_MAX) throw new AuthException(400, "公告标题不能超过 " + ANNOUNCEMENT_TITLE_MAX + " 字");
+            if (content.length() > ANNOUNCEMENT_CONTENT_MAX) throw new AuthException(400, "公告内容不能超过 " + ANNOUNCEMENT_CONTENT_MAX + " 字");
+            if (enabled && content.isBlank()) throw new AuthException(400, "开启公告时内容不能为空");
+            if (!tone.isBlank() && !Set.of("info", "warning").contains(tone)) throw new AuthException(400, "公告样式只能是 info 或 warning");
+            save(ANNOUNCEMENT_ENABLED, Boolean.toString(enabled));
+            save(ANNOUNCEMENT_TITLE, title.isBlank() ? "公告" : title);
+            save(ANNOUNCEMENT_CONTENT, content);
+            save(ANNOUNCEMENT_TONE, tone.isBlank() ? "info" : tone);
+        }
         Map<String, Object> visibility = map(body.get("visibility"));
         VISIBILITY_DEFAULTS.forEach((feature, fallback) -> {
             String level = string(visibility, feature).toUpperCase();
@@ -505,6 +536,8 @@ public class RuntimeConfigService {
         String clean = message.replaceAll("[\\r\\n\\t]+", " ").trim();
         return clean.substring(0, Math.min(clean.length(), 240));
     }
+    /** Single-line plain text: control characters and line breaks collapse to spaces. */
+    private String announcementText(String value) { return value.replaceAll("[\\p{Cntrl}\\s]+", " ").trim(); }
     private String text(String value, String fallback) { return value == null || value.isBlank() ? fallback : value.trim(); }
     public Map<String, Object> githubRankingSettings() {
         return new LinkedHashMap<>(Map.of(

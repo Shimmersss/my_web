@@ -186,8 +186,14 @@ public class ImageGenerationService {
             if ("cancelled".equals(session.getStatus())) return;
             session.setStatus("completed"); session.setProgressStage("completed"); session.setCompletedAt(System.currentTimeMillis());
             persist(session); send(session); completeEmitters(session.getTaskId()); cleanupHistory();
-        } catch (Exception e) { if (!"cancelled".equals(session.getStatus())) fail(session, "生图失败，请稍后重试", e); }
+        } catch (Exception e) { if (!"cancelled".equals(session.getStatus())) fail(session, failureMessage(e), e); }
         finally { taskFutures.remove(session.getTaskId()); updateQueuePositions(); }
+    }
+
+    private static String failureMessage(Exception error) {
+        return error instanceof OpenAiImageClient.ImageProviderException provider && provider.isContentRejected()
+                ? "内容被 OpenAI 安全系统拒绝，请修改提示词或参考图后重试"
+                : "生图失败，请稍后重试";
     }
 
     private void fail(ImageGenerationSession session, String safeMessage, Exception error) {

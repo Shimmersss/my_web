@@ -62,6 +62,26 @@ class OpenAiImageClientTest {
                 () -> client.generate("prompt", "1024x1024", "medium"));
     }
 
+    @Test
+    void marksSafetyRejectionSoTheUserIsToldToChangeThePrompt() throws Exception {
+        HttpClient http = mock(HttpClient.class);
+        @SuppressWarnings("unchecked") HttpResponse<java.io.InputStream> response = mock(HttpResponse.class);
+        when(response.statusCode()).thenReturn(400);
+        when(response.body()).thenReturn(new ByteArrayInputStream(("{\"error\":{\"message\":\"Your request was rejected by the safety system. "
+                + "safety_violations=[sexual].\",\"type\":\"image_generation_user_error\",\"code\":\"moderation_blocked\"}}").getBytes()));
+        when(http.<java.io.InputStream>send(any(), any())).thenReturn(response);
+        OpenAiImageClient client = new OpenAiImageClient(runtime(), new ImageGenerationConfig(), new ObjectMapper(), http);
+
+        OpenAiImageClient.ImageProviderException error = assertThrows(OpenAiImageClient.ImageProviderException.class,
+                () -> client.generate("prompt", "1024x1024", "medium"));
+        assertTrue(error.isContentRejected());
+
+        when(response.statusCode()).thenReturn(400);
+        when(response.body()).thenReturn(new ByteArrayInputStream("{\"error\":{\"message\":\"Invalid size\"}}".getBytes()));
+        assertFalse(assertThrows(OpenAiImageClient.ImageProviderException.class,
+                () -> client.generate("prompt", "1024x1024", "medium")).isContentRejected());
+    }
+
     private Fixture fixture() throws Exception {
         HttpClient http = mock(HttpClient.class);
         @SuppressWarnings("unchecked") HttpResponse<java.io.InputStream> response = mock(HttpResponse.class);

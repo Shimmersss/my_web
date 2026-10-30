@@ -86,7 +86,8 @@ public class OpenAiImageClient {
         try (InputStream input = response.body()) { responseBytes = readLimited(input, encodedLimit); }
         String body = new String(responseBytes, StandardCharsets.UTF_8);
         if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new ImageProviderException("Images API HTTP " + response.statusCode() + ": " + concise(body));
+            throw new ImageProviderException("Images API HTTP " + response.statusCode() + ": " + concise(body),
+                    response.statusCode() == 400 && isSafetyRejection(body));
         }
         Map<String, Object> root = objectMapper.readValue(body, new TypeReference<>() {});
         Object data = root.get("data");
@@ -183,7 +184,18 @@ public class OpenAiImageClient {
         return result.isBlank() ? "上游未返回详情" : result.substring(0, Math.min(360, result.length()));
     }
 
+    /** OpenAI answers a moderated prompt with HTTP 400 code moderation_blocked; relays may keep only the message. */
+    private static boolean isSafetyRejection(String body) {
+        String text = body == null ? "" : body.toLowerCase(java.util.Locale.ROOT);
+        return text.contains("moderation_blocked") || text.contains("rejected by the safety system")
+                || text.contains("safety_violations");
+    }
+
     public static class ImageProviderException extends IllegalStateException {
-        public ImageProviderException(String message) { super(message); }
+        private final boolean contentRejected;
+        public ImageProviderException(String message) { this(message, false); }
+        public ImageProviderException(String message, boolean contentRejected) { super(message); this.contentRejected = contentRejected; }
+        /** True when the provider refused the prompt or reference image itself; retrying unchanged cannot succeed. */
+        public boolean isContentRejected() { return contentRejected; }
     }
 }

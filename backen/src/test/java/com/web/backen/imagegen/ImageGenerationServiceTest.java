@@ -62,6 +62,25 @@ class ImageGenerationServiceTest {
     }
 
     @Test
+    void safetyRejectionTellsTheUserToChangeThePromptAndRefunds() throws Exception {
+        OpenAiImageClient client = mock(OpenAiImageClient.class);
+        when(client.generate(anyString(), anyString(), anyString()))
+                .thenThrow(new OpenAiImageClient.ImageProviderException("Images API HTTP 400: rejected", true));
+        QuotaService quota = mock(QuotaService.class);
+        when(quota.imageCredit("medium")).thenReturn(4);
+        when(quota.spend(eq(7L), eq(4), eq("IMAGE_GENERATION"), anyString(), anyString())).thenReturn(43L);
+        service = service(client, quota);
+
+        ImageGenerationSession session = service.create("测试", "GENERATE", "1024x1024", "medium",
+                null, null, new AuthUser(7, "user", "USER", 20, true));
+        awaitTerminal(session);
+
+        assertEquals("failed", session.getStatus());
+        assertEquals("内容被 OpenAI 安全系统拒绝，请修改提示词或参考图后重试", session.getErrorMessage());
+        verify(quota).refund(43L, "生图任务未完成退款");
+    }
+
+    @Test
     void rejectsInvalidReferenceAndCrossUserHistoryAccess() throws Exception {
         service = service(mock(OpenAiImageClient.class), mock(QuotaService.class));
         AuthUser root = new AuthUser(1, "root", "ROOT", 0, true);

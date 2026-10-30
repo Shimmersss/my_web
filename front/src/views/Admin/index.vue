@@ -110,7 +110,7 @@
             </button>
           </div>
           <p class="panel-desc">
-            开启后在全站顶部横幅显示，访客与登录用户均可见；仅支持纯文本单行内容。功能暂停提示仍会自动附加显示。
+            开启后在全站顶部横幅显示，访客与登录用户均可见；仅支持纯文本单行内容。暂停的模块只隐藏入口，不再自动显示暂停提示。
           </p>
           <div class="announcement-form">
             <label class="feature-switch"><input v-model="announcementForm.enabled" type="checkbox" /> 显示公告</label>

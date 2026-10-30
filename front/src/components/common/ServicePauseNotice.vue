@@ -1,13 +1,9 @@
 <template>
-  <div v-if="customAnnouncement || pausedNames.length" class="service-pause-notice" :class="{ 'is-info': !pausedNames.length && customAnnouncement?.tone !== 'warning' }" role="status">
+  <div v-if="customAnnouncement" class="service-pause-notice" :class="{ 'is-info': customAnnouncement.tone !== 'warning' }" role="status">
     <div class="container notice-inner">
       <p v-if="customAnnouncement" class="notice-row">
         <strong>{{ customAnnouncement.title || '公告' }}</strong>
         <span>{{ customAnnouncement.content }}</span>
-      </p>
-      <p v-if="pausedNames.length" class="notice-row">
-        <strong>服务调整</strong>
-        <span>{{ pausedNames.join('、') }}暂停服务，服务器资源正优先保障论文翻译。</span>
       </p>
     </div>
   </div>
@@ -17,11 +13,8 @@
 import { computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 
-const FEATURE_NAMES = { Contact: 'PPT 生成', ImageGenerate: 'GPT 生图', Publications: '文献库' }
-
 const auth = useAuthStore()
-const pausedNames = computed(() => auth.pausedFeatures.map(feature => FEATURE_NAMES[feature]).filter(Boolean))
-// Root-configured banner text; rendered as plain text only.
+// Root-configured banner text only; paused modules are hidden without a site-wide notice.
 const customAnnouncement = computed(() => auth.announcement?.enabled && auth.announcement.content ? auth.announcement : null)
 </script>
 
